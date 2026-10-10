@@ -157,5 +157,23 @@ if (fsBtn && paeRoot) {
   maxChecks.push(['Escape exits maximized PAE', !paeRoot.className.includes('pv-pae--max')])
 }
 for (const [name, ok] of maxChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
+
+// PAE copy-image: the composited export figure (title + heatmap + profile
+// strip + legend) goes to the clipboard; button lives in the PAE toolbar.
+const copyChecks = []
+let clipItems = null
+globalThis.ClipboardItem = class { constructor(items) { this.items = items; clipItems = items } }
+win.HTMLCanvasElement.prototype.toBlob = (cb) => cb(new Blob(['pngbytes'], { type: 'image/png' }))
+const paeWrites = []
+try { Object.defineProperty(win.navigator, 'clipboard', { value: { write: async (items) => paeWrites.push(items) }, configurable: true }) } catch {}
+const paeCopyBtn = [...(container.querySelector('.pv-pae')?.querySelectorAll('button.pv-export') ?? [])].find((b) => (b.textContent ?? '').trim() === '复制图像')
+copyChecks.push(['PAE copy-image button rendered', !!paeCopyBtn])
+if (paeCopyBtn) {
+  paeCopyBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 300))
+  copyChecks.push(['PAE clipboard write receives image/png', !!clipItems && clipItems['image/png'] instanceof Blob && clipItems['image/png'].type === 'image/png'])
+  copyChecks.push(['PAE button confirms copy', (paeCopyBtn.textContent ?? '').includes('已复制')])
+}
+for (const [name, ok] of copyChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 process.exit(failed ? 1 : 0)
 console.log('PAE PANEL TESTS DONE')

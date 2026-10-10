@@ -1534,12 +1534,11 @@ function exportCurvePng(e, name, residues) {
 }
 
 // PAE heatmap export: title + heatmap + legend composed on white, matching
-// the other panel exports (paper/group-meeting ready).
-function exportPaePng(e, name, n, bytes, chainSizes, scale = 1, chainPairs = null) {
-  const mod = e.currentTarget.closest('.pv-pae')
-  const canvas = mod?.querySelector('canvas.pv-pae-canvas')
-  if (!canvas || typeof canvas.toDataURL !== 'function') return
-  try {
+// the other panel exports (paper/group-meeting ready). The builder is shared
+// with the clipboard copy.
+function buildPaeComposite(canvas, n, bytes, chainSizes, scale = 1, chainPairs = null) {
+  if (!canvas || typeof canvas.toDataURL !== 'function') return null
+  {
     const s = 2 // supersample for crisp text/legend
     const pad = 12 * s
     const titleH = 22 * s
@@ -1638,8 +1637,23 @@ function exportPaePng(e, name, n, bytes, chainSizes, scale = 1, chainPairs = nul
     g.fillStyle = '#6b7280'
     g.font = `${10 * s}px system-ui, sans-serif`
     g.fillText('右侧条形：各残基平均误差（不含自身）——长条提示界面残基或无序区', pad, noteY)
+    return c
+  }
+}
+
+function exportPaePng(e, name, n, bytes, chainSizes, scale = 1, chainPairs = null) {
+  const mod = e.currentTarget.closest('.pv-pae')
+  const canvas = mod?.querySelector('canvas.pv-pae-canvas')
+  if (!canvas || typeof canvas.toDataURL !== 'function') return
+  try {
+    const c = buildPaeComposite(canvas, n, bytes, chainSizes, scale, chainPairs)
+    if (!c) return
     downloadCanvas(c, name)
   } catch {}
+}
+
+async function copyPaeComposite(canvas, n, bytes, chainSizes, scale, chainPairs) {
+  return copyCanvasPng(canvas, (cv) => buildPaeComposite(cv, n, bytes, chainSizes, scale, chainPairs))
 }
 
 // Raw pair errors as CSV (chain-prefixed 1-based indices, long format) —
@@ -2559,6 +2573,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
   // Maximized mode: the whole PAE module goes fixed over the frame so the
   // error matrix can be explored at presentation size (Esc exits).
   const [maxed, setMaxed] = useState(false)
+  const [paeCopied, setPaeCopied] = useState(null)
 
   useEffect(() => {
     if (!maxed) return
@@ -2871,6 +2886,23 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
             onClick: () => setMaxed((m) => !m),
           },
           maxed ? '⤡ 退出全屏' : '⤢ 全屏',
+        ),
+        h(
+          'button',
+          {
+            className: 'pv-export',
+            onClick: async (e) => {
+              try {
+                const canvas = e.currentTarget.closest('.pv-pae')?.querySelector('canvas.pv-pae-canvas')
+                const ok = await copyPaeComposite(canvas, n, pae.bytes, chainSizes, scale, chainPairs)
+                setPaeCopied(ok)
+              } catch {
+                setPaeCopied(false)
+              }
+              setTimeout(() => setPaeCopied(null), 1600)
+            },
+          },
+          paeCopied == null ? '复制图像' : paeCopied ? '已复制 ✓' : '复制失败',
         ),
         h(
           'button',
