@@ -99,7 +99,7 @@ async function runLocalBoltz({ proteins, smiles, label, wait }) {
   // Local mode is synchronous — no job id exists, so `wait` is advisory only.
   let stdout = ''
   try {
-    ;({ stdout } = await exec(bin, ['predict', join(work, 'input.yaml'), '--accelerator', 'mps', '--out_dir', join(work, 'out')], {
+    ;({ stdout } = await exec(bin, ['predict', join(work, 'input.yaml'), '--accelerator', 'mps', '--use_msa_server', '--out_dir', join(work, 'out')], {
       timeout: 20 * 60_000,
       maxBuffer: 64 * 1024 * 1024,
     }))
