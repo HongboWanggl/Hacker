@@ -492,6 +492,8 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
                   stripMode,
                   distMap,
                   gmap,
+                  ligandInfo,
+                  showLigand,
                 ),
             },
             '导出 PNG',
@@ -1552,7 +1554,7 @@ function exportCompareCsv(e, name, residues, distMap, gmap) {
 // Compare PNG export composites the 3D overlay with the divergence strip below,
 // drawn on a backdrop band that continues the 3D gradient. `mode` picks the
 // strip coloring (ΔpLDDT or Cα distance); unmatched residues stay gray.
-function exportComparePng(e, name, residues, mode, distMap, gmap) {
+function exportComparePng(e, name, residues, mode, distMap, gmap, ligandInfo = null, showLigand = false) {
   const col = e.currentTarget.closest('.pv-3d-col')
   const canvas = col?.querySelector('canvas.pv-3d')
   if (!canvas || typeof canvas.toDataURL !== 'function' || !residues?.length) return
@@ -1563,9 +1565,10 @@ function exportComparePng(e, name, residues, mode, distMap, gmap) {
     const rows = Math.ceil(residues.length / perRow)
     const labelH = Math.round(20 * s)
     const top = 8 * s
+    const ligH = ligandInfo && showLigand ? labelH : 0
     const c = document.createElement('canvas')
     c.width = canvas.width
-    c.height = Math.round(canvas.height + top + labelH + rows * pitch)
+    c.height = Math.round(canvas.height + top + ligH + labelH + rows * pitch)
     const g = c.getContext('2d')
     g.drawImage(canvas, 0, 0)
     // band continues the 3D backdrop gradient (#0e1420 → #141c2b)
@@ -1576,13 +1579,29 @@ function exportComparePng(e, name, residues, mode, distMap, gmap) {
     g.fillRect(0, canvas.height, c.width, c.height - canvas.height)
     g.font = `${11 * s}px ui-sans-serif, system-ui`
     g.textBaseline = 'middle'
+    if (ligH) {
+      // element key row, same style as the single-panel 3D export
+      let x = 6 * s
+      const y = canvas.height + top + ligH / 2
+      for (const el of ['C', 'N', 'O', 'S', 'P']) {
+        const rgb = ligandColor(el)
+        g.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`
+        g.beginPath()
+        g.arc(x + 5 * s, y, 5 * s, 0, Math.PI * 2)
+        g.fill()
+        g.fillStyle = 'rgba(255,255,255,0.9)'
+        g.fillText(el, x + 13 * s, y)
+        x += 34 * s
+      }
+      g.fillText('配体按元素着色 · 口袋虚线 = 5 Å 内接触', x + 8 * s, y)
+    }
     g.fillStyle = 'rgba(255,255,255,0.85)'
     g.fillText(
       mode === 'dist'
         ? 'Cα 偏差（叠合后） · teal ≤0.5 Å → 红 ≥5 Å'
         : '|ΔpLDDT| 置信度差异 · 0 → ≥30',
       6 * s,
-      canvas.height + top + labelH / 2,
+      canvas.height + top + ligH + labelH / 2,
     )
     residues.forEach((r, idx) => {
       const d = distMap?.get(r.i)
@@ -1594,7 +1613,7 @@ function exportComparePng(e, name, residues, mode, distMap, gmap) {
           : gmap.has(r.i)
             ? deltaColor(r.b - gmap.get(r.i))
             : '#b6b6b6'
-      g.fillRect((idx % perRow) * pitch + 6 * s, canvas.height + top + labelH + Math.floor(idx / perRow) * pitch, pitch - 1, pitch - 1)
+      g.fillRect((idx % perRow) * pitch + 6 * s, canvas.height + top + ligH + labelH + Math.floor(idx / perRow) * pitch, pitch - 1, pitch - 1)
     })
     downloadCanvas(c, name)
   } catch {}

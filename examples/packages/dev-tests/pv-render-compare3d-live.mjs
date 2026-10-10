@@ -9,7 +9,20 @@ globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(16), 16)
 globalThis.cancelAnimationFrame = (id) => clearTimeout(id)
 globalThis.devicePixelRatio = 1
 const anyFn = new Proxy(function () {}, { get: (t, k) => (k === Symbol.toPrimitive ? () => 0 : anyFn), apply: () => anyFn })
-win.HTMLCanvasElement.prototype.getContext = function () { return anyFn }
+// Recording 2d context: log fillText/arc so the export composite can be asserted.
+const g2dCalls = []
+const recording = new Proxy({}, {
+  get(t, k) {
+    if (k === 'canvas') return { width: 300, height: 300 }
+    return (...args) => {
+      if (k === 'fillText' || k === 'arc') g2dCalls.push([k, ...args])
+      return anyFn
+    }
+  },
+  set() { return true },
+})
+win.HTMLCanvasElement.prototype.getContext = function () { return recording }
+win.HTMLCanvasElement.prototype.toDataURL = () => 'data:image/png;base64,'
 
 const React = (await import('/Users/wanghanbao/agnes-harness/node_modules/.pnpm/react@18.3.1/node_modules/react/index.js')).default
 const { createRoot } = await import('/Users/wanghanbao/agnes-harness/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/client.js')
@@ -146,6 +159,26 @@ if (ligInput) {
   const html3 = container.innerHTML
   ligChecks.push(['unchecking hides element legend', (html3.match(/pv-ligand-el/g) ?? []).length === 0])
   ligChecks.push(['checkbox reflects off state', ligInput.checked === false])
+  // re-enable so the export test below sees the pose
+  ligInput.click()
+  await new Promise((r) => setTimeout(r, 250))
 }
 for (const [name, ok] of ligChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
+
+// compare PNG export composite: with the pose shown, the band must carry the
+// ligand element key (5 arcs + note) above the strip label row.
+const expChecks = []
+const pngBtn = [...container.querySelectorAll('button.pv-export')].find((b) => (b.textContent ?? '').trim() === '导出 PNG')
+expChecks.push(['export PNG button rendered', !!pngBtn])
+if (pngBtn) {
+  const before = g2dCalls.length
+  pngBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 200))
+  const texts = g2dCalls.slice(before).filter((c) => c[0] === 'fillText').map((c) => c[1])
+  const arcs = g2dCalls.slice(before).filter((c) => c[0] === 'arc').length
+  expChecks.push(['composite carries ligand element key', texts.some((t) => String(t).includes('配体按元素着色'))])
+  expChecks.push([`composite draws 5 element dots (got ${arcs})`, arcs >= 5])
+  expChecks.push(['composite carries strip label', texts.some((t) => String(t).includes('|ΔpLDDT|'))])
+}
+for (const [name, ok] of expChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 process.exit(failed ? 1 : 0)
