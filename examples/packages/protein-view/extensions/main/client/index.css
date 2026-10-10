@@ -347,12 +347,50 @@
 .pv-search-head,
 .pv-search-row {
   display: grid;
-  grid-template-columns: 92px 1fr 1fr 64px;
+  grid-template-columns: 22px 92px 1fr 1fr 64px;
   gap: 8px;
   align-items: center;
   padding: 6px 10px;
   text-align: left;
 }
+/* Batch-selection checkbox column (search card) */
+.pv-search-check {
+  all: unset;
+  width: 15px;
+  height: 15px;
+  box-sizing: border-box;
+  border: 1.5px solid rgb(255 255 255 / 22%);
+  border-radius: 4px;
+  cursor: pointer;
+  color: #fff;
+  font-size: 10px;
+  line-height: 12px;
+  text-align: center;
+  vertical-align: middle;
+}
+.pv-search-check:hover { border-color: #ff7d45; }
+.pv-search-check--on { background: #ff7d45; border-color: #ff7d45; }
+.pv-search-row--sel { background: rgb(255 125 69 / 7%); }
+/* Batch hand-off bar under the table */
+.pv-batchbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px solid rgb(255 125 69 / 35%);
+  border-radius: 10px;
+  background: rgb(255 125 69 / 8%);
+  font-size: 11.5px;
+}
+.pv-batchbar-count { font-weight: 600; color: #b34a1e; font-variant-numeric: tabular-nums; }
+.pv-batchbar-clear {
+  all: unset;
+  cursor: pointer;
+  color: #8d99af;
+  font-size: 11px;
+}
+.pv-batchbar-clear:hover { color: #c9d4ee; text-decoration: underline; }
 .pv-search-head {
   font-size: 11px;
   color: #8d99af;

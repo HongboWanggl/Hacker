@@ -731,6 +731,11 @@ function SearchCard({ report }) {
   // Column sort: null = UniProt relevance order; clicking a header toggles
   // asc → desc → back to relevance.
   const [sort, setSort] = useState(null)
+  // Multi-select for the batch hand-off: tick rows, then copy a ready-made
+  // batch_predict prompt (client can't run agent turns, but the pasted prompt
+  // saves the user from retyping accessions).
+  const [sel, setSel] = useState(() => new Set())
+  const [batchCopied, setBatchCopied] = useState(false)
   const hits = Array.isArray(report.hits) ? report.hits : []
   const sorted = useMemo(() => {
     if (!sort) return hits
@@ -746,6 +751,27 @@ function SearchCard({ report }) {
   const toggleSort = (key) =>
     setSort((s) => (s?.key !== key ? { key, dir: 'asc' } : s.dir === 'asc' ? { key, dir: 'desc' } : null))
   const arrow = (key) => (sort?.key !== key ? '' : sort.dir === 'asc' ? ' ▲' : ' ▼')
+  const toggleSel = (acc) =>
+    setSel((s) => {
+      const n = new Set(s)
+      if (n.has(acc)) n.delete(acc)
+      else n.add(acc)
+      return n
+    })
+  const allSel = hits.length > 0 && hits.every((x) => !x.accession || sel.has(x.accession))
+  const toggleAll = () =>
+    setSel((s) => (allSel ? new Set() : new Set(hits.map((x) => x.accession).filter(Boolean))))
+  const copyBatch = () => {
+    const text = `用 batch_predict 一次预测这些蛋白：${[...sel].join(' ')}`
+    try {
+      void navigator.clipboard?.writeText(text)
+    } catch {
+      // Clipboard unavailable — the bar still confirms selection; user can
+      // retype from the visible accessions.
+    }
+    setBatchCopied(true)
+    setTimeout(() => setBatchCopied(false), 1800)
+  }
   const copy = (acc) => {
     try {
       void navigator.clipboard?.writeText(acc)
@@ -784,6 +810,15 @@ function SearchCard({ report }) {
           h(
             'div',
             { className: 'pv-search-head' },
+            h(
+              'button',
+              {
+                className: 'pv-search-check' + (allSel ? ' pv-search-check--on' : ''),
+                title: allSel ? '取消全选' : '全选',
+                onClick: toggleAll,
+              },
+              allSel ? '✓' : '',
+            ),
             headCell('accession', 'Accession'),
             headCell('proteinName', '蛋白'),
             headCell('organism', '物种'),
@@ -793,11 +828,23 @@ function SearchCard({ report }) {
             h(
               'button',
               {
-                className: 'pv-search-row',
+                className: 'pv-search-row' + (hit.accession && sel.has(hit.accession) ? ' pv-search-row--sel' : ''),
                 key: hit.accession ?? k,
                 title: `点击复制 ${hit.accession ?? ''}`,
                 onClick: () => copy(hit.accession),
               },
+              h(
+                'span',
+                {
+                  className: 'pv-search-check' + (hit.accession && sel.has(hit.accession) ? ' pv-search-check--on' : ''),
+                  title: sel.has(hit.accession) ? '取消选择' : '加入批量预测',
+                  onClick: (e) => {
+                    e.stopPropagation()
+                    if (hit.accession) toggleSel(hit.accession)
+                  },
+                },
+                hit.accession && sel.has(hit.accession) ? '✓' : '',
+              ),
               h(
                 'span',
                 { className: 'pv-search-acccell' },
@@ -826,7 +873,20 @@ function SearchCard({ report }) {
           ),
         )
       : h('div', { className: 'pv-fallback' }, '没有匹配的蛋白，换个关键词再试。'),
-    h('div', { className: 'pv-search-hint' }, '点击行复制 accession，点击表头排序；回复「预测 <accession>」继续，或用 batch_predict 一次预测多个。'),
+    sel.size > 0
+      ? h(
+          'div',
+          { className: 'pv-batchbar' },
+          h('span', { className: 'pv-batchbar-count' }, `已选 ${sel.size} 个`),
+          h(
+            'button',
+            { className: 'pv-chip pv-chip--active', onClick: copyBatch, title: '复制 batch_predict 指令到剪贴板，粘贴到对话框即可批量预测' },
+            batchCopied ? '已复制 ✓ 粘贴到对话框' : '复制批量预测指令',
+          ),
+          h('button', { className: 'pv-batchbar-clear', onClick: () => setSel(new Set()) }, '清空'),
+        )
+      : null,
+    h('div', { className: 'pv-search-hint' }, '点击行复制 accession，点击表头排序，勾选后一键生成批量预测指令；回复「预测 <accession>」继续，或用 batch_predict 一次预测多个。'),
   )
 }
 
