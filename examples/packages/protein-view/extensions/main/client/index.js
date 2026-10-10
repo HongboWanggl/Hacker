@@ -1304,6 +1304,7 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
 // (e.g. by post-superposition Cα distance); null falls back to the gray ghost.
 function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, autoSpin, ghost, ghostColorOf, hintText }) {
   const canvasRef = useRef(null)
+  const tipRef = useRef(null)
   const wrapRef = useRef(null)
   const [size, setSize] = useState({ w: 600, h: 340 })
   const view = useRef({ yaw: -0.6, pitch: 0.35, zoom: 1, dragging: false, lastX: 0, lastY: 0, vx: 0, vy: 0, lastInteract: 0 })
@@ -1572,6 +1573,13 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
           const k = pick(ev)
           if (k != null) onHover?.(k)
           else onHover?.(null)
+          // Floating readout follows the cursor (like the curve tooltip); the
+          // visible/off state rides on the hover prop.
+          if (tipRef.current) {
+            const wrap = tipRef.current.parentElement.getBoundingClientRect()
+            tipRef.current.style.left = `${Math.min(ev.clientX - wrap.left + 12, wrap.width - 96)}px`
+            tipRef.current.style.top = `${ev.clientY - wrap.top - 28}px`
+          }
         }
       },
       onPointerUp: (ev) => {
@@ -1597,6 +1605,14 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
         Object.assign(view.current, { yaw: -0.6, pitch: 0.35, zoom: 1, vx: 0, vy: 0 })
       },
     }),
+    (() => {
+      const r = hover != null ? residues[hover] : null
+      return h(
+        'div',
+        { className: `pv-3d-tip${r ? ' pv-3d-tip--on' : ''}`, ref: tipRef },
+        r ? `${resLabel(residues, r)} · pLDDT ${r.b.toFixed(1)}` : '',
+      )
+    })(),
     h('div', { className: 'pv-3d-hint' }, hintText ?? '拖拽旋转 · 滚轮缩放 · 双击复位'),
   )
 }

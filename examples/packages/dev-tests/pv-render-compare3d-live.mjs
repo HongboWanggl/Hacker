@@ -49,6 +49,7 @@ const checks = [
   ['3D title shows ghost count', html.includes('3D 叠合 · 预测 20 aa + 参考 20 aa')],
   ['ghost hint', html.includes('灰色为 AlphaFold 参考模型')],
   ['3D canvas mounted', html.includes('pv-3d')],
+  ['3D floating tip mounted', html.includes('pv-3d-tip')],
   ['sparkline still present', html.includes('pv-delta-bars')],
   ['divergence strip renders 20 tiles', (html.match(/pv-seq-tile/g) ?? []).length === 20],
   ['strip tile carries Δ tooltip', /· Δ -?\d/.test(html)],

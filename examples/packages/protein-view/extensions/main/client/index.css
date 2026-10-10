@@ -244,6 +244,23 @@
   display: block;
 }
 .pv-3d:active { cursor: grabbing; }
+.pv-3d-wrap { position: relative; }
+/* Floating cursor readout over the 3D view (same skin as the curve tooltip) */
+.pv-3d-tip {
+  position: absolute;
+  z-index: 3;
+  background: rgb(20 24 32 / 85%);
+  color: #fff;
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pv-3d-tip--on { opacity: 1; }
 .pv-3d-hint { font-size: 10px; color: var(--pv-muted); text-align: right; margin-top: 2px; }
 .pv-hoverline {
   min-height: 16px;
