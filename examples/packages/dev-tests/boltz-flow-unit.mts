@@ -3,6 +3,7 @@
 // API needs a paid key). Covers: wait=false submit, bearer→x-api-key fallback,
 // success parsing (metrics scaled to 0-100, verdict), failed-job surfacing,
 // and the "complexes only" guard.
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { predictComplex } from '/Users/wanghanbao/agnes-harness/examples/packages/protein-predictor/boltz.mjs'
 
 const captured: any[] = []
@@ -154,6 +155,47 @@ const jsonRes = (obj: any, status = 200) => ({ ok: status >= 200 && status < 300
   ok('resume polls existing job', !res.isError && r.savedTo === 'structures/resumed_boltz.pdb')
   ok('resume never resubmits', !calls.some((c) => c.init.method === 'POST'))
   ok('resume verdict from binding confidence', r.verdict === 'predicted to bind with high confidence')
+}
+
+// --- 5. local mode: no key, fake boltz CLI produces model + confidences
+{
+  delete process.env.BOLTZ_API_KEY
+  process.env.AGH_HOME = '/tmp/unit-test-no-such-agh'
+  mkdirSync('/tmp/boltz-fake-bin', { recursive: true })
+  const fakeBin = '/tmp/boltz-fake-bin/boltz'
+  writeFileSync(
+    fakeBin,
+    `#!/bin/bash
+OUT=""
+args=("$@")
+for i in \${!args[@]}; do
+  if [ "\${args[$i]}" = "--out_dir" ]; then OUT="\${args[$((i+1))]}"; fi
+done
+mkdir -p "$OUT/predictions/input"
+cat > "$OUT/predictions/input/model_0.pdb" <<'PDB'
+${PDB}
+PDB
+echo '{"ptm":0.9,"iptm":0.85,"ligand_iptm":0.8}' > "$OUT/predictions/input/confidence_model_0.json"
+echo '{"affinity_probability":0.91,"affinity_pred_value":-6.2}' > "$OUT/predictions/input/affinity_model_0.json"
+`,
+    { mode: 0o755 },
+  )
+  process.env.BOLTZ_LOCAL_BIN = fakeBin
+  const tctx = makeTctx([], () => {
+    throw new Error('network must not be used in local mode')
+  })
+  const res = await spec.execute(
+    { sequences: 'MKTAYIAKQRQISFVKSHFSRQ,EIAKQGQVTMVIKKSMLEK', ligand_smiles: 'CC(=O)OC1=CC=CC=C1C(=O)O', name: 'local pair' },
+    tctx,
+  )
+  const r = res.structured ?? {}
+  ok('local mode runs without a key', !res.isError && r.engine === 'boltz2-local', JSON.stringify(r).slice(0, 200))
+  ok('local mode saves workspace PDB', String(tctx.written.get('structures/local_pair_boltz_local.pdb') ?? '').includes('CA  ALA'))
+  ok('local mode scales confidences to 0-100', r.ptm === 90 && r.iptm === 85 && r.bindingConfidence === 91, JSON.stringify(r.metrics ?? r).slice(0, 120))
+  ok('local mode verdict from affinity', r.verdict === 'predicted to bind with high confidence')
+  ok('local mode residue count', r.residues === 4)
+  ok('local mode flags ligand + chains', r.chains === 2 && r.hasLigand === true)
+  delete process.env.BOLTZ_LOCAL_BIN
 }
 
 console.log('BOLTZ FLOW TESTS DONE')

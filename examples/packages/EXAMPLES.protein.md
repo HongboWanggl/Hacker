@@ -50,7 +50,12 @@ structures/p53_R248W_393aa.pdb（R248W 热点突变体，ESMFold 预测）
 说明折叠是否一致、置信度分歧最大的残基在哪里。
 ```
 
-## 复合物 / 蛋白-配体（需要 Boltz API key，付费）
+## 复合物 / 蛋白-配体（Boltz-2）
+
+配置了 API key 时走云端（快、支持大复合物）；**未配置密钥时自动使用本机开源权重**
+（`boltz-community`，Apple Silicon 走 MPS 加速）：报告带 `engine: "boltz2-local"`，
+指标口径与云端一致，但每个目标需数分钟、首次运行会下载约 10GB 权重，大复合物（>500 残基）
+建议配 key。
 
 ```text
 用 predict_complex 预测这两条链的复合物：

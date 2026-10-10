@@ -1,12 +1,18 @@
-// Boltz-2 complex/ligand prediction via api.boltz.bio.
+// Boltz-2 complex/ligand prediction via api.boltz.bio, with a local fallback.
 // Complements ESMFold (single-chain, free): Boltz-2 handles protein/ligand/RNA/DNA
 // complexes and reports interface confidences (pTM, ipTM, ligand_iPTM, binding
-// confidence) that single-chain tools cannot. Requires a Boltz API key — resolved
-// from BOLTZ_API_KEY or the AGH secret store (secrets/boltz/default) — and fails
-// with setup instructions when neither is present.
+// confidence) that single-chain tools cannot. With a key (BOLTZ_API_KEY or the
+// AGH secret store) it calls the API; without one it runs the open-source
+// weights locally when the boltz-community CLI is installed (Apple MPS or
+// CUDA), and only fails with setup instructions when neither path exists.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { accessSync, constants as fsConstants } from 'node:fs'
 
 const Kind = Symbol.for('TypeBox.Kind')
 
@@ -54,7 +60,90 @@ function resolveApiKey() {
 const SETUP_HINT =
   'Boltz-2 needs an API key. Either set BOLTZ_API_KEY in the daemon environment, or create the secret file: ' +
   'mkdir -p "$AGH_HOME/secrets/boltz" && printf %s "YOUR_KEY" > "$AGH_HOME/secrets/boltz/default" && chmod 600 "$AGH_HOME/secrets/boltz/default" ' +
- '(get a key at https://boltz.bio).'
+ '(get a key at https://boltz.bio). Alternatively install the open-source weights locally: ' +
+ 'uv venv --python 3.12 ~/boltz2/venv && uv pip install --python ~/boltz2/venv/bin/python boltz-community ' +
+ '(Apple Silicon uses MPS; first run downloads ~10 GB of weights).'
+
+// Local open-source fallback: the boltz-community fork (Apple MPS / CUDA).
+// Detect the CLI; BOLTZ_LOCAL_BIN overrides the default venv path.
+function resolveLocalBoltz() {
+  const candidates = [process.env.BOLTZ_LOCAL_BIN, join(process.env.HOME ?? '', 'boltz2', 'venv', 'bin', 'boltz')].filter(Boolean)
+  for (const p of candidates) {
+    try {
+      accessSync(p, fsConstants.X_OK)
+      return p
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  return undefined
+}
+
+// Run a prediction locally and shape the result like the API path so the panel
+// renders identically. Local runs take minutes (MPS fp32, roughly 1-2x slower
+// than a T4); the first ever run also downloads ~10 GB of weights.
+async function runLocalBoltz({ proteins, smiles, label, wait }) {
+  const bin = resolveLocalBoltz()
+  if (!bin) return { missing: true }
+  const exec = promisify(execFile)
+  const work = await mkdtemp(join(tmpdir(), 'boltz-local-'))
+  await mkdir(join(work, 'out'), { recursive: true })
+  const yaml = ['sequences:']
+  for (const [i, seq] of proteins.entries()) {
+    yaml.push(`  - protein:\n      id: ${String.fromCharCode(65 + i)}\n      sequence: ${seq}`)
+  }
+  if (smiles) {
+    yaml.push(`  - ligand:\n      id: ${String.fromCharCode(65 + proteins.length)}\n      smiles: ${smiles}`)
+  }
+  await writeFile(join(work, 'input.yaml'), `${yaml.join('\n')}\n`, 'utf8')
+  // Local mode is synchronous — no job id exists, so `wait` is advisory only.
+  let stdout = ''
+  try {
+    ;({ stdout } = await exec(bin, ['predict', join(work, 'input.yaml'), '--accelerator', 'mps', '--out_dir', join(work, 'out')], {
+      timeout: 20 * 60_000,
+      maxBuffer: 64 * 1024 * 1024,
+    }))
+  } catch (error) {
+    const msg = String(error?.message ?? error)
+    if (killed(error)) return { error: `Local Boltz-2 timed out after 20 min (${msg.slice(0, 120)}). Try smaller targets or the API.` }
+    return { error: `Local Boltz-2 failed: ${msg.slice(0, 400)}` }
+  }
+  // Locate the best model: the deepest model_0.pdb under the out dir plus the
+  // confidence/affinity JSONs next to it (layout varies slightly across versions).
+  const outRoot = join(work, 'out')
+  const stack = [outRoot]
+  let modelPdb = null
+  while (stack.length && !modelPdb) {
+    const dir = stack.pop()
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const e of entries) {
+      const p = join(dir, e.name)
+      if (e.isDirectory()) stack.push(p)
+      else if (e.name === 'model_0.pdb') modelPdb = p
+    }
+  }
+  if (!modelPdb) return { error: `Local Boltz-2 finished but no model_0.pdb found under ${outRoot}` }
+  const beside = (suffix) => {
+    try {
+      const dir = modelPdb.slice(0, modelPdb.lastIndexOf('/'))
+      return JSON.parse(readFileSync(join(dir, suffix), 'utf8'))
+    } catch {
+      return undefined
+    }
+  }
+  const conf = beside('confidence_model_0.json') ?? {}
+  const aff = beside('affinity_model_0.json') ?? {}
+  return { modelPdb, conf, aff, stdout: stdout.slice(-400) }
+}
+
+function killed(error) {
+  return error?.killed === true || String(error?.message ?? '').includes('TIMEDOUT') === true || String(error?.message ?? '').includes('ETIMEDOUT') === true
+}
 
 async function boltzFetch(tctx, path, init) {
   const key = resolveApiKey()
@@ -141,7 +230,7 @@ export const predictComplex = {
     agnes.registerTool({
       name: 'predict_complex',
       description:
-        'Predict a protein complex or protein-ligand structure with Boltz-2 (co-folding). Handles multi-chain proteins, RNA/DNA, and small-molecule ligands; reports pTM/ipTM interface confidence and binding confidence. Costs API credits — prefer predict_structure (ESMFold, free) for single-chain jobs. Saves the best structure as a PDB with pLDDT in the B-factor column.',
+        'Predict a protein complex or protein-ligand structure with Boltz-2 (co-folding). Handles multi-chain proteins, RNA/DNA, and small-molecule ligands; reports pTM/ipTM interface confidence and binding confidence. Uses the Boltz API when a key is configured (costs credits); otherwise runs the open-source weights locally via the boltz-community CLI (slow: minutes per target, first run downloads ~10 GB) — prefer predict_structure (ESMFold, free) for single-chain jobs. Saves the best structure as a PDB with pLDDT in the B-factor column.',
       parameters: {
         [Kind]: 'Object',
         type: 'object',
@@ -176,10 +265,45 @@ export const predictComplex = {
           return fail('This tool is for complexes: pass at least two chains or one chain + ligand_smiles. For a single chain use predict_structure (free).')
         }
         const key = resolveApiKey()
-        if (!key) return fail(SETUP_HINT)
+        const label = name.replace(/[^A-Za-z0-9_.-]/g, '_')
+        // No key → run the open-source weights locally when the CLI exists.
+        if (!key) {
+          if (!resolveLocalBoltz()) return fail(SETUP_HINT)
+          const t0 = Date.now()
+          const out = await runLocalBoltz({ proteins, smiles, label, wait })
+          if (out.missing) return fail(SETUP_HINT)
+          if (out.error) return fail(out.error)
+          // boltz writes pLDDT into the PDB B-factor column, so the existing
+          // confidence viewer renders local models without extra work.
+          const pdb = await readFile(out.modelPdb, 'utf8')
+          const nResidues = [...pdb.matchAll(/^ATOM\s+\d+\s+CA\s/gm)].length
+          const path = `structures/${label}_boltz_local.pdb`
+          await tctx.fs.write(path, pdb)
+          const pct = (x) => (Number.isFinite(x) ? Math.round(x * 1000) / 10 : undefined)
+          const metrics = {
+            ...(pct(out.conf?.ptm) !== undefined ? { ptm: pct(out.conf.ptm) } : {}),
+            ...(pct(out.conf?.iptm) !== undefined ? { iptm: pct(out.conf.iptm) } : {}),
+            ...(pct(out.conf?.ligand_iptm) !== undefined ? { ligandIptm: pct(out.conf.ligand_iptm) } : {}),
+            ...(pct(out.conf?.protein_iptm) !== undefined ? { proteinIptm: pct(out.conf.protein_iptm) } : {}),
+            ...(pct(out.aff?.affinity_probability) !== undefined ? { bindingConfidence: pct(out.aff.affinity_probability) } : {}),
+          }
+          const verdict = out.aff?.affinity_probability != null
+            ? verdictFrom({ binding_confidence: out.aff.affinity_probability })
+            : verdictFrom({ iptm: out.conf?.iptm ?? out.conf?.ptm ?? 0 })
+          const report = {
+            engine: 'boltz2-local',
+            savedTo: path,
+            chains: proteins.length,
+            hasLigand: Boolean(smiles),
+            residues: nResidues,
+            ...metrics,
+            ...(verdict ? { verdict } : {}),
+            runtimeSec: Math.round((Date.now() - t0) / 1000),
+          }
+          return result(report, JSON.stringify(report))
+        }
 
         const resumeId = String(prediction_id || '').trim()
-        const label = name.replace(/[^A-Za-z0-9_.-]/g, '_')
         let id = resumeId
         if (!resumeId) {
           const entities = buildEntities({ proteins, ligand_smiles: smiles || undefined })

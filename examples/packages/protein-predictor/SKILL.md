@@ -22,7 +22,10 @@ description: 蛋白质结构预测工作流：UniProt 取序列、ESMFold 结构
        可称"预测高置信结合"，50-80 提示"可能结合、需实验验证"
      - 长任务：`wait=false` 立即返回 predictionId；超时返回会带恢复指引——稍后用
        `prediction_id="<id>"`（传相同 sequences）再调用即可取结果，不会重复计费提交
-     - 未配置密钥时工具会返回配置指引，向用户转述即可（密钥放 `AGH_HOME/secrets/boltz/default`
+     - **未配置密钥时自动走本地开源权重**（boltz-community CLI，Apple MPS）：报告带
+       `engine: "boltz2-local"`，指标口径一致，但每个目标要跑几分钟、首次运行会下载
+       ~10GB 权重；大复合物（>500 残基）建议配 API key
+     - 两者都没有时工具会返回配置指引，向用户转述即可（密钥放 `AGH_HOME/secrets/boltz/default`
        或环境变量 `BOLTZ_API_KEY`，值不要出现在对话里）
 3. **置信度分析**：对产出的 PDB 运行 `analyze_confidence`，解读指标时使用下表。
 4. **与 AlphaFold DB 对比（可选）**：用户提供 UniProt accession 且该蛋白在 AlphaFold DB
@@ -75,6 +78,7 @@ description: 蛋白质结构预测工作流：UniProt 取序列、ESMFold 结构
 
 - ESMFold 是单序列语言模型法：对孤儿序列（同源少的蛋白）精度低于 AF 系；多链复合物、
   配体结合场景改用 `predict_complex`（Boltz-2）
-- `predict_complex` 消耗 Boltz API 额度：先向用户确认再调用；单链任务一律用 `predict_structure`
+- `predict_complex` 配置了密钥时消耗 Boltz API 额度：先向用户确认再调用；未配密钥走本地权重
+  （慢，几分钟一个目标）；单链任务一律用 `predict_structure`
 - 涉及实验决策（如突变设计）时，明确说明"计算结果≠实验结论"
 - 每次向用户报告时给出：PDB 文件路径、平均 pLDDT、低置信区段列表
