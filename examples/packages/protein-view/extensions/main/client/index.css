@@ -222,6 +222,7 @@
 }
 .pv-export:hover { background: rgb(0 83 214 / 14%); }
 .pv-export:active { transform: translateY(1px); }
+.pv-3d-toolbar .pv-export + .pv-export { margin-left: 6px; }
 .pv-jump {
   font-size: 11px;
   padding: 3px 8px;

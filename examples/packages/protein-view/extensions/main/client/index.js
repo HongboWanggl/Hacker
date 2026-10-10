@@ -431,6 +431,21 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
             },
             '导出 PNG',
           ),
+          h(
+            'button',
+            {
+              className: 'pv-export',
+              onClick: (e) =>
+                exportCompareCsv(
+                  e,
+                  `${(predPath ?? 'compare').split('/').pop().replace(/\.pdb$/i, '')}.compare.csv`,
+                  pred.residues,
+                  distMap,
+                  gmap,
+                ),
+            },
+            '导出 CSV',
+          ),
         ),
       h(Structure3D, {
         residues: pred.residues,
@@ -1135,6 +1150,33 @@ function exportCurvePng(e, name, residues) {
       g.fillRect((idx % perRow) * pitch + 6 * s, canvas.height + top + Math.floor(idx / perRow) * pitch, pitch - 1, pitch - 1)
     })
     downloadCanvas(c, name)
+  } catch {}
+}
+
+// Compare per-residue CSV: pLDDT both sides, Δ and post-superposition Cα
+// distance per residue — the raw numbers behind the divergence strip.
+function exportCompareCsv(e, name, residues, distMap, gmap) {
+  const row = (r) => {
+    const gb = gmap?.get(r.i)
+    const d = distMap?.get(r.i)
+    return [
+      r.chain ? `${r.chain}:${r.i}` : r.i,
+      r.aa ?? '',
+      r.b != null ? r.b.toFixed(1) : '',
+      gb != null ? gb.toFixed(1) : '',
+      gb != null ? (r.b - gb).toFixed(1) : '',
+      d != null ? d.toFixed(2) : '',
+    ].join(',')
+  }
+  try {
+    const url = URL.createObjectURL(
+      new Blob(['residue,aa,plddt_pred,plddt_ref,delta_plddt,ca_dist\n' + residues.map(row).join('\n')], { type: 'text/csv' }),
+    )
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    a.click()
+    URL.revokeObjectURL(url)
   } catch {}
 }
 
