@@ -101,12 +101,13 @@ function deltaColor(d) {
 // Structural-deviation scale for the compare strip's distance mode: teal at
 // ≤0.5 Å (essentially identical) → amber ~2 Å → red at ≥5 Å. The 0.55 exponent
 // bends the ramp early so sub-Å noise stays calm while real deviations pop.
-function distColor(d) {
+function distColorRgb(d) {
   const a = Math.min(Math.max(d, 0) / 5, 1) ** 0.55
   const from = [64, 180, 160]
   const to = [235, 80, 60]
-  return `rgb(${from.map((v, i) => Math.round(v + (to[i] - v) * a)).join(',')})`
+  return from.map((v, i) => Math.round(v + (to[i] - v) * a))
 }
+const distColor = (d) => `rgb(${distColorRgb(d).join(',')})`
 const isMultiChain = (residues) => Array.isArray(residues) && residues.length > 1 && residues.some((r) => r.chain && r.chain !== residues[0].chain)
 
 function ChainLegend({ residues }) {
@@ -418,6 +419,17 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
         colorMode: isMultiChain(pred.residues) ? 'chain' : 'plddt',
         autoSpin: true,
         ghost: ghostResidues,
+        // In the distance lens the ghost recolors by post-superposition Cα
+        // deviation — structural hot spots become visible spatially, not just
+        // in the strip. Ghost residues without a match stay gray.
+        ghostColorOf:
+          stripMode === 'dist' && distMap
+            ? (a, b) => {
+                const g = ghostResidues[a] ?? ghostResidues[b]
+                const d = g != null ? distMap.get(g.i) : undefined
+                return d != null ? distColorRgb(d) : null
+              }
+            : undefined,
         hover,
         onHover: setHover,
         onSelect: (k) => {
@@ -425,7 +437,7 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
           if (r) onPickRes?.(r.i)
         },
         selected: selIdx != null && selIdx >= 0 ? selIdx : undefined,
-        hintText: `拖拽旋转 · 滚轮缩放 · 双击复位 · 灰色为 ${pw ? pw[1] : 'AlphaFold 参考模型'}`,
+        hintText: `拖拽旋转 · 滚轮缩放 · 双击复位 · ${stripMode === 'dist' ? '参考链按 Cα 偏差着色，灰=无匹配' : `灰色为 ${pw ? pw[1] : 'AlphaFold 参考模型'}`}`,
       }),
       isMultiChain(pred.residues) ? h(ChainLegend, { residues: pred.residues }) : null,
       h('div', { className: 'pv-hoverline' }, hoverLine),
@@ -1268,7 +1280,9 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
 
 // ---------------------------------------------------------------------------
 // 3D backbone viewer. Canvas 2D, painter's algorithm, orthographic + depth fog.
-function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, autoSpin, ghost, hintText }) {
+// `ghostColorOf(aIdx, bIdx)` lets the compare card recolor ghost segments
+// (e.g. by post-superposition Cα distance); null falls back to the gray ghost.
+function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, autoSpin, ghost, ghostColorOf, hintText }) {
   const canvasRef = useRef(null)
   const wrapRef = useRef(null)
   const [size, setSize] = useState({ w: 600, h: 340 })
@@ -1410,7 +1424,11 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
           const p1 = ghostProjected[it.a]
           const p2 = ghostProjected[it.b]
           const d = depth01(it.z)
-          ctx2d.strokeStyle = `rgba(158,168,186,${0.55 * (1 - 0.55 * d)})`
+          const gc = ghostColorOf?.(it.a, it.b)
+          if (gc) {
+            const f = 1.15 - 0.5 * d
+            ctx2d.strokeStyle = `rgba(${Math.round(Math.min(255, gc[0] * f))},${Math.round(Math.min(255, gc[1] * f))},${Math.round(Math.min(255, gc[2] * f))},${0.7 * (1 - 0.5 * d)})`
+          } else ctx2d.strokeStyle = `rgba(158,168,186,${0.55 * (1 - 0.55 * d)})`
           ctx2d.lineWidth = 0.9 + 0.9 * (1 - d)
           ctx2d.lineCap = 'round'
           ctx2d.beginPath()
@@ -1467,7 +1485,7 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       cancelAnimationFrame(frame.current)
       clearTimeout(wake.current)
     }
-  }, [geo, size, residues, hover, selected, colorMode, autoSpin, ghost])
+  }, [geo, size, residues, hover, selected, colorMode, autoSpin, ghost, ghostColorOf])
 
   const pick = useCallback(
     (ev) => {
