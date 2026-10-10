@@ -15,7 +15,7 @@ description: 蛋白质结构预测工作流：UniProt 取序列、ESMFold 结构
 2. **预测结构**：
    - 单链蛋白 → 用 `predict_structure`（ESMFold，单链 <400 残基效果最好，秒级返回，免费）。
      序列必须是大写单字母编码、无空格。
-   - **多链复合物 / 蛋白-配体 / 蛋白-RNA** → 用 `predict_complex`（Boltz-2 共折叠，付费 API）：
+   - **多链复合物 / 蛋白-配体 / 蛋白-RNA** → 用 `predict_complex`（Boltz-2 共折叠；云端 API 或本地开源权重，见下）：
      - `sequences` 传每条链的序列，逗号分隔（如 `seqA,seqB`）
      - `ligand_smiles` 传配体 SMILES（可选）
      - 返回 `ptm` / `iptm` / `bindingConfidence`（0-100）：ipTM≥80 接口高置信；bindingConfidence≥80
@@ -28,6 +28,9 @@ description: 蛋白质结构预测工作流：UniProt 取序列、ESMFold 结构
        （`*_pae.npz`）存进工作区，面板自动渲染为可交互的误差热图（悬停读残基对误差，
        与 3D/曲线双向联动；超过 800 残基自动降采样显示），并附链间平均误差芯片与
        3D「按界面误差着色」模式（紫=界面可信，黄=界面误差大）
+     - 蛋白-配体预测的姿势会在 3D 视图按元素着色渲染（附元素图例），自动画出配体到
+       5 Å 内残基的口袋接触虚线；悬停配体原子读出元素与距最近残基距离，悬停口袋残基
+       显示「距配体 X.X Å」
      - **长链回退**：单链 ≥400 残基时本工具也接受（ESMFold 免费端点对长链直接 413）；
        此时报告只含 pTM（无接口指标），verdict 形如 "high-confidence single-chain fold"。
      - 两者都没有时工具会返回配置指引，向用户转述即可（密钥放 `AGH_HOME/secrets/boltz/default`
