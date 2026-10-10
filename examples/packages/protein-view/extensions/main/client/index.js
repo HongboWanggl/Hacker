@@ -1333,22 +1333,18 @@ function exportCanvasPng(e, canvasClass, name) {
 
 // 3D PNG export composites the chain legend for multi-chain complexes and the
 // ligand element key when a pose is shown, with the legend strip extending the
-// 3D backdrop gradient so the figure is seamless.
-function export3DPng(e, name, residues, colorMode, ligandInfo = null, showLigand = false) {
-  const col = e.currentTarget.closest('.pv-3d-col')
-  const canvas = col?.querySelector('canvas.pv-3d')
-  if (!canvas || typeof canvas.toDataURL !== 'function') return
-  try {
-    const withLigand = !!(ligandInfo && showLigand)
-    const multi = colorMode === 'chain' && isMultiChain(residues)
-    // Non-chain colorings get a scale legend row so every exported figure is
-    // self-explanatory (pLDDT bands / rainbow N→C / interface viridis).
-    const withScale =
-      colorMode === 'plddt' || colorMode === 'rainbow' || (colorMode === 'interface' && !!interfaceErr)
-    if (!multi && !withLigand && !withScale) {
-      downloadCanvas(canvas, name)
-      return
-    }
+// 3D backdrop gradient so the figure is seamless. The composite builder is
+// shared with the clipboard copy so both produce the same figure; it returns
+// null when the plain canvas already tells the whole story.
+function build3DComposite(canvas, residues, colorMode, ligandInfo = null, showLigand = false, interfaceErr = null) {
+  const withLigand = !!(ligandInfo && showLigand)
+  const multi = colorMode === 'chain' && isMultiChain(residues)
+  // Non-chain colorings get a scale legend row so every exported figure is
+  // self-explanatory (pLDDT bands / rainbow N→C / interface viridis).
+  const withScale =
+    colorMode === 'plddt' || colorMode === 'rainbow' || (colorMode === 'interface' && !!interfaceErr)
+  if (!multi && !withLigand && !withScale) return null
+  {
     const s = canvas.width / (canvas.clientWidth || canvas.width) || 1
     const m = new Map()
     if (multi) {
@@ -1435,8 +1431,30 @@ function export3DPng(e, name, residues, colorMode, ligandInfo = null, showLigand
       }
       g.fillText('配体按元素着色 · 口袋虚线 = 5 Å 内接触', x + 8 * s, y)
     }
-    downloadCanvas(c, name)
+    return c
+  }
+}
+
+function export3DPng(e, name, residues, colorMode, ligandInfo = null, showLigand = false, interfaceErr = null) {
+  const col = e.currentTarget.closest('.pv-3d-col')
+  const canvas = col?.querySelector('canvas.pv-3d')
+  if (!canvas || typeof canvas.toDataURL !== 'function') return
+  try {
+    const c = build3DComposite(canvas, residues, colorMode, ligandInfo, showLigand, interfaceErr)
+    downloadCanvas(c ?? canvas, name)
   } catch {}
+}
+
+// Clipboard copy of the same composited figure (paste straight into slides or
+// docs). Returns false when the async Clipboard API is unavailable/denied.
+async function copy3DComposite(canvas, residues, colorMode, ligandInfo = null, showLigand = false, interfaceErr = null) {
+  if (!canvas || typeof canvas.toBlob !== 'function') return false
+  if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') return false
+  const c = build3DComposite(canvas, residues, colorMode, ligandInfo, showLigand, interfaceErr) ?? canvas
+  const blob = await new Promise((res) => c.toBlob(res, 'image/png'))
+  if (!blob) return false
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+  return true
 }
 
 // Curve PNG export composites the sequence strip below the curve, so the saved
@@ -2956,6 +2974,8 @@ function ProteinToolView({ owner, services }) {
   const [colorMode, setColorMode] = useState('plddt')
   const [autoSpin, setAutoSpin] = useState(true)
   const [seqCopied, setSeqCopied] = useState(false)
+  // null = idle, true/false = last copy-image attempt (button flashes the result)
+  const [imgCopied, setImgCopied] = useState(null)
   const [hiddenChains, setHiddenChains] = useState(() => new Set())
   const [highlightSeg, setHighlightSeg] = useState(null)
   // Per-residue mean inter-chain PAE (Å), reported up by PaesModule once the
@@ -3128,8 +3148,26 @@ function ProteinToolView({ owner, services }) {
                   : null,
                 h(
                   'button',
-                  { className: 'pv-export', onClick: (e) => export3DPng(e, `${pdbName}.3d.png`, residues, colorMode, ligandInfo, showLigand) },
+                  { className: 'pv-export', onClick: (e) => export3DPng(e, `${pdbName}.3d.png`, residues, colorMode, ligandInfo, showLigand, interfaceErr) },
                   '导出 PNG',
+                ),
+                h(
+                  'button',
+                  {
+                    className: 'pv-export',
+                    onClick: async (e) => {
+                      try {
+                        const canvas = e.currentTarget.closest('.pv-3d-col')?.querySelector('canvas.pv-3d')
+                        const ok = await copy3DComposite(canvas, residues, colorMode, ligandInfo, showLigand, interfaceErr)
+                        setImgCopied(ok)
+                      } catch {
+                        setImgCopied(false)
+                      }
+                      setTimeout(() => setImgCopied(null), 1600)
+                    },
+                    title: '复制合成图（含图例）到剪贴板，可直接粘贴进幻灯片/文档',
+                  },
+                  imgCopied == null ? '复制图像' : imgCopied ? '已复制 ✓' : '复制失败',
                 ),
                 h(
                   'button',
@@ -3199,7 +3237,7 @@ function ProteinToolView({ owner, services }) {
               ligand: ligandInfo,
               showLigand,
               hiddenChains,
-              onExport3D: (e) => export3DPng(e, `${pdbName}.3d.png`, residues, colorMode, ligandInfo, showLigand),
+              onExport3D: (e) => export3DPng(e, `${pdbName}.3d.png`, residues, colorMode, ligandInfo, showLigand, interfaceErr),
             }),
             colorMode === 'chain' ? h(ChainLegend, { residues, hidden: hiddenChains, onToggle: toggleChain }) : null,
             colorMode === 'interface'

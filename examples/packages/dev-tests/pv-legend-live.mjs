@@ -126,5 +126,22 @@ if (maxBtn && wrap) {
   maxChecks.push(['legend overlay removed on exit', !container.querySelector('.pv-3d-maxlegend')])
 }
 for (const [name, ok] of maxChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
+
+// copy-image: the composited figure goes to the clipboard as image/png.
+const copyChecks = []
+let clipItems = null
+globalThis.ClipboardItem = class { constructor(items) { this.items = items; clipItems = items } }
+win.HTMLCanvasElement.prototype.toBlob = (cb) => cb(new Blob(['pngbytes'], { type: 'image/png' }))
+const writes = []
+try { Object.defineProperty(win.navigator, 'clipboard', { value: { write: async (items) => writes.push(items) }, configurable: true }) } catch {}
+const copyBtn = [...container.querySelectorAll('button.pv-export')].find((b) => (b.textContent ?? '').trim() === '复制图像')
+copyChecks.push(['copy-image button rendered', !!copyBtn])
+if (copyBtn) {
+  copyBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 300))
+  copyChecks.push(['clipboard write receives image/png item', !!clipItems && clipItems['image/png'] instanceof Blob && clipItems['image/png'].type === 'image/png'])
+  copyChecks.push(['button confirms copy', (copyBtn.textContent ?? '').includes('已复制')])
+}
+for (const [name, ok] of copyChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 process.exit(failed ? 1 : 0)
 console.log('LEGEND TESTS DONE')
