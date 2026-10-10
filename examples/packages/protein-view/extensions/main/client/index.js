@@ -851,6 +851,7 @@ function BatchRowDetail({ job, services }) {
   const [hover, setHover] = useState(null)
   const [selected, setSelected] = useState(null)
   const [seqCopied, setSeqCopied] = useState(false)
+  const [curveCopied, setCurveCopied] = useState(null)
 
   useEffect(() => {
     if (!job.savedTo || !services) return
@@ -950,6 +951,23 @@ function BatchRowDetail({ job, services }) {
           h(
             'div',
             { className: 'pv-toolbar-controls' },
+            h(
+              'button',
+              {
+                className: 'pv-export',
+                onClick: async (e) => {
+                  try {
+                    const col = e.currentTarget.closest('.pv-curve-col')
+                    const ok = await copyCurveComposite(col?.querySelector('canvas.pv-curve'), col?.querySelector('.pv-seqstrip'), residues)
+                    setCurveCopied(ok)
+                  } catch {
+                    setCurveCopied(false)
+                  }
+                  setTimeout(() => setCurveCopied(null), 1600)
+                },
+              },
+              curveCopied == null ? '复制图像' : curveCopied ? '已复制 ✓' : '复制失败',
+            ),
             h(
               'button',
               { className: 'pv-export', onClick: (e) => exportCurvePng(e, `${job.accession}.plddt.png`, residues) },
@@ -1445,62 +1463,73 @@ function export3DPng(e, name, residues, colorMode, ligandInfo = null, showLigand
   } catch {}
 }
 
-// Clipboard copy of the same composited figure (paste straight into slides or
-// docs). Returns false when the async Clipboard API is unavailable/denied.
-async function copy3DComposite(canvas, residues, colorMode, ligandInfo = null, showLigand = false, interfaceErr = null) {
+// Clipboard copy of a composited figure (paste straight into slides or docs).
+// Returns false when the async Clipboard API is unavailable/denied; `build`
+// receives the source canvas and returns the composite (null = plain canvas).
+async function copyCanvasPng(canvas, build) {
   if (!canvas || typeof canvas.toBlob !== 'function') return false
   if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') return false
-  const c = build3DComposite(canvas, residues, colorMode, ligandInfo, showLigand, interfaceErr) ?? canvas
+  const c = build(canvas) ?? canvas
   const blob = await new Promise((res) => c.toBlob(res, 'image/png'))
   if (!blob) return false
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
   return true
 }
 
+async function copy3DComposite(canvas, residues, colorMode, ligandInfo = null, showLigand = false, interfaceErr = null) {
+  return copyCanvasPng(canvas, (cv) => build3DComposite(cv, residues, colorMode, ligandInfo, showLigand, interfaceErr))
+}
+
+async function copyCurveComposite(canvas, strip, residues) {
+  return copyCanvasPng(canvas, (cv) => buildCurveComposite(cv, strip, residues))
+}
+
 // Curve PNG export composites the sequence strip below the curve, so the saved
 // figure carries the band heat map too (main panel; strip-less columns fall
-// back to the plain canvas).
+// back to the plain canvas). The builder is shared with the clipboard copy.
+function buildCurveComposite(canvas, strip, residues) {
+  if (!strip || !residues?.length) return null
+  const s = canvas.width / (canvas.clientWidth || canvas.width) || 1
+  const pitch = Math.max(8, Math.round(14 * s))
+  const perRow = Math.max(1, Math.floor((canvas.width - 12 * s) / pitch))
+  const rows = Math.ceil(residues.length / perRow)
+  const top = 8 * s
+  const legendH = 18 * s
+  const c = document.createElement('canvas')
+  c.width = canvas.width
+  c.height = Math.round(canvas.height + top + rows * pitch + legendH)
+  const g = c.getContext('2d')
+  g.fillStyle = '#ffffff'
+  g.fillRect(0, 0, c.width, c.height)
+  g.drawImage(canvas, 0, 0)
+  residues.forEach((r, idx) => {
+    g.fillStyle = bandColor(r.b)
+    g.fillRect((idx % perRow) * pitch + 6 * s, canvas.height + top + Math.floor(idx / perRow) * pitch, pitch - 1, pitch - 1)
+  })
+  // band key row: the figure reads standalone, same key as the 3D export
+  g.font = `${11 * s}px ui-sans-serif, system-ui`
+  g.textBaseline = 'middle'
+  let lx = 6 * s
+  const ly = canvas.height + top + rows * pitch + legendH / 2
+  for (const b of BANDS) {
+    g.fillStyle = b.color
+    g.fillRect(lx, ly - 5 * s, 10 * s, 10 * s)
+    g.fillStyle = '#1f2430'
+    g.fillText(b.label, lx + 13 * s, ly)
+    lx += 13 * s + g.measureText(b.label).width + 12 * s
+  }
+  g.fillText('pLDDT 置信度', lx + 8 * s, ly)
+  return c
+}
+
 function exportCurvePng(e, name, residues) {
   const col = e.currentTarget.closest('.pv-curve-col')
   const canvas = col?.querySelector('canvas.pv-curve')
   if (!canvas || typeof canvas.toDataURL !== 'function') return
   try {
     const strip = residues?.length ? col.querySelector('.pv-seqstrip') : null
-    if (!strip) {
-      downloadCanvas(canvas, name)
-      return
-    }
-    const s = canvas.width / (canvas.clientWidth || canvas.width) || 1
-    const pitch = Math.max(8, Math.round(14 * s))
-    const perRow = Math.max(1, Math.floor((canvas.width - 12 * s) / pitch))
-    const rows = Math.ceil(residues.length / perRow)
-    const top = 8 * s
-    const legendH = 18 * s
-    const c = document.createElement('canvas')
-    c.width = canvas.width
-    c.height = Math.round(canvas.height + top + rows * pitch + legendH)
-    const g = c.getContext('2d')
-    g.fillStyle = '#ffffff'
-    g.fillRect(0, 0, c.width, c.height)
-    g.drawImage(canvas, 0, 0)
-    residues.forEach((r, idx) => {
-      g.fillStyle = bandColor(r.b)
-      g.fillRect((idx % perRow) * pitch + 6 * s, canvas.height + top + Math.floor(idx / perRow) * pitch, pitch - 1, pitch - 1)
-    })
-    // band key row: the figure reads standalone, same key as the 3D export
-    g.font = `${11 * s}px ui-sans-serif, system-ui`
-    g.textBaseline = 'middle'
-    let lx = 6 * s
-    const ly = canvas.height + top + rows * pitch + legendH / 2
-    for (const b of BANDS) {
-      g.fillStyle = b.color
-      g.fillRect(lx, ly - 5 * s, 10 * s, 10 * s)
-      g.fillStyle = '#1f2430'
-      g.fillText(b.label, lx + 13 * s, ly)
-      lx += 13 * s + g.measureText(b.label).width + 12 * s
-    }
-    g.fillText('pLDDT 置信度', lx + 8 * s, ly)
-    downloadCanvas(c, name)
+    const c = buildCurveComposite(canvas, strip, residues)
+    downloadCanvas(c ?? canvas, name)
   } catch {}
 }
 
@@ -2976,6 +3005,7 @@ function ProteinToolView({ owner, services }) {
   const [seqCopied, setSeqCopied] = useState(false)
   // null = idle, true/false = last copy-image attempt (button flashes the result)
   const [imgCopied, setImgCopied] = useState(null)
+  const [curveCopied, setCurveCopied] = useState(null)
   const [hiddenChains, setHiddenChains] = useState(() => new Set())
   const [highlightSeg, setHighlightSeg] = useState(null)
   // Per-residue mean inter-chain PAE (Å), reported up by PaesModule once the
@@ -3288,6 +3318,23 @@ function ProteinToolView({ owner, services }) {
               h(
                 'div',
                 { className: 'pv-toolbar-controls' },
+                h(
+                  'button',
+                  {
+                    className: 'pv-export',
+                    onClick: async (e) => {
+                      try {
+                        const col = e.currentTarget.closest('.pv-curve-col')
+                        const ok = await copyCurveComposite(col?.querySelector('canvas.pv-curve'), col?.querySelector('.pv-seqstrip'), residues)
+                        setCurveCopied(ok)
+                      } catch {
+                        setCurveCopied(false)
+                      }
+                      setTimeout(() => setCurveCopied(null), 1600)
+                    },
+                  },
+                  curveCopied == null ? '复制图像' : curveCopied ? '已复制 ✓' : '复制失败',
+                ),
                 h(
                   'button',
                   { className: 'pv-export', onClick: (e) => exportCurvePng(e, `${pdbName}.plddt.png`, residues) },

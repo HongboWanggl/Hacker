@@ -143,5 +143,21 @@ if (copyBtn) {
   copyChecks.push(['button confirms copy', (copyBtn.textContent ?? '').includes('已复制')])
 }
 for (const [name, ok] of copyChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
+
+// curve copy-image: same composited figure as the curve export (strip + band
+// key row) goes to the clipboard; button lives in the curve toolbar.
+const curveCopyChecks = []
+const curveCol = container.querySelector('.pv-curve-col')
+const curveCopyBtn = [...(curveCol?.querySelectorAll('button.pv-export') ?? [])].find((b) => (b.textContent ?? '').trim() === '复制图像')
+curveCopyChecks.push(['curve copy-image button rendered', !!curveCopyBtn])
+if (curveCopyBtn) {
+  clipItems = null
+  writes.length = 0
+  curveCopyBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 300))
+  curveCopyChecks.push(['curve clipboard write receives image/png', !!clipItems && clipItems['image/png'] instanceof Blob && clipItems['image/png'].type === 'image/png'])
+  curveCopyChecks.push(['curve button confirms copy', (curveCopyBtn.textContent ?? '').includes('已复制')])
+}
+for (const [name, ok] of curveCopyChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 process.exit(failed ? 1 : 0)
 console.log('LEGEND TESTS DONE')
