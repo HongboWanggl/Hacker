@@ -585,6 +585,7 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
         hintText: `拖拽旋转 · 滚轮缩放 · 双击复位 · ${stripMode === 'dist' ? '参考链按 Cα 偏差着色，灰=无匹配' : `灰色为 ${pw ? pw[1] : 'AlphaFold 参考模型'}`}`,
       }),
       isMultiChain(pred.residues) ? h(ChainLegend, { residues: pred.residues }) : null,
+      !isMultiChain(pred.residues) ? h(PlddtLegend) : null,
       ligandInfo
         ? h(
             'label',
@@ -916,6 +917,7 @@ function BatchRowDetail({ job, services }) {
           autoSpin: false,
         }),
         isMultiChain(residues) ? h(ChainLegend, { residues }) : null,
+        !isMultiChain(residues) ? h(PlddtLegend) : null,
         h(
           'div',
           { className: 'pv-hoverline' },

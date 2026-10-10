@@ -77,6 +77,7 @@ const checks = [
   ['divergence legend mounted', html.includes('pv-divlegend') && html.includes('≥30')],
   ['compare ligand toggle mounted', html.includes('配体 (2)')],
   ['compare ligand element legend mounted', (html.match(/pv-ligand-el/g) ?? []).length === 5],
+  ['compare card plddt legend (single-chain pred)', (html.match(/pv-plddt-el/g) ?? []).length === 4],
 ]
 let failed = 0
 for (const [name, ok] of checks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
