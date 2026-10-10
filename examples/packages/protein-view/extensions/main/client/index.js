@@ -370,9 +370,16 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
   const [pred, setPred] = useState(null)
   const [ghost, setGhost] = useState(null)
   const [hover, setHover] = useState(null)
+  const [showLigand, setShowLigand] = useState(true)
   const selIdx = useMemo(
     () => (selectedRes == null || !pred ? null : pred.residues.findIndex((r) => r.i === selectedRes)),
     [selectedRes, pred],
+  )
+  // The prediction may carry a ligand pose (complex-vs-complex comparisons):
+  // render it element-colored like the main panel, toggleable from the toolbar.
+  const ligandInfo = useMemo(
+    () => (pred?.ligandAtoms?.length ? { n: pred.ligandAtoms.length, atoms: pred.ligandAtoms, bonds: pred.ligandBonds ?? [] } : null),
+    [pred],
   )
 
   useEffect(() => {
@@ -528,9 +535,24 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
           if (r) onPickRes?.(r.i)
         },
         selected: selIdx != null && selIdx >= 0 ? selIdx : undefined,
+        ligand: ligandInfo,
+        showLigand,
         hintText: `拖拽旋转 · 滚轮缩放 · 双击复位 · ${stripMode === 'dist' ? '参考链按 Cα 偏差着色，灰=无匹配' : `灰色为 ${pw ? pw[1] : 'AlphaFold 参考模型'}`}`,
       }),
       isMultiChain(pred.residues) ? h(ChainLegend, { residues: pred.residues }) : null,
+      ligandInfo
+        ? h(
+            'label',
+            { className: 'pv-toggle' },
+            h('input', {
+              type: 'checkbox',
+              checked: showLigand,
+              onChange: (e) => setShowLigand(e.target.checked),
+            }),
+            `配体 (${ligandInfo.n})`,
+          )
+        : null,
+      ligandInfo && showLigand ? h(LigandLegend) : null,
       h('div', { className: 'pv-hoverline' }, hoverLine),
       ),
     ),

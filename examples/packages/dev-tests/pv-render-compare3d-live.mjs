@@ -22,7 +22,11 @@ const services = { call: async (name, input) => {
   if (name !== 'protein.structure') throw new Error('unexpected ' + name)
   // reference model sits 5 pLDDT below the prediction → non-zero Δ in tooltips
   const res = mk(20).map((r) => (input.path.includes('alphafold_ref') ? { ...r, b: r.b - 5 } : r))
-  return { n: 20, sequence: 'A'.repeat(20), residues: res }
+  // prediction carries a ligand pose → Compare3D must render the 配体 toggle
+  const ligand = input.path.includes('alphafold_ref')
+    ? {}
+    : { ligandAtoms: [{ el: 'C', x: 0, y: 0, z: 0 }, { el: 'O', x: 3, y: 1, z: 2 }], ligandBonds: [[0, 1]] }
+  return { n: 20, sequence: 'A'.repeat(20), residues: res, ...ligand }
 } }
 const report = {
   accession: 'P04637', model: 'AF-P04637-F1 (v6)',
@@ -58,6 +62,8 @@ const checks = [
   ['divergence strip renders 20 tiles', (html.match(/pv-seq-tile/g) ?? []).length === 20],
   ['strip tile carries Δ tooltip', /· Δ -?\d/.test(html)],
   ['divergence legend mounted', html.includes('pv-divlegend') && html.includes('≥30')],
+  ['compare ligand toggle mounted', html.includes('配体 (2)')],
+  ['compare ligand element legend mounted', (html.match(/pv-ligand-el/g) ?? []).length === 5],
 ]
 let failed = 0
 for (const [name, ok] of checks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
@@ -128,4 +134,18 @@ if (deltaBars.length >= 2) {
   deltaChecks.push(['delta bar click outlines tile', !!sel && (sel.title ?? '').includes('A1')])
 }
 for (const [name, ok] of deltaChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
+
+// 配体 toggle hides the pose: unchecking removes the element legend row.
+const ligChecks = []
+const ligToggle = [...container.querySelectorAll('.pv-toggle')].find((l) => (l.textContent ?? '').includes('配体'))
+const ligInput = ligToggle?.querySelector('input')
+ligChecks.push(['compare ligand checkbox rendered', !!ligInput && ligInput.checked === true])
+if (ligInput) {
+  ligInput.click()
+  await new Promise((r) => setTimeout(r, 250))
+  const html3 = container.innerHTML
+  ligChecks.push(['unchecking hides element legend', (html3.match(/pv-ligand-el/g) ?? []).length === 0])
+  ligChecks.push(['checkbox reflects off state', ligInput.checked === false])
+}
+for (const [name, ok] of ligChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 process.exit(failed ? 1 : 0)
