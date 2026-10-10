@@ -4,7 +4,7 @@
     "styles": ["./client/index.css"],
     "slots": ["tool.call.toolview"],
     "slotCatalogVersion": "dsh-client-slots/v1",
-    "services": ["protein.structure"],
+    "services": ["protein.structure", "protein.report"],
     "projections": [],
     "publicConfig": {
       "label": "Protein Structure & Confidence Viewer"

@@ -1466,7 +1466,32 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
 // Tool view root. Registered for both tools; degrades gracefully per data availability.
 function ProteinToolView({ owner, services }) {
   const block = owner?.block ?? {}
-  const report = useMemo(() => parseReport(block), [block])
+  // The transcript clips resultPreview at 4096 chars, which truncates large reports
+  // (>20 search hits, big batch tables) into unparseable JSON. Tools therefore save
+  // the full report into the workspace and put `savedTo` first in the result — the
+  // clip keeps that key — and the panel re-fetches the whole report here.
+  const previewRaw = typeof block.resultPreview === 'string' ? block.resultPreview : ''
+  const clippedSavedTo = useMemo(() => {
+    const m = /"savedTo"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(previewRaw)
+    return m && !m[1].endsWith('.pdb') ? m[1].replace(/\\(.)/g, '$1') : null
+  }, [previewRaw])
+  const previewReport = useMemo(() => parseReport(block), [block])
+  const [fetchedReport, setFetchedReport] = useState(null)
+  useEffect(() => {
+    setFetchedReport(null)
+    if (!clippedSavedTo || previewReport) return
+    let alive = true
+    services
+      .call('protein.report', { path: clippedSavedTo })
+      .then((full) => {
+        if (alive && full && typeof full === 'object') setFetchedReport(full)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [clippedSavedTo, previewReport, services])
+  const report = previewReport ?? fetchedReport
   const pdbPath = useMemo(() => {
     const p = report?.savedTo ?? report?.file
     return typeof p === 'string' && p.endsWith('.pdb') ? p : null

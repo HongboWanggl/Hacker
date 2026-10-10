@@ -121,7 +121,13 @@ export const uniprotSearch = {
           const [accession, id, proteinName, organism, length] = l.split('\t')
           return { accession, id, proteinName, organism, length: Number(length) }
         })
-        return result({ query, hits }, JSON.stringify({ query, hits }))
+        // Save the full report and put savedTo FIRST in the structured result: the
+        // transcript clips resultPreview at 4096 chars, and with >20 hits the JSON tail
+        // (where savedTo would land) is cut — the panel then cannot find the full copy.
+        const slug = query.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'query'
+        const reportPath = `reports/search_${slug}.json`
+        await tctx.fs.write(reportPath, JSON.stringify({ query, hits }, null, 2))
+        return result({ savedTo: reportPath, query, hits }, JSON.stringify({ savedTo: reportPath, query, hits }))
       },
     })
   },

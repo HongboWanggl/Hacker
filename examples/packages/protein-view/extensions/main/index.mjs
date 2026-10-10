@@ -16,6 +16,10 @@ const AA3_TO_1 = {
 // workspace-confined by the host; this keeps the contract tight and errors useful.
 const SAFE_PATH = /^(?!\.)[\w][\w./-]{0,500}\.pdb$/
 const ABSOLUTE_SAFE = /^\/[\w./-]{1,1000}\.pdb$/
+// Report JSONs (uniprot_search writes reports/search_<slug>.json) — same shape rules
+// as PDB paths, different extension.
+const SAFE_JSON = /^(?!\.)[\w][\w./-]{0,500}\.json$/
+const ABSOLUTE_SAFE_JSON = /^\/[\w./-]{1,1000}\.json$/
 
 export const runtime = {
   apply(ctx) {
@@ -98,6 +102,39 @@ export const runtime = {
           sequence: residues.map((r) => r.aa).join(''),
           residues,
         }
+      },
+    })
+    // Full tool-report reader: the transcript clips a tool result's preview at 4096
+    // chars, so large reports (search hit tables, batch results) arrive truncated and
+    // the panel cannot parse them. Tools save the full JSON into the workspace and put
+    // `savedTo` first in the result; the panel fetches the whole report through here.
+    ctx.services.register({
+      name: 'protein.report',
+      kind: 'query',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Workspace-relative path of a saved report JSON' },
+        },
+        required: ['path'],
+        additionalProperties: false,
+      },
+      outputSchema: { type: 'object', additionalProperties: true },
+      // Protocol caps maxResultBytes at 1 MiB (E_SERVICE_DEF beyond that); search
+      // reports are tens of KB, so the cap is plenty.
+      timeoutMs: 5000,
+      maxResultBytes: 1048576,
+      async handler({ path }, svc) {
+        let rel = typeof path === 'string' ? path : ''
+        if (ABSOLUTE_SAFE_JSON.test(rel)) {
+          const cwd = svc.cwd.endsWith('/') ? svc.cwd : `${svc.cwd}/`
+          if (rel.startsWith(cwd)) rel = rel.slice(cwd.length)
+        }
+        if (!SAFE_JSON.test(rel)) {
+          throw new Error(`invalid report path: ${JSON.stringify(String(path).slice(0, 80))}`)
+        }
+        const bytes = await svc.fs.read(rel)
+        return JSON.parse(Buffer.from(bytes).toString('utf8'))
       },
     })
   },
