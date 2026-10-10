@@ -110,7 +110,8 @@ async function runLocalBoltz({ proteins, smiles, label, wait }) {
   } catch (error) {
     const msg = String(error?.message ?? error)
     if (killed(error)) return { error: `Local Boltz-2 timed out after 20 min (${msg.slice(0, 120)}). Try smaller targets or the API.` }
-    return { error: `Local Boltz-2 failed: ${msg.slice(0, 400)}` }
+    // The tail of the message carries the actual exception; the head is the exec line + progress bars.
+    return { error: `Local Boltz-2 failed: ${msg.slice(-400)}` }
   }
   // Locate the best model: the deepest model_0.pdb under the out dir plus the
   // confidence/affinity JSONs next to it (boltz names them

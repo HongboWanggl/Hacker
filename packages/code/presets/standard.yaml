@@ -17,7 +17,14 @@ model:
     verifier: { route: default, model: default }
   prompt_sections: [persona, environment, coding-doctrine]
 disclosure: standard
-tools: { core: [read, write, edit, shell, grep, find, ls, todo, web_fetch] }
+tools:
+  core: [read, write, edit, shell, grep, find, ls, todo, web_fetch]
+  # Per-tool deadlines above the 120 s default, for tools whose work is genuinely
+  # long-running by design (a local structure-prediction pass runs minutes on
+  # purpose; the tool returns its own friendly timeout message before these trip).
+  timeouts:
+    predict_complex: 1300000
+    batch_predict: 900000
 # L0: file tools still stay in the workspace; shell is not wrapped in sandbox-exec.
 # on_unavailable must be allow — L0 has no OS backend, and deny would refuse every exec.
 sandbox: { level: L0, required: false, on_unavailable: allow }
