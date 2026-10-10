@@ -828,6 +828,11 @@ function BatchRowDetail({ job, services }) {
               { className: 'pv-export', onClick: (e) => exportCurvePng(e, `${job.accession}.plddt.png`, residues) },
               '导出 PNG',
             ),
+            h(
+              'button',
+              { className: 'pv-export', onClick: () => exportResiduesCsv(`${job.accession}.plddt.csv`, residues) },
+              '导出 CSV',
+            ),
           ),
         ),
         h(Curve, {
@@ -1261,6 +1266,22 @@ function exportCurvePng(e, name, residues) {
       g.fillRect((idx % perRow) * pitch + 6 * s, canvas.height + top + Math.floor(idx / perRow) * pitch, pitch - 1, pitch - 1)
     })
     downloadCanvas(c, name)
+  } catch {}
+}
+
+// Single-model per-residue CSV: residue, aa, pLDDT (chain-prefixed keys on
+// complexes) — the raw numbers behind the confidence curve.
+function exportResiduesCsv(name, residues) {
+  try {
+    const rows = residues.map((r) =>
+      [r.chain ? `${r.chain}:${r.i}` : r.i, r.aa ?? '', r.b != null ? r.b.toFixed(1) : ''].join(','),
+    )
+    const url = URL.createObjectURL(new Blob(['residue,aa,plddt\n' + rows.join('\n')], { type: 'text/csv' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    a.click()
+    URL.revokeObjectURL(url)
   } catch {}
 }
 
@@ -2177,6 +2198,11 @@ function ProteinToolView({ owner, services }) {
                   'button',
                   { className: 'pv-export', onClick: (e) => exportCurvePng(e, `${pdbName}.plddt.png`, residues) },
                   '导出 PNG',
+                ),
+                h(
+                  'button',
+                  { className: 'pv-export', onClick: () => exportResiduesCsv(`${pdbName}.plddt.csv`, residues) },
+                  '导出 CSV',
                 ),
               ),
             ),
