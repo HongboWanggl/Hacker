@@ -60,6 +60,7 @@ Captured from live sessions by `dev-tests/pv-screenshots.mjs` (2x DPI):
 
 ![Confidence panel: 3D backbone + pLDDT curve](docs/screenshots/confidence-3d-curve.png)
 ![Comparison card: core-RMSD score, 3D overlay, ΔpLDDT profile](docs/screenshots/compare-card.png)
+![Cα-deviation lens: distance-colored strip and reference ghost](docs/screenshots/compare-dist-lens.png)
 ![Batch card](docs/screenshots/batch-card.png)
 ![UniProt search card](docs/screenshots/search-card.png)
 

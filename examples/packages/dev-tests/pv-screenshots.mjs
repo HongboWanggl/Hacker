@@ -64,6 +64,14 @@ async function openSession(titleRe) {
 
 await openSession(/compare_alphafold 对比|compare_structures 对比/)
 await shoot('.pv-root:has(.pv-compare-bars)', 'compare-card')
+// Cα-deviation lens variant: same card with the distance lens active — the
+// strip recolors by post-superposition Cα distance and so does the 3D ghost.
+const distChip = page.locator('button:has-text("Cα 偏差"):visible').first()
+if (await distChip.count()) {
+  await distChip.click()
+  await page.waitForTimeout(1200)
+  await shoot('.pv-root:has(.pv-compare-bars)', 'compare-dist-lens')
+}
 await openSession(/batch_predict 预测/)
 await shoot('.pv-root:has(.pv-batch)', 'batch-card')
 await openSession(/uniprot_search|lysozyme|搜索/)
