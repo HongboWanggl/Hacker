@@ -53,6 +53,7 @@ const checks = [
   ['compare export button mounted', html.includes('导出 PNG')],
   ['compare CSV export button mounted', html.includes('导出 CSV')],
   ['copy-summary button mounted', html.includes('复制结论')],
+  ['AlphaFold DB link mounted', html.includes('alphafold.ebi.ac.uk/entry/AF-P04637-F1')],
   ['sparkline still present', html.includes('pv-delta-bars')],
   ['divergence strip renders 20 tiles', (html.match(/pv-seq-tile/g) ?? []).length === 20],
   ['strip tile carries Δ tooltip', /· Δ -?\d/.test(html)],

@@ -631,6 +631,16 @@ function CompareCard({ report, services }) {
           h('span', { className: `pv-verdict-dot pv-verdict-dot--${tone}` }),
           TONE_ZH[tone],
           h('span', { className: 'pv-residue-count' }, ` · ${pw ? pw.join(' vs ') : `${report.accession ?? ''} vs ${report.model ?? 'AlphaFold DB'}`}`),
+          // Jump straight to the live AlphaFold DB entry behind the reference.
+          !pw && report.accession
+            ? h('a', {
+                className: 'pv-search-link',
+                href: `https://alphafold.ebi.ac.uk/entry/AF-${encodeURIComponent(report.accession)}-F1`,
+                target: '_blank',
+                rel: 'noreferrer noopener',
+                title: '在 AlphaFold DB 打开参考模型',
+              }, 'AlphaFold DB ↗')
+            : null,
         ),
         // Mean-pLDDT side-by-side bars: prediction vs reference.
         pred != null && af != null
