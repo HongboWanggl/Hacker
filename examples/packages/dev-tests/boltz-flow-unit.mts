@@ -175,7 +175,7 @@ mkdir -p "$OUT/predictions/input"
 cat > "$OUT/predictions/input/model_0.pdb" <<'PDB'
 ${PDB}
 PDB
-echo '{"ptm":0.9,"iptm":0.85,"ligand_iptm":0.8}' > "$OUT/predictions/input/confidence_model_0.json"
+echo '{"ptm":0.9,"iptm":0.85,"ligand_iptm":0.8,"protein_iptm":0.7}' > "$OUT/predictions/input/confidence_model_0.json"
 echo '{"affinity_probability_binary":0.91,"affinity_pred_value":-6.2}' > "$OUT/predictions/input/affinity_input.json"
 `,
     { mode: 0o755 },
@@ -202,6 +202,15 @@ echo '{"affinity_probability_binary":0.91,"affinity_pred_value":-6.2}' > "$OUT/p
   )
   const r2 = res2.structured ?? {}
   ok('ligand-free local run hides ligandIptm', !res2.isError && r2.hasLigand === false && r2.ligandIptm === undefined, JSON.stringify(r2).slice(0, 160))
+  ok('two-protein local run keeps proteinIptm', r2.proteinIptm === 70, JSON.stringify(r2).slice(0, 160))
+  // Single protein + ligand: protein_iptm is 0.0 in the real output — noise, drop it.
+  const res3 = await spec.execute(
+    { sequences: 'MKTAYIAKQRQISFVKSHFSRQ', ligand_smiles: 'CC(=O)OC1=CC=CC=C1C(=O)O', name: 'local single' },
+    tctx,
+  )
+  const r3 = res3.structured ?? {}
+  ok('single-protein local run hides proteinIptm', !res3.isError && r3.chains === 1 && r3.hasLigand === true && r3.proteinIptm === undefined, JSON.stringify(r3).slice(0, 160))
+  ok('single-protein local run keeps ligandIptm', r3.ligandIptm === 80, JSON.stringify(r3).slice(0, 160))
   delete process.env.BOLTZ_LOCAL_BIN
 }
 

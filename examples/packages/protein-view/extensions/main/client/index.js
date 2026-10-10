@@ -272,9 +272,10 @@ function complexMetricChips(report) {
   const items = [
     report.ptm != null && ['pTM', report.ptm],
     report.iptm != null && ['ipTM', report.iptm],
-    // Ligand-free runs report ligand_iptm as 0.0 — that chip would be noise.
+    // Ligand-free runs report ligand_iptm as 0.0, single-protein runs
+    // protein_iptm as 0.0 — those chips would be noise.
     report.hasLigand && report.ligandIptm != null && ['ligand ipTM', report.ligandIptm],
-    report.proteinIptm != null && ['protein ipTM', report.proteinIptm],
+    (report.chains ?? 2) >= 2 && report.proteinIptm != null && ['protein ipTM', report.proteinIptm],
     report.bindingConfidence != null && ['结合置信度', report.bindingConfidence],
   ].filter(Boolean)
   if (!items.length) return null

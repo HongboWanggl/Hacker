@@ -86,6 +86,15 @@ const noligHtml = renderToString(
 )
 console.log(noligHtml.includes('ligand ipTM') ? 'FAIL' : 'ok ', 'no ligand chip when ligand-free')
 if (noligHtml.includes('ligand ipTM')) failed++
+// Single protein + ligand: protein_iptm is 0.0 in real output — chip must stay hidden.
+const singleHtml = renderToString(
+  React.createElement(
+    complexReg.comp,
+    { owner: { callId: 't1-z', toolName: 'predict_complex', block: { resultPreview: JSON.stringify({ ...complexReport, chains: 1, proteinIptm: 0 }) } } },
+  ),
+)
+console.log(singleHtml.includes('protein ipTM') ? 'FAIL' : 'ok ', 'no protein chip when single protein chain')
+if (singleHtml.includes('protein ipTM')) failed++
 // batch_predict card
 const batchReg = regs.find((r) => r.def.key === 'batch_predict')
 const batchReport = {
