@@ -553,6 +553,14 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
 }
 
 /* PAE error heatmap (Boltz-2 local runs) */
+.pv-pae--max {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  margin-top: 0;
+  background: #101724;
+  overflow: auto;
+}
 .pv-pae {
   margin-top: 12px;
   border: 1px solid var(--pv-border, rgba(128, 128, 128, 0.25));

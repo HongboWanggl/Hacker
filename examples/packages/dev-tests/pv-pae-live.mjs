@@ -140,5 +140,22 @@ await new Promise((r) => setTimeout(r, 200))
 const readout2 = container2.querySelector('.pv-pae-side .pv-hoverline')?.textContent ?? ''
 check(`pooled hover readout ranges (got "${readout2}")`, readout2 === 'B:A1–B:A2 → A:A1–A:A2 · 8.03 Å')
 
+// fullscreen toggle: the module pins fixed and the matrix cell cap lifts
+// (4×4 native → cell 8 inline, 24 maximized), Esc exits.
+const maxChecks = []
+const paeRoot = container.querySelector('.pv-pae')
+const fsBtn = [...paeRoot.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('全屏'))
+maxChecks.push(['fullscreen button rendered', !!fsBtn])
+if (fsBtn && paeRoot) {
+  const w0 = container.querySelector('canvas.pv-pae-canvas').width
+  fsBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 300))
+  const w1 = container.querySelector('canvas.pv-pae-canvas').width
+  maxChecks.push(['matrix grows maximized (32 → ' + w1 + ')', paeRoot.className.includes('pv-pae--max') && w1 > w0])
+  win.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  await new Promise((r) => setTimeout(r, 300))
+  maxChecks.push(['Escape exits maximized PAE', !paeRoot.className.includes('pv-pae--max')])
+}
+for (const [name, ok] of maxChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 process.exit(failed ? 1 : 0)
 console.log('PAE PANEL TESTS DONE')

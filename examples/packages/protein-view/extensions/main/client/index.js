@@ -2496,6 +2496,18 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
   const [focusPair, setFocusPair] = useState(null) // 'A|B' — chip-clicked chain pair
   const canvasRef = useRef(null)
   const stripRef = useRef(null)
+  // Maximized mode: the whole PAE module goes fixed over the frame so the
+  // error matrix can be explored at presentation size (Esc exits).
+  const [maxed, setMaxed] = useState(false)
+
+  useEffect(() => {
+    if (!maxed) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') setMaxed(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [maxed])
 
   useEffect(() => {
     setPae(null)
@@ -2540,7 +2552,10 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
 
   const n = pae?.n ?? 0
   const scale = pae?.scale ?? 1
-  const cell = n ? Math.max(1, Math.min(8, Math.floor(480 / n))) : 0
+  // Maximized mode lets the matrix grow past the 480 px inline cap (cell cap
+  // lifts from 8 to 24 so small complexes fill the screen).
+  const maxSize = maxed ? Math.max(480, Math.min(window.innerHeight - 230, window.innerWidth - 140)) : 480
+  const cell = n ? Math.max(1, Math.min(maxed ? 24 : 8, Math.floor(maxSize / n))) : 0
   const px = n * cell
 
   // Per-residue mean PAE (diagonal excluded — that's self-error, always 0).
@@ -2773,7 +2788,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
 
   return h(
     'div',
-    { className: 'pv-pae' },
+    { className: `pv-pae${maxed ? ' pv-pae--max' : ''}` },
     h(
       'div',
       { className: 'pv-3d-toolbar' },
@@ -2787,6 +2802,15 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
           h('span', null, '0 Å'),
           h('div', { className: 'pv-pae-legendbar' }),
           h('span', null, '32 Å'),
+        ),
+        h(
+          'button',
+          {
+            className: 'pv-export',
+            title: maxed ? '退出全屏（Esc）' : '全屏显示误差热图（Esc 退出）',
+            onClick: () => setMaxed((m) => !m),
+          },
+          maxed ? '⤡ 退出全屏' : '⤢ 全屏',
         ),
         h(
           'button',
