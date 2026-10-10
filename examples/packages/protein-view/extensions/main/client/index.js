@@ -1432,9 +1432,10 @@ function exportCurvePng(e, name, residues) {
     const perRow = Math.max(1, Math.floor((canvas.width - 12 * s) / pitch))
     const rows = Math.ceil(residues.length / perRow)
     const top = 8 * s
+    const legendH = 18 * s
     const c = document.createElement('canvas')
     c.width = canvas.width
-    c.height = Math.round(canvas.height + top + rows * pitch)
+    c.height = Math.round(canvas.height + top + rows * pitch + legendH)
     const g = c.getContext('2d')
     g.fillStyle = '#ffffff'
     g.fillRect(0, 0, c.width, c.height)
@@ -1443,6 +1444,19 @@ function exportCurvePng(e, name, residues) {
       g.fillStyle = bandColor(r.b)
       g.fillRect((idx % perRow) * pitch + 6 * s, canvas.height + top + Math.floor(idx / perRow) * pitch, pitch - 1, pitch - 1)
     })
+    // band key row: the figure reads standalone, same key as the 3D export
+    g.font = `${11 * s}px ui-sans-serif, system-ui`
+    g.textBaseline = 'middle'
+    let lx = 6 * s
+    const ly = canvas.height + top + rows * pitch + legendH / 2
+    for (const b of BANDS) {
+      g.fillStyle = b.color
+      g.fillRect(lx, ly - 5 * s, 10 * s, 10 * s)
+      g.fillStyle = '#1f2430'
+      g.fillText(b.label, lx + 13 * s, ly)
+      lx += 13 * s + g.measureText(b.label).width + 12 * s
+    }
+    g.fillText('pLDDT 置信度', lx + 8 * s, ly)
     downloadCanvas(c, name)
   } catch {}
 }

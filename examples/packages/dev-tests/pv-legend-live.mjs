@@ -81,5 +81,19 @@ if (select) {
     check('rainbow export composite carries N/C + note', texts2.some((t) => String(t) === 'N') && texts2.some((t) => String(t) === 'C') && texts2.some((t) => String(t).includes('残基序号 N→C')))
   }
 }
+// curve PNG export: composite must carry the same band key row (dark text on
+// the white figure background).
+const curveChecks = []
+const curveBtn = [...container.querySelectorAll('.pv-curve-col button.pv-export')].find((b) => (b.textContent ?? '').trim() === '导出 PNG')
+curveChecks.push(['curve export button present', !!curveBtn])
+if (curveBtn) {
+  const before3 = calls.length
+  curveBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 200))
+  const texts3 = calls.slice(before3).filter((c) => c[0] === 'fillText').map((c) => c[1])
+  curveChecks.push(['curve composite carries band labels', ['很高 (>90)', '极低 (<50)'].every((t) => texts3.some((x) => String(x) === t))])
+  curveChecks.push(['curve composite carries pLDDT note', texts3.some((t) => String(t).includes('pLDDT 置信度'))])
+}
+for (const [name, ok] of curveChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 process.exit(failed ? 1 : 0)
 console.log('LEGEND TESTS DONE')
