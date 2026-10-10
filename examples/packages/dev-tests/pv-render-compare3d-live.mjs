@@ -182,4 +182,22 @@ if (pngBtn) {
   expChecks.push(['composite carries strip label', texts.some((t) => String(t).includes('|ΔpLDDT|'))])
 }
 for (const [name, ok] of expChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
+
+// compare copy-image: the same composite (3D overlay + ligand key + strip)
+// goes to the clipboard; button lives in the compare 3D toolbar.
+const copyChecks = []
+let clipItems = null
+globalThis.ClipboardItem = class { constructor(items) { this.items = items; clipItems = items } }
+win.HTMLCanvasElement.prototype.toBlob = (cb) => cb(new Blob(['pngbytes'], { type: 'image/png' }))
+const cmpWrites = []
+try { Object.defineProperty(win.navigator, 'clipboard', { value: { write: async (items) => cmpWrites.push(items), writeText: (t) => clipTexts.push(t) }, configurable: true }) } catch {}
+const cmpCopyBtn = [...container.querySelectorAll('button.pv-export')].find((b) => (b.textContent ?? '').trim() === '复制图像')
+copyChecks.push(['compare copy-image button rendered', !!cmpCopyBtn])
+if (cmpCopyBtn) {
+  cmpCopyBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 300))
+  copyChecks.push(['compare clipboard write receives image/png', !!clipItems && clipItems['image/png'] instanceof Blob && clipItems['image/png'].type === 'image/png'])
+  copyChecks.push(['compare button confirms copy', (cmpCopyBtn.textContent ?? '').includes('已复制')])
+}
+for (const [name, ok] of copyChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 process.exit(failed ? 1 : 0)

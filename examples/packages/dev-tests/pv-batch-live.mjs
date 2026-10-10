@@ -52,6 +52,22 @@ check('bar tooltip carries pLDDT', (okRows[0].querySelector('.pv-batch-bar')?.ti
 okRows[0].dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
 await new Promise((r) => setTimeout(r, 400))
 check('row click opens drill-down', !!container.querySelector('.pv-batch-detail'))
+// drill-down 3D copy-image: composite goes to the clipboard, button confirms
+{
+  let clipItems = null
+  globalThis.ClipboardItem = class { constructor(items) { this.items = items; clipItems = items } }
+  win.HTMLCanvasElement.prototype.toBlob = (cb) => cb(new Blob(['pngbytes'], { type: 'image/png' }))
+  const writes2 = []
+  try { Object.defineProperty(win.navigator, 'clipboard', { value: { write: async (items) => writes2.push(items) }, configurable: true }) } catch {}
+  const detailCopy = [...container.querySelectorAll('.pv-batch-detail .pv-3d-col button.pv-export')].find((b) => (b.textContent ?? '').trim() === '复制图像')
+  check('drill-down copy-image button rendered', !!detailCopy)
+  if (detailCopy) {
+    detailCopy.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 300))
+    check('drill-down clipboard write receives image/png', !!clipItems && clipItems['image/png'] instanceof Blob && clipItems['image/png'].type === 'image/png')
+    check('drill-down button confirms copy', (detailCopy.textContent ?? '').includes('已复制'))
+  }
+}
 okRows[0].dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
 await new Promise((r) => setTimeout(r, 300))
 check('second click closes drill-down', !container.querySelector('.pv-batch-detail'))

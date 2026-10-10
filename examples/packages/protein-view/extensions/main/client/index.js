@@ -414,6 +414,7 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
   const [ghost, setGhost] = useState(null)
   const [hover, setHover] = useState(null)
   const [showLigand, setShowLigand] = useState(true)
+  const [cmpCopied, setCmpCopied] = useState(null)
   const selIdx = useMemo(
     () => (selectedRes == null || !pred ? null : pred.residues.findIndex((r) => r.i === selectedRes)),
     [selectedRes, pred],
@@ -523,6 +524,23 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
           ),
           // Export composites the 3D overlay with the current strip mode below —
           // one figure carries the superposition and the divergence heat map.
+          h(
+            'button',
+            {
+              className: 'pv-export',
+              onClick: async (e) => {
+                try {
+                  const canvas = e.currentTarget.closest('.pv-3d-col')?.querySelector('canvas.pv-3d')
+                  const ok = await copyCompareComposite(canvas, pred.residues, stripMode, distMap, gmap, ligandInfo, showLigand)
+                  setCmpCopied(ok)
+                } catch {
+                  setCmpCopied(false)
+                }
+                setTimeout(() => setCmpCopied(null), 1600)
+              },
+            },
+            cmpCopied == null ? '复制图像' : cmpCopied ? '已复制 ✓' : '复制失败',
+          ),
           h(
             'button',
             {
@@ -852,6 +870,7 @@ function BatchRowDetail({ job, services }) {
   const [selected, setSelected] = useState(null)
   const [seqCopied, setSeqCopied] = useState(false)
   const [curveCopied, setCurveCopied] = useState(null)
+  const [imgCopied, setImgCopied] = useState(null)
 
   useEffect(() => {
     if (!job.savedTo || !services) return
@@ -895,6 +914,24 @@ function BatchRowDetail({ job, services }) {
           'div',
           { className: 'pv-3d-toolbar' },
           h('div', { className: 'pv-section-title' }, `${job.accession} 3D 结构`),
+          h(
+            'button',
+            {
+              className: 'pv-export',
+              onClick: async (e) => {
+                try {
+                  const canvas = e.currentTarget.closest('.pv-3d-col')?.querySelector('canvas.pv-3d')
+                  const mode = isMultiChain(residues) ? 'chain' : 'plddt'
+                  const ok = await copy3DComposite(canvas, residues, mode)
+                  setImgCopied(ok)
+                } catch {
+                  setImgCopied(false)
+                }
+                setTimeout(() => setImgCopied(null), 1600)
+              },
+            },
+            imgCopied == null ? '复制图像' : imgCopied ? '已复制 ✓' : '复制失败',
+          ),
           h(
             'button',
             { className: 'pv-export', onClick: (e) => export3DPng(e, `${job.accession}.3d.png`, residues, isMultiChain(residues) ? 'chain' : 'plddt') },
@@ -1739,11 +1776,12 @@ function exportCompareCsv(e, name, residues, distMap, gmap) {
 // Compare PNG export composites the 3D overlay with the divergence strip below,
 // drawn on a backdrop band that continues the 3D gradient. `mode` picks the
 // strip coloring (ΔpLDDT or Cα distance); unmatched residues stay gray.
-function exportComparePng(e, name, residues, mode, distMap, gmap, ligandInfo = null, showLigand = false) {
-  const col = e.currentTarget.closest('.pv-3d-col')
-  const canvas = col?.querySelector('canvas.pv-3d')
-  if (!canvas || typeof canvas.toDataURL !== 'function' || !residues?.length) return
-  try {
+// Compare 3D export: the 3D overlay + the divergence strip (current lens)
+// composed on the same dark backdrop, so one figure carries superposition and
+// heat map. The builder is shared with the clipboard copy.
+function buildCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo = null, showLigand = false) {
+  if (!canvas || typeof canvas.toDataURL !== 'function' || !residues?.length) return null
+  {
     const s = canvas.width / (canvas.clientWidth || canvas.width) || 1
     const pitch = Math.max(8, Math.round(14 * s))
     const perRow = Math.max(1, Math.floor((canvas.width - 12 * s) / pitch))
@@ -1800,8 +1838,23 @@ function exportComparePng(e, name, residues, mode, distMap, gmap, ligandInfo = n
             : '#b6b6b6'
       g.fillRect((idx % perRow) * pitch + 6 * s, canvas.height + top + ligH + labelH + Math.floor(idx / perRow) * pitch, pitch - 1, pitch - 1)
     })
+    return c
+  }
+}
+
+function exportComparePng(e, name, residues, mode, distMap, gmap, ligandInfo = null, showLigand = false) {
+  const col = e.currentTarget.closest('.pv-3d-col')
+  const canvas = col?.querySelector('canvas.pv-3d')
+  if (!canvas || typeof canvas.toDataURL !== 'function' || !residues?.length) return
+  try {
+    const c = buildCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo, showLigand)
+    if (!c) return
     downloadCanvas(c, name)
   } catch {}
+}
+
+async function copyCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo, showLigand) {
+  return copyCanvasPng(canvas, (cv) => buildCompareComposite(cv, residues, mode, distMap, gmap, ligandInfo, showLigand))
 }
 
 // Batch table → CSV download (per-accession rows, failures included).
