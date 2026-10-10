@@ -85,5 +85,15 @@ for (let i = 0; i < calls.length; i++) {
   }
 }
 check(`contact segments drawn beneath atoms (windows: ${windows.join(',')})`, windows.includes(4))
+
+// hover readout gains the ligand distance for pocket residues: strip row 1 →
+// residues[1] = A:A2 at (2,1,2), 0.5 Å from ligand atom 0 at (2.5,1,2).
+const strip = container.querySelector('canvas.pv-pae-strip')
+check('strip canvas present for hover test', !!strip)
+strip.getBoundingClientRect = () => ({ left: 0, top: 0, width: 28, height: 100 })
+strip.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: 10, clientY: 30 }))
+await new Promise((r) => setTimeout(r, 200))
+const readout = [...container.querySelectorAll('.pv-hoverline')].map((e) => e.textContent).find((t) => t.includes('pLDDT')) ?? ''
+check(`pocket readout shows ligand distance (got "${readout}")`, readout === 'A:A2 · pLDDT 80.0 · 距配体 0.5 Å')
 process.exit(failed ? 1 : 0)
 console.log('CONTACT LINE TESTS DONE')

@@ -2590,6 +2590,18 @@ function ProteinToolView({ owner, services }) {
     () => (structure?.ligandAtoms?.length ? { n: structure.ligandAtoms.length, atoms: structure.ligandAtoms, bonds: structure.ligandBonds ?? [] } : null),
     [structure],
   )
+  // Per-residue distance to the closest ligand atom (same Cα geometry the 3D
+  // view draws) — pocket residues get a 距配体 readout on hover instead of
+  // requiring the user to eyeball the contact lines.
+  const ligandDist = useMemo(() => {
+    if (!ligandInfo || !structure?.residues?.length) return null
+    const atoms = ligandInfo.atoms
+    return structure.residues.map((r) => {
+      let m = Infinity
+      for (const a of atoms) m = Math.min(m, Math.hypot(a.x - r.x, a.y - r.y, a.z - r.z))
+      return m
+    })
+  }, [ligandInfo, structure])
 
   useEffect(() => {
     if (!pdbPath || !services) return
@@ -2816,11 +2828,13 @@ function ProteinToolView({ owner, services }) {
               'div',
               { className: 'pv-hoverline' },
               hover != null && residues[hover]
-                ? colorMode === 'interface' && interfaceErr
-                  ? `${resLabel(residues, residues[hover])} · 界面误差 ${interfaceErr[hover].toFixed(2)} Å`
-                  : `${resLabel(residues, residues[hover])} · pLDDT ${residues[hover].b.toFixed(1)}`
+                ? (colorMode === 'interface' && interfaceErr
+                    ? `${resLabel(residues, residues[hover])} · 界面误差 ${interfaceErr[hover].toFixed(2)} Å`
+                    : `${resLabel(residues, residues[hover])} · pLDDT ${residues[hover].b.toFixed(1)}`) +
+                  (ligandDist && ligandDist[hover] <= 6 ? ` · 距配体 ${ligandDist[hover].toFixed(1)} Å` : '')
                 : selected != null && residues[selected]
-                  ? `已选 ${resLabel(residues, residues[selected])} · pLDDT ${residues[selected].b.toFixed(1)}（点击曲线取消）`
+                  ? `已选 ${resLabel(residues, residues[selected])} · pLDDT ${residues[selected].b.toFixed(1)}（点击曲线取消）` +
+                    (ligandDist && ligandDist[selected] <= 6 ? ` · 距配体 ${ligandDist[selected].toFixed(1)} Å` : '')
                   : '',
             ),
           ),
