@@ -1,7 +1,8 @@
 // Live E2E: 3D click-to-select. A click (pointerdown→up, <5px movement) on the
 // 3D canvas selects the picked residue — hoverline gains the 已选 readout and
 // the selection survives hover-elsewhere (hover keeps priority in the readout).
-// Uses the historical compare_structures session (now titled 比较两个PDB文件结构).
+// Uses a historical compare_structures session; session titles churn, so match
+// the tool name first and fall back to known titles.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
 const exe = '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
 const browser = await chromium.launch({ executablePath: exe, headless: true })
@@ -10,17 +11,35 @@ const errors = []
 page.on('pageerror', (e) => errors.push(String(e).slice(0, 200)))
 await page.goto('http://127.0.0.1:4177/', { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForTimeout(5000)
-const clicked = await page.evaluate(() => {
-  const spans = [...document.querySelectorAll('.session-title')]
-  const el = spans.find((s) => s.textContent.includes('比较两个PDB文件结构'))
-  if (!el) return 'not found'
-  el.closest('li, [role=button], button, div')?.click()
-  el.click()
-  return 'clicked'
-})
-if (clicked !== 'clicked') { console.log('FAIL session not found'); process.exit(1) }
-console.log(clicked)
-await page.waitForTimeout(5000)
+// The sidebar renders only the most recent 100 sessions, so fixed titles fall
+// out of the window as new sessions land. Probe candidate compare sessions
+// (title matches 对比/compare) until one opens a compare card.
+const candidates = await page.evaluate(() =>
+  [...document.querySelectorAll('.session-title')]
+    .map((s) => s.textContent.trim())
+    .filter((t) => /对比|compare/.test(t)),
+)
+console.log('candidates:', candidates.length)
+let opened = false
+for (const title of candidates) {
+  await page.evaluate((t) => {
+    const el = [...document.querySelectorAll('.session-title')].find((s) => s.textContent.trim() === t)
+    el?.closest('li, [role=button], button, div')?.click()
+    el?.click()
+  }, title)
+  await page.waitForTimeout(3500)
+  await page.evaluate(() => {
+    document.querySelectorAll('details.turn-process:not([open])').forEach((d) => d.querySelector('summary')?.click())
+  })
+  await page.waitForTimeout(2000)
+  if (await page.evaluate(() => !!document.querySelector('.pv-compare-wrap'))) {
+    opened = true
+    console.log('opened compare session:', title)
+    break
+  }
+}
+if (!opened) { console.log('FAIL session not found'); process.exit(1) }
+await page.waitForTimeout(2000)
 await page.evaluate(() => {
   document.querySelectorAll('details.turn-process:not([open])').forEach((d) => d.querySelector('summary')?.click())
 })
