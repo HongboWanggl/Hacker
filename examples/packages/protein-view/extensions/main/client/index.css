@@ -81,6 +81,7 @@
 .pv-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 10.5px; color: var(--pv-muted); }
 .pv-legend-item { display: inline-flex; align-items: center; gap: 4px; }
 .pv-complex-metrics { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.pv-summary-copy { align-self: flex-start; margin-top: 6px; }
 .pv-metric-chip {
   display: inline-flex; align-items: baseline; gap: 5px;
   font-size: 11px; padding: 2px 8px; border-radius: 999px;

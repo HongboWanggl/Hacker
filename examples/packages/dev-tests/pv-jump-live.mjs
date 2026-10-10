@@ -50,7 +50,7 @@ async function run(services, report) {
   const { container, jump } = await run(services, report)
   const html = container.innerHTML
   ok('jump box mounted', html.includes('pv-jump'))
-  ok('export buttons mounted', container.querySelectorAll('.pv-export').length === 6) // 导出 PNG + 复制图像 + 复制序列 + curve 复制图像 + curve 导出 PNG + curve 导出 CSV
+  ok('export buttons mounted', container.querySelectorAll('.pv-export').length === 7) // 导出 PNG + 复制图像 + 复制序列 + curve 复制图像 + curve 导出 PNG + curve 导出 CSV + 复制结论
   // 复制序列: stub the clipboard, click, assert the FASTA payload (single chain → one record, 60-col lines).
   const clipTexts1 = []
   try { Object.defineProperty(win.navigator, 'clipboard', { value: { writeText: (t) => clipTexts1.push(t) }, configurable: true }) } catch {}
@@ -62,6 +62,21 @@ async function run(services, report) {
     const fasta = clipTexts1.join('\n')
     ok('FASTA payload: header + 40 aa', fasta === `>x_40aa\n${'A'.repeat(40)}`)
     ok('copy-sequence button confirms', (seqBtn.textContent ?? '').includes('已复制'))
+  }
+  // 复制结论: the summary row copies a ready-to-paste Markdown block with the
+  // headline numbers (score, verdict, output file).
+  const conclBtn = [...container.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === '复制结论')
+  ok('copy-conclusion button mounted', !!conclBtn)
+  if (conclBtn) {
+    clipTexts1.length = 0
+    conclBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 120))
+    const md = clipTexts1.join('\n')
+    ok('conclusion markdown: title from savedTo', md.startsWith('结构预测结论：x_40aa'))
+    ok('conclusion markdown: mean pLDDT line', md.includes('- 平均 pLDDT: 60.0（40 残基）'))
+    ok('conclusion markdown: verdict line', md.includes('- 解读: 置信偏低 · 谨慎解读'))
+    ok('conclusion markdown: output file line', md.includes('- 结构文件: structures/x_40aa.pdb'))
+    ok('copy-conclusion button confirms', (conclBtn.textContent ?? '').includes('已复制'))
   }
   // sequence strip: one band-colored tile per residue
   ok('sequence strip renders 40 tiles', container.querySelectorAll('.pv-seq-tile').length === 40)

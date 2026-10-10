@@ -251,7 +251,40 @@ function parseReport(block) {
 // Confidence summary header: big score + verdict + band bar + legend.
 // Boltz-2 complex reports carry interface confidences instead of a mean pLDDT;
 // fall back to bindingConfidence → ipTM → pTM for the headline score.
-function ConfidenceSummary({ report }) {
+
+// Ready-to-paste Markdown conclusion — the same numbers the summary row shows
+// (headline score, band distribution, low-confidence segments, output file).
+function predictionSummaryMd(report) {
+  if (!report) return ''
+  const mean = typeof report.meanPlddt === 'number' ? report.meanPlddt : null
+  const name = String(report.savedTo ?? '').split('/').pop().replace(/\.pdb$/i, '') || '预测'
+  const lines = [`结构预测结论：${name}`]
+  if (mean != null) {
+    lines.push(`- 平均 pLDDT: ${mean.toFixed(1)}${report.residues ? `（${report.residues} 残基）` : ''}`)
+    const b = report.bands ?? {}
+    const bandKeys = ['veryHigh_gt90', 'confident_70_90', 'low_50_70', 'veryLow_lt50']
+    const bandText = BANDS.map((band, i) => {
+      const n = b[bandKeys[i]]?.count
+      return n != null ? `${band.label} ${n}` : null
+    }).filter(Boolean).join(' · ')
+    if (bandText) lines.push(`- 置信度分布: ${bandText}`)
+    if (Array.isArray(report.lowConfidenceSegments) && report.lowConfidenceSegments.length) {
+      lines.push(`- 低置信区段: ${report.lowConfidenceSegments.map((s) => `${s.residues}（平均 ${s.meanPlddt}）`).join('、')}——可能为无序区`)
+    }
+    lines.push(`- 解读: ${VERDICT_ZH[verdictTone(mean)]}`)
+  } else {
+    if (report.ptm != null) lines.push(`- pTM 结构置信: ${report.ptm}`)
+    if (report.iptm != null) lines.push(`- ipTM 界面置信: ${report.iptm}`)
+    if (report.bindingConfidence != null) lines.push(`- 结合置信度: ${report.bindingConfidence}`)
+    if (report.chains) lines.push(`- 链数: ${report.chains}${report.hasLigand ? ' + 配体' : ''}`)
+    if (report.verdict) lines.push(`- 结论: ${report.verdict}`)
+  }
+  if (report.savedTo) lines.push(`- 结构文件: ${report.savedTo}`)
+  return lines.join('\n')
+}
+
+function ConfidenceSummary({ report, onCopy }) {
+  const [copied, setCopied] = useState(false)
   if (!report) return null
   const complexScore =
     typeof report.bindingConfidence === 'number'
@@ -340,6 +373,22 @@ function ConfidenceSummary({ report }) {
         ),
       // Boltz-2 complex metrics (pTM/ipTM/binding), when the report carries them.
       h('div', { className: 'pv-complex-metrics' }, complexMetricChips(report)),
+      // One-click Markdown conclusion, mirroring the compare card's 复制结论.
+      onCopy
+        ? h(
+            'button',
+            {
+              className: 'pv-export pv-summary-copy',
+              title: '复制可直接粘贴的预测结论（Markdown）',
+              onClick: () => {
+                onCopy()
+                setCopied(true)
+                setTimeout(() => setCopied(false), 1600)
+              },
+            },
+            copied ? '已复制 ✓' : '复制结论',
+          )
+        : null,
     ),
   )
 }
@@ -757,7 +806,7 @@ function CompareCard({ report, services }) {
         : null,
     ].filter(Boolean)
     try {
-      void navigator.clipboard?.writeText(lines.join('\n'))
+      void navigator.clipboard?.writeText(lines.join('\n'))?.catch(() => {})
     } catch {
       // Clipboard unavailable — the button still confirms; the same numbers
       // stay visible in the chips above.
@@ -943,7 +992,7 @@ function BatchRowDetail({ job, services }) {
               className: 'pv-export',
               onClick: () => {
                 try {
-                  void navigator.clipboard?.writeText(fastaOf(residues, job.accession))
+                  void navigator.clipboard?.writeText(fastaOf(residues, job.accession))?.catch(() => {})
                 } catch {}
                 setSeqCopied(true)
                 setTimeout(() => setSeqCopied(false), 1600)
@@ -1076,7 +1125,7 @@ function SearchCard({ report }) {
   const copyBatch = () => {
     const text = `用 batch_predict 一次预测这些蛋白：${[...sel].join(' ')}`
     try {
-      void navigator.clipboard?.writeText(text)
+      void navigator.clipboard?.writeText(text)?.catch(() => {})
     } catch {
       // Clipboard unavailable — the bar still confirms selection; user can
       // retype from the visible accessions.
@@ -1086,7 +1135,7 @@ function SearchCard({ report }) {
   }
   const copy = (acc) => {
     try {
-      void navigator.clipboard?.writeText(acc)
+      void navigator.clipboard?.writeText(acc)?.catch(() => {})
     } catch {
       // Clipboard may be unavailable; the row still shows the accession.
     }
@@ -3207,7 +3256,16 @@ function ProteinToolView({ owner, services }) {
         setSelected((prev) => Math.max(0, Math.min(residues.length - 1, (prev ?? -1) + delta)))
       },
     },
-    h(ConfidenceSummary, { report }),
+    h(ConfidenceSummary, {
+      report,
+      onCopy: () => {
+        try {
+          void navigator.clipboard?.writeText(predictionSummaryMd(report))?.catch(() => {})
+        } catch {
+          // Clipboard unavailable — the same numbers stay visible in the summary.
+        }
+      },
+    }),
     h(SegmentChips, {
       segments: report.lowConfidenceSegments,
       selected: highlightSeg,
@@ -3291,7 +3349,7 @@ function ProteinToolView({ owner, services }) {
                     onClick: () => {
                       if (!residues) return
                       try {
-                        void navigator.clipboard?.writeText(fastaOf(residues, pdbName))
+                        void navigator.clipboard?.writeText(fastaOf(residues, pdbName))?.catch(() => {})
                       } catch {
                         // Clipboard unavailable — sequence stays visible in the strip.
                       }
