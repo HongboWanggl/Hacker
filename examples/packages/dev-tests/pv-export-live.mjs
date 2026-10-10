@@ -1,5 +1,5 @@
 // Live E2E: PNG export downloads. Uses the historical single-protein session
-// (蛋白结构预测与置信度总结) — the original new-session flow broke when turn
+// (蛋白结构预测与置信度分析) — the original new-session flow broke when turn
 // markup changed, and a fresh live turn only re-tests what other probes already
 // cover. Clicks both 3D and curve 导出 PNG and asserts two downloads.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
@@ -18,7 +18,7 @@ await page.evaluate(() => {
 })
 await page.waitForTimeout(1500)
 const clicked = await page.evaluate(() => {
-  const el = [...document.querySelectorAll('.session-row .session')].find((e) => e.textContent.trim() === '蛋白结构预测与置信度总结')
+  const el = [...document.querySelectorAll('.session-row .session')].find((e) => e.textContent.trim() === '蛋白结构预测与置信度分析')
   el?.click()
   return !!el
 })
