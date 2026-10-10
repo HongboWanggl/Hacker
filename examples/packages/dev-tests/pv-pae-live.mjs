@@ -69,6 +69,17 @@ check('caption present', container.querySelector('.pv-pae-caption')?.textContent
 // mean 183.75 → 23.06 Å
 const pairChip = container.querySelector('.pv-pae-pair')?.textContent ?? ''
 check(`chain-pair mean chip (got "${pairChip}")`, pairChip === 'A–B 23.06 Å')
+// chips are toggle buttons: clicking focuses the pair (block outline in the
+// heatmap), clicking again clears it
+const chipBtn = container.querySelector('.pv-pae-pair')
+chipBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+await new Promise((r) => setTimeout(r, 200))
+const chipOn = container.querySelector('.pv-pae-pair')?.className ?? ''
+check('chip click focuses pair', chipOn.includes('pv-pae-pair--on'))
+container.querySelector('.pv-pae-pair').dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+await new Promise((r) => setTimeout(r, 200))
+const chipOff = container.querySelector('.pv-pae-pair')?.className ?? ''
+check('second chip click clears focus', !chipOff.includes('pv-pae-pair--on'))
 // PaesModule lifts per-residue inter-chain means to the parent → the 3D
 // color-by select gains the interface option on complex panels
 check('interface color mode offered', !!container.querySelector('select.pv-select option[value=interface]'))

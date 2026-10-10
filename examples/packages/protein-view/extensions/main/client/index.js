@@ -2180,6 +2180,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
   const [error, setError] = useState(null)
   const [hoverCell, setHoverCell] = useState(null) // { i, j } pooled-matrix indices
   const [stripRow, setStripRow] = useState(null) // row hovered in the side profile
+  const [focusPair, setFocusPair] = useState(null) // 'A|B' — chip-clicked chain pair
   const canvasRef = useRef(null)
   const stripRef = useRef(null)
 
@@ -2187,6 +2188,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
     setPae(null)
     setError(null)
     setHoverCell(null)
+    setFocusPair(null)
     if (!paePath || !services) return
     let alive = true
     services
@@ -2307,6 +2309,18 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
     onInterface?.(interfaceErr ?? null)
   }, [onInterface, interfaceErr])
 
+  // Cell-index range spanned by each chain — for the chip-click block outline.
+  const chainRanges = useMemo(() => {
+    if (!pae || !n || !residues || !residues.length) return null
+    const ranges = {}
+    for (let c = 0; c < n; c++) {
+      const ch = residues[Math.min(c * scale, residues.length - 1)]?.chain ?? '?'
+      if (!ranges[ch]) ranges[ch] = { start: c, end: c + 1 }
+      else ranges[ch].end = c + 1
+    }
+    return ranges
+  }, [pae, n, residues, scale])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !n) return
@@ -2363,7 +2377,19 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
         ctx2d.stroke()
       }
     }
-  }, [pae, n, px, cell, chainSizes, hover, scale])
+    // Chip-clicked chain pair: outline both symmetric blocks of the submatrix
+    // so the pair's error structure can be inspected in isolation.
+    if (focusPair && chainRanges) {
+      const ra = chainRanges[focusPair.a]
+      const rb = chainRanges[focusPair.b]
+      if (ra && rb) {
+        ctx2d.strokeStyle = 'rgba(255,255,255,0.95)'
+        ctx2d.lineWidth = 1.5
+        ctx2d.strokeRect(ra.start * cell + 0.5, rb.start * cell + 0.5, (ra.end - ra.start) * cell - 1, (rb.end - rb.start) * cell - 1)
+        ctx2d.strokeRect(rb.start * cell + 0.5, ra.start * cell + 0.5, (rb.end - rb.start) * cell - 1, (ra.end - ra.start) * cell - 1)
+      }
+    }
+  }, [pae, n, px, cell, chainSizes, hover, scale, focusPair, chainRanges])
 
   // Side profile: one bar per (pooled) row = that residue's mean PAE against
   // all partners. Same hover linkage as the heatmap — the hovered row lights up.
@@ -2512,12 +2538,14 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
               { className: 'pv-pae-pairs' },
               chainPairs.map((p) =>
                 h(
-                  'span',
+                  'button',
                   {
                     key: `${p.a}|${p.b}`,
-                    className: 'pv-pae-pair',
-                    title: '链间平均 PAE——低值说明该链对的结合界面建模可信',
+                    className: 'pv-pae-pair' + (focusPair && focusPair.a === p.a && focusPair.b === p.b ? ' pv-pae-pair--on' : ''),
+                    title: '链间平均 PAE——低值说明该链对的结合界面建模可信；点击在热图中框出该链对的误差块',
                     style: { background: `rgb(${viridisRgb(Math.min(1, p.meanA / 32)).join(',')})` },
+                    onClick: () =>
+                      setFocusPair((prev) => (prev && prev.a === p.a && prev.b === p.b ? null : { a: p.a, b: p.b })),
                   },
                   `${p.a}–${p.b} ${p.meanA.toFixed(2)} Å`,
                 ),

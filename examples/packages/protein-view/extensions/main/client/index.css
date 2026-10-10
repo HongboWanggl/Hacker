@@ -571,6 +571,14 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
   padding: 3px 9px;
   border-radius: 999px;
   letter-spacing: 0.2px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.pv-pae-pair--on {
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
 }
 .pv-pae-caption {
   font-size: 11px;
