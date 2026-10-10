@@ -588,12 +588,14 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
   font-size: 11px;
   margin-top: 6px;
 }
+.pv-plddt-el,
 .pv-ligand-el {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   color: var(--pv-fg, #dfe5ee);
 }
+.pv-plddt-el i,
 .pv-ligand-el i {
   width: 9px;
   height: 9px;

@@ -162,6 +162,49 @@ function InterfaceLegend() {
   )
 }
 
+// Legend for the default pLDDT coloring: the four AlphaFold confidence bands.
+function PlddtLegend() {
+  return h(
+    'div',
+    { className: 'pv-chain-legend' },
+    h(
+      'span',
+      { className: 'pv-chain-chip', title: '每个残基按其 pLDDT 置信度着色' },
+      BANDS.map((b) =>
+        h(
+          'span',
+          { key: b.label, className: 'pv-plddt-el' },
+          h('i', { style: { background: b.color } }),
+          b.label,
+        ),
+      ),
+      h('span', { className: 'pv-legend-note' }, 'pLDDT 置信度'),
+    ),
+  )
+}
+
+// Legend for the rainbow N→C coloring: a compact gradient bar.
+function RainbowLegend() {
+  return h(
+    'div',
+    { className: 'pv-chain-legend' },
+    h(
+      'span',
+      { className: 'pv-chain-chip', title: '按残基序号 N→C 彩虹着色' },
+      h('span', null, 'N'),
+      h('span', {
+        className: 'pv-pae-legendbar',
+        style: {
+          width: '80px',
+          background: `linear-gradient(90deg, ${RAINBOW.map(([t, rgb]) => `rgb(${rgb.join(',')})`).join(',')})`,
+        },
+      }),
+      h('span', null, 'C'),
+      h('span', { className: 'pv-legend-note' }, '残基序号 N→C'),
+    ),
+  )
+}
+
 // Element key for the ligand pose: same palette the 3D view paints with.
 function LigandLegend() {
   return h(
@@ -1271,7 +1314,11 @@ function export3DPng(e, name, residues, colorMode, ligandInfo = null, showLigand
   try {
     const withLigand = !!(ligandInfo && showLigand)
     const multi = colorMode === 'chain' && isMultiChain(residues)
-    if (!multi && !withLigand) {
+    // Non-chain colorings get a scale legend row so every exported figure is
+    // self-explanatory (pLDDT bands / rainbow N→C / interface viridis).
+    const withScale =
+      colorMode === 'plddt' || colorMode === 'rainbow' || (colorMode === 'interface' && !!interfaceErr)
+    if (!multi && !withLigand && !withScale) {
       downloadCanvas(canvas, name)
       return
     }
@@ -1288,7 +1335,7 @@ function export3DPng(e, name, residues, colorMode, ligandInfo = null, showLigand
     const stats = [...m.values()]
     const c = document.createElement('canvas')
     const rowH = 18 * s
-    const rows = stats.length + (withLigand ? 1 : 0)
+    const rows = stats.length + (withScale ? 1 : 0) + (withLigand ? 1 : 0)
     c.width = canvas.width
     c.height = Math.round(canvas.height + 8 * s + rows * rowH)
     const g = c.getContext('2d')
@@ -1310,6 +1357,42 @@ function export3DPng(e, name, residues, colorMode, ligandInfo = null, showLigand
       g.fillStyle = 'rgba(255,255,255,0.9)'
       g.fillText(`链 ${st.chain} · ${st.n} aa · 均值 pLDDT ${(st.sum / st.n).toFixed(1)}`, 22 * s, y)
     })
+    if (withScale) {
+      const y = canvas.height + 8 * s + row * rowH + rowH / 2
+      row++
+      if (colorMode === 'plddt') {
+        let x = 6 * s
+        for (const b of BANDS) {
+          g.fillStyle = b.color
+          g.fillRect(x, y - 5 * s, 10 * s, 10 * s)
+          g.fillStyle = 'rgba(255,255,255,0.9)'
+          g.fillText(b.label, x + 13 * s, y)
+          x += 13 * s + g.measureText(b.label).width + 12 * s
+        }
+        g.fillText('pLDDT 置信度', x + 8 * s, y)
+      } else {
+        // gradient bar with end labels: rainbow N→C or interface viridis 0→32 Å
+        const bw = 80 * s
+        const grad = g.createLinearGradient(6 * s, 0, 6 * s + bw, 0)
+        if (colorMode === 'interface') {
+          for (let t = 0; t <= 4; t++) grad.addColorStop(t / 4, `rgb(${viridisRgb(t / 4).join(',')})`)
+        } else {
+          for (const [t, rgb] of RAINBOW) grad.addColorStop(t, `rgb(${rgb.join(',')})`)
+        }
+        g.fillStyle = grad
+        g.fillRect(6 * s, y - 5 * s, bw, 10 * s)
+        g.fillStyle = 'rgba(255,255,255,0.9)'
+        if (colorMode === 'interface') {
+          g.fillText('0 Å', 6 * s + bw + 6 * s, y)
+          g.fillText('32 Å', 6 * s + bw + 40 * s, y)
+          g.fillText('界面误差 · 紫=界面可信，黄=误差大', 6 * s + bw + 76 * s, y)
+        } else {
+          g.fillText('N', 6 * s + bw + 6 * s, y)
+          g.fillText('C', 6 * s + bw + 24 * s, y)
+          g.fillText('残基序号 N→C', 6 * s + bw + 42 * s, y)
+        }
+      }
+    }
     if (withLigand) {
       const y = canvas.height + 8 * s + row * rowH + rowH / 2
       let x = 6 * s
@@ -3000,7 +3083,13 @@ function ProteinToolView({ owner, services }) {
               hiddenChains,
             }),
             colorMode === 'chain' ? h(ChainLegend, { residues, hidden: hiddenChains, onToggle: toggleChain }) : null,
-            colorMode === 'interface' ? h(InterfaceLegend) : null,
+            colorMode === 'interface'
+              ? h(InterfaceLegend)
+              : colorMode === 'rainbow'
+                ? h(RainbowLegend)
+                : colorMode === 'plddt'
+                  ? h(PlddtLegend)
+                  : null,
             ligandInfo && showLigand ? h(LigandLegend) : null,
             h(
               'div',
