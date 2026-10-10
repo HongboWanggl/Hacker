@@ -27,6 +27,7 @@ run pairwise-overlap.mts
 run boltz-flow-unit.mts
 run structure-service-unit.mts
 run confidence-multichain-unit.mts
+run pae-service.mjs
 
 echo "=== panel render: SSR ==="
 run pv-render-compare.mjs

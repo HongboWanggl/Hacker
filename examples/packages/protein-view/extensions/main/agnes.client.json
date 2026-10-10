@@ -1,10 +1,18 @@
 {
   "client": {
     "entry": "./client/index.js",
-    "styles": ["./client/index.css"],
-    "slots": ["tool.call.toolview"],
+    "styles": [
+      "./client/index.css"
+    ],
+    "slots": [
+      "tool.call.toolview"
+    ],
     "slotCatalogVersion": "dsh-client-slots/v1",
-    "services": ["protein.structure", "protein.report"],
+    "services": [
+      "protein.structure",
+      "protein.report",
+      "protein.pae"
+    ],
     "projections": [],
     "publicConfig": {
       "label": "Protein Structure & Confidence Viewer"

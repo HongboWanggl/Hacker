@@ -115,11 +115,13 @@ async function runLocalBoltz({ proteins, smiles, label, wait }) {
   }
   // Locate the best model: the deepest model_0.pdb under the out dir plus the
   // confidence/affinity JSONs next to it (boltz names them
-  // `{input}_model_0.pdb` / `confidence_{input}_model_0.json`).
+  // `{input}_model_0.pdb` / `confidence_{input}_model_0.json`). The PAE matrix
+  // (`pae_{input}_model_0.npz`) rides along for the panel's error heatmap.
   const outRoot = join(work, 'out')
   const stack = [outRoot]
   let modelPdb = null
-  while (stack.length && !modelPdb) {
+  let paeNpz = null
+  while (stack.length && (!modelPdb || !paeNpz)) {
     const dir = stack.pop()
     let entries
     try {
@@ -131,6 +133,7 @@ async function runLocalBoltz({ proteins, smiles, label, wait }) {
       const p = join(dir, e.name)
       if (e.isDirectory()) stack.push(p)
       else if (e.name.endsWith('model_0.pdb')) modelPdb = p
+      else if (e.name.startsWith('pae_') && e.name.endsWith('model_0.npz')) paeNpz = p
     }
   }
   if (!modelPdb) return { error: `Local Boltz-2 finished but no model_0.pdb found under ${outRoot}` }
@@ -146,7 +149,7 @@ async function runLocalBoltz({ proteins, smiles, label, wait }) {
   const conf = beside('confidence') ?? {}
   // boltz names this `affinity_{input}.json` — no model suffix.
   const aff = beside('affinity', '.json') ?? {}
-  return { modelPdb, conf, aff, stdout: stdout.slice(-400) }
+  return { modelPdb, paeNpz, conf, aff, stdout: stdout.slice(-400) }
 }
 
 function killed(error) {
@@ -334,6 +337,17 @@ export const predictComplex = {
             ...metrics,
             ...(verdict ? { verdict } : {}),
             runtimeSec: Math.round((Date.now() - t0) / 1000),
+          }
+          // Persist the PAE matrix for the panel's error heatmap. Best-effort:
+          // its absence only hides the heatmap, never the model itself.
+          if (out.paeNpz) {
+            try {
+              const paePath = `structures/${label}_pae.npz`
+              await tctx.fs.write(paePath, await readFile(out.paeNpz))
+              report.paePath = paePath
+            } catch {
+              // npz copy failure is cosmetic; keep the report.
+            }
           }
           return result(report, JSON.stringify(report))
         }

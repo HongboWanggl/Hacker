@@ -3,6 +3,8 @@
 // session workspace and returns the CA-atom backbone with per-residue pLDDT so the
 // browser panel can render without any file access of its own.
 
+import { inflateRawSync } from 'node:zlib'
+
 const AA3_TO_1 = {
   ALA: 'A', ARG: 'R', ASN: 'N', ASP: 'D', CYS: 'C', GLN: 'Q', GLU: 'E', GLY: 'G',
   HIS: 'H', ILE: 'I', LEU: 'L', LYS: 'K', MET: 'M', PHE: 'F', PRO: 'P', SER: 'S',
@@ -137,5 +139,134 @@ export const runtime = {
         return JSON.parse(Buffer.from(bytes).toString('utf8'))
       },
     })
+    // PAE (predicted aligned error) matrix reader for Boltz-2 local runs: parses
+    // the `pae_{input}_model_0.npz` the tool saves next to the model PDB and
+    // returns a quantized N×N byte matrix (0-255 ↦ 0-32 Å) for the panel heatmap.
+    ctx.services.register({
+      name: 'protein.pae',
+      kind: 'query',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Workspace-relative path of a saved PAE .npz file' },
+        },
+        required: ['path'],
+        additionalProperties: false,
+      },
+      outputSchema: {
+        type: 'object',
+        properties: {
+          n: { type: 'number' },
+          data: { type: 'string' },
+        },
+        required: ['n', 'data'],
+        additionalProperties: false,
+      },
+      // Protocol caps maxResultBytes at 1 MiB: 800² bytes → ~853 KB base64.
+      timeoutMs: 5000,
+      maxResultBytes: 1048576,
+      async handler({ path }, svc) {
+        let rel = typeof path === 'string' ? path : ''
+        if (ABSOLUTE_SAFE_JSON.test(rel)) {
+          const cwd = svc.cwd.endsWith('/') ? svc.cwd : `${svc.cwd}/`
+          if (rel.startsWith(cwd)) rel = rel.slice(cwd.length)
+        }
+        if (!/^(?!\.)[\w][\w./-]{0,500}\.npz$/.test(rel)) {
+          throw new Error(`invalid npz path: ${JSON.stringify(String(path).slice(0, 80))}`)
+        }
+        const buf = Buffer.from(await svc.fs.read(rel))
+        const npy = readNpzEntry(buf, 'pae.npy') ?? Object.values(readNpzEntries(buf))[0]
+        if (!npy) throw new Error(`no pae array in ${rel}`)
+        const { shape, fortran, float } = parseNpy(npy)
+        const n = shape[0]
+        if (!Number.isInteger(n) || n < 2 || n !== shape[1]) throw new Error(`pae matrix is not square (shape ${shape.join('x')})`)
+        if (n > 800) throw new Error(`pae matrix too large (${n} residues; cap 800)`)
+        const out = Buffer.alloc(n * n)
+        for (let i = 0; i < n; i++) {
+          for (let j = 0; j < n; j++) {
+            // fortran_order stores column-major: [i][j] lives at i + j*n.
+            const v = float[fortran ? i + j * n : i * n + j]
+            out[i * n + j] = Math.max(0, Math.min(255, Math.round((Number.isFinite(v) ? v : 32) / 32 * 255)))
+          }
+        }
+        return { n, data: out.toString('base64') }
+      },
+    })
   },
+}
+
+// ---------------------------------------------------------------------------
+// Minimal .npz (zip) / .npy readers — just enough for what numpy's savez
+// writes. Central-directory based, so data-descriptor (streamed) entries with
+// zeroed local sizes parse correctly; stored and deflate both handled.
+
+function readNpzEntries(buf) {
+  // Locate the end-of-central-directory record (signature 0x06054b50), scanning
+  // back over a possible zip64 locator and comment.
+  let eocd = -1
+  for (let off = buf.length - 22; off >= Math.max(0, buf.length - 22 - 65536); off--) {
+    if (buf.readUInt32LE(off) === 0x06054b50) {
+      eocd = off
+      break
+    }
+  }
+  if (eocd < 0) throw new Error('not a zip archive (npz)')
+  const count = buf.readUInt16LE(eocd + 10)
+  let off = buf.readUInt32LE(eocd + 16)
+  const entries = {}
+  for (let i = 0; i < count; i++) {
+    if (buf.readUInt32LE(off) !== 0x02014b50) break
+    const method = buf.readUInt16LE(off + 10)
+    const csize = buf.readUInt32LE(off + 20)
+    const nameLen = buf.readUInt16LE(off + 28)
+    const extraLen = buf.readUInt16LE(off + 30)
+    const commentLen = buf.readUInt16LE(off + 32)
+    const localOff = buf.readUInt32LE(off + 42)
+    const name = buf.slice(off + 46, off + 46 + nameLen).toString('utf8')
+    // PAE matrices are ≤ 800² bytes — far below the zip64 threshold. A 0xffffffff
+    // size here would mean zip64 extra fields, which this reader does not parse.
+    if (csize === 0xffffffff) throw new Error(`zip64 entry not supported (${name})`)
+    // Jump from the central entry to the local header to find the data start.
+    if (buf.readUInt32LE(localOff) !== 0x04034b50) throw new Error(`corrupt zip entry ${name}`)
+    const lNameLen = buf.readUInt16LE(localOff + 26)
+    const lExtraLen = buf.readUInt16LE(localOff + 28)
+    const dataStart = localOff + 30 + lNameLen + lExtraLen
+    const raw = buf.slice(dataStart, dataStart + csize)
+    entries[name] = method === 8 ? inflateRawSync(raw) : Buffer.from(raw)
+    off += 46 + nameLen + extraLen + commentLen
+  }
+  return entries
+}
+
+function readNpzEntry(buf, name) {
+  return readNpzEntries(buf)[name]
+}
+
+function parseNpy(bytes) {
+  if (bytes.length < 10 || bytes[0] !== 0x93 || bytes.toString('latin1', 1, 6) !== 'NUMPY') {
+    throw new Error('not an npy payload')
+  }
+  const verMajor = bytes[6]
+  const hdrLen = verMajor >= 2 ? bytes.readUInt32LE(8) : bytes.readUInt16LE(8)
+  const header = bytes.toString('latin1', 10, 10 + hdrLen)
+  const descr = /'descr':\s*'([^']+)'/.exec(header)?.[1] ?? '<f4'
+  const fortran = /'fortran_order':\s*True/.test(header)
+  const shapeStr = /'shape':\s*\(([^)]*)\)/.exec(header)?.[1] ?? ''
+  const shape = shapeStr
+    .split(',')
+    .map((s) => Number(s.trim()))
+    .filter((x) => Number.isInteger(x) && x > 0)
+  // v2 headers use a 32-bit length field, so the data starts 2 bytes later.
+  const start = (verMajor >= 2 ? 12 : 10) + hdrLen
+  const count = shape.reduce((a, b) => a * b, 1)
+  // Buffer may be a pooled view: slice the underlying bytes it actually covers.
+  const ab = bytes.buffer.slice(bytes.byteOffset + start, bytes.byteOffset + start + count * (descr === '<f8' ? 8 : 4))
+  switch (descr) {
+    case '<f4':
+      return { shape, fortran, float: new Float32Array(ab) }
+    case '<f8':
+      return { shape, fortran, float: new Float64Array(ab) }
+    default:
+      throw new Error(`unsupported npy dtype ${descr} (expected float32/64)`)
+  }
 }

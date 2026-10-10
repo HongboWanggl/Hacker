@@ -95,6 +95,18 @@ const singleHtml = renderToString(
 )
 console.log(singleHtml.includes('protein ipTM') ? 'FAIL' : 'ok ', 'no protein chip when single protein chain')
 if (singleHtml.includes('protein ipTM')) failed++
+// Boltz-2 local runs save a PAE matrix — the panel mounts the heatmap module.
+// renderToString skips effects, so SSR shows the loading note; draw/hover are client-only.
+const paeHtml = renderToString(
+  React.createElement(
+    complexReg.comp,
+    { owner: { callId: 't1-pae', toolName: 'predict_complex', block: { resultPreview: JSON.stringify({ ...complexReport, paePath: 'structures/complex_boltz_pae.npz' }) } } },
+  ),
+)
+console.log(paeHtml.includes('PAE 误差热图') && paeHtml.includes('加载 PAE 矩阵…') ? 'ok ' : 'FAIL', 'PAE module mounts when paePath present')
+if (!(paeHtml.includes('PAE 误差热图') && paeHtml.includes('加载 PAE 矩阵…'))) failed++
+console.log(chtml.includes('PAE 误差热图') ? 'FAIL' : 'ok ', 'PAE module absent without paePath')
+if (chtml.includes('PAE 误差热图')) failed++
 // batch_predict card
 const batchReg = regs.find((r) => r.def.key === 'batch_predict')
 const batchReport = {

@@ -511,3 +511,55 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
   line-height: 9px;
   border-radius: 1px;
 }
+
+/* PAE error heatmap (Boltz-2 local runs) */
+.pv-pae {
+  margin-top: 12px;
+  border: 1px solid var(--pv-border, rgba(128, 128, 128, 0.25));
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.pv-pae .pv-3d-toolbar {
+  margin-bottom: 8px;
+}
+.pv-pae-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--pv-muted, rgba(128, 128, 128, 0.9));
+  white-space: nowrap;
+}
+.pv-pae-legendbar {
+  width: 120px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #440154, #3b528b, #21918c, #5ec962, #fde725);
+}
+.pv-pae-body {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.pv-pae-canvas {
+  border-radius: 6px;
+  cursor: crosshair;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+}
+.pv-pae-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.pv-pae-caption {
+  font-size: 11px;
+  color: var(--pv-muted, rgba(128, 128, 128, 0.9));
+  line-height: 1.7;
+}
+.pv-pae-note {
+  font-size: 12px;
+  color: var(--pv-muted, rgba(128, 128, 128, 0.9));
+  padding: 4px 0;
+}

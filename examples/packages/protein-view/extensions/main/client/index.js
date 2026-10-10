@@ -1939,6 +1939,190 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
 
 // ---------------------------------------------------------------------------
 // Tool view root. Registered for both tools; degrades gracefully per data availability.
+// ---------------------------------------------------------------------------
+// PAE (predicted aligned error) heatmap — Boltz-2 local runs save the N×N
+// error matrix next to the model; viridis colormap, chain boundaries marked,
+// hovering a cell reads the pair error in Å and syncs the 3D/curve hover.
+
+const VIRIDIS_STOPS = [
+  [68, 1, 84],
+  [59, 82, 139],
+  [33, 145, 140],
+  [94, 201, 98],
+  [253, 231, 37],
+]
+function viridisRgb(t) {
+  const x = Math.max(0, Math.min(1, t)) * (VIRIDIS_STOPS.length - 1)
+  const i = Math.min(VIRIDIS_STOPS.length - 2, Math.floor(x))
+  const f = x - i
+  const a = VIRIDIS_STOPS[i]
+  const b = VIRIDIS_STOPS[i + 1]
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * f),
+    Math.round(a[1] + (b[1] - a[1]) * f),
+    Math.round(a[2] + (b[2] - a[2]) * f),
+  ]
+}
+
+function PaesModule({ paePath, residues, services, onHover }) {
+  const [pae, setPae] = useState(null) // { n, bytes }
+  const [error, setError] = useState(null)
+  const [hoverCell, setHoverCell] = useState(null) // { i, j } residue indices
+  const canvasRef = useRef(null)
+
+  useEffect(() => {
+    setPae(null)
+    setError(null)
+    setHoverCell(null)
+    if (!paePath || !services) return
+    let alive = true
+    services
+      .call('protein.pae', { path: paePath })
+      .then((m) => {
+        if (!alive || !m || typeof m.n !== 'number' || typeof m.data !== 'string') return
+        const bin = atob(m.data)
+        const bytes = new Uint8Array(bin.length)
+        for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k)
+        setPae({ n: m.n, bytes })
+      })
+      .catch((e) => {
+        if (alive) setError(String(e?.message ?? e).slice(0, 160))
+      })
+    return () => {
+      alive = false
+    }
+  }, [paePath, services])
+
+  // Chain segment sizes in residue order — dashed boundary lines overlay the
+  // heatmap where one chain ends and the next begins.
+  const chainSizes = useMemo(() => {
+    if (!residues) return null
+    const sizes = []
+    let cur = null
+    for (const r of residues) {
+      if (r.chain !== cur) {
+        sizes.push(0)
+        cur = r.chain
+      }
+      sizes[sizes.length - 1] += 1
+    }
+    return sizes.length > 1 ? sizes : null
+  }, [residues])
+
+  const n = pae?.n ?? 0
+  const cell = n ? Math.max(1, Math.min(8, Math.floor(480 / n))) : 0
+  const px = n * cell
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !n) return
+    const ctx2d = canvas.getContext('2d')
+    const tmp = document.createElement('canvas')
+    tmp.width = n
+    tmp.height = n
+    const tctx = tmp.getContext('2d')
+    // Headless/test environments may lack a 2D context — skip drawing, the
+    // canvas element itself still renders.
+    if (!ctx2d || !tctx) return
+    const img = tctx.createImageData(n, n)
+    for (let k = 0; k < n * n; k++) {
+      const [r, g, b] = viridisRgb(pae.bytes[k] / 255)
+      img.data[k * 4] = r
+      img.data[k * 4 + 1] = g
+      img.data[k * 4 + 2] = b
+      img.data[k * 4 + 3] = 255
+    }
+    tctx.putImageData(img, 0, 0)
+    ctx2d.imageSmoothingEnabled = false
+    ctx2d.clearRect(0, 0, px, px)
+    ctx2d.drawImage(tmp, 0, 0, px, px)
+    if (chainSizes && cell > 1) {
+      ctx2d.strokeStyle = 'rgba(255,255,255,0.65)'
+      ctx2d.lineWidth = 1
+      let acc = 0
+      for (let s = 0; s < chainSizes.length - 1; s++) {
+        acc += chainSizes[s]
+        const line = acc * cell + 0.5
+        ctx2d.setLineDash([3, 3])
+        ctx2d.beginPath()
+        ctx2d.moveTo(line, 0)
+        ctx2d.lineTo(line, px)
+        ctx2d.moveTo(0, line)
+        ctx2d.lineTo(px, line)
+        ctx2d.stroke()
+        ctx2d.setLineDash([])
+      }
+    }
+  }, [pae, n, px, cell, chainSizes])
+
+  if (error || !pae) {
+    return h(
+      'div',
+      { className: 'pv-pae' },
+      h('div', { className: 'pv-section-title' }, 'PAE 误差热图'),
+      error
+        ? h('div', { className: 'pv-pae-note' }, `PAE 加载失败：${error}`)
+        : h('div', { className: 'pv-pae-note' }, '加载 PAE 矩阵…'),
+    )
+  }
+
+  const cellLabel = (k) => (residues && residues[k] ? resLabel(residues, residues[k]) : `${k + 1}`)
+  const readout =
+    hoverCell && residues && residues[hoverCell.i] && residues[hoverCell.j]
+      ? `${cellLabel(hoverCell.i)} → ${cellLabel(hoverCell.j)} · ${(pae.bytes[hoverCell.i * n + hoverCell.j] / 255 * 32).toFixed(2)} Å`
+      : hoverCell
+        ? `残基 ${hoverCell.i + 1} → ${hoverCell.j + 1} · ${(pae.bytes[hoverCell.i * n + hoverCell.j] / 255 * 32).toFixed(2)} Å`
+        : ''
+
+  return h(
+    'div',
+    { className: 'pv-pae' },
+    h(
+      'div',
+      { className: 'pv-3d-toolbar' },
+      h('div', { className: 'pv-section-title' }, `PAE 误差热图 · ${n}×${n}`),
+      h(
+        'div',
+        { className: 'pv-pae-legend' },
+        h('span', null, '0 Å'),
+        h('div', { className: 'pv-pae-legendbar' }),
+        h('span', null, '32 Å'),
+      ),
+    ),
+    h(
+      'div',
+      { className: 'pv-pae-body' },
+      h('canvas', {
+        ref: canvasRef,
+        className: 'pv-pae-canvas',
+        width: px,
+        height: px,
+        style: { width: `${px}px`, height: `${px}px` },
+        onMouseMove: (e) => {
+          const rect = e.currentTarget.getBoundingClientRect()
+          const i = Math.floor((e.clientX - rect.left) / (rect.width / n))
+          const j = Math.floor((e.clientY - rect.top) / (rect.height / n))
+          if (i < 0 || j < 0 || i >= n || j >= n) return
+          setHoverCell({ i, j })
+          // Sync the 3D/curve hover to the row residue — cross-view linkage.
+          if (residues && residues[i] && onHover) onHover(i)
+        },
+        onMouseLeave: () => setHoverCell(null),
+      }),
+      h(
+        'div',
+        { className: 'pv-pae-side' },
+        h('div', { className: 'pv-hoverline' }, readout),
+        h(
+          'div',
+          { className: 'pv-pae-caption' },
+          '紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界，块外亮区提示接口或折叠不确定性。悬停读出残基对误差并联动 3D。',
+        ),
+      ),
+    ),
+  )
+}
+
 function ProteinToolView({ owner, services }) {
   const block = owner?.block ?? {}
   // The transcript clips resultPreview at 4096 chars, which truncates large reports
@@ -2248,6 +2432,9 @@ function ProteinToolView({ owner, services }) {
                 '加载结构…',
               ),
         ),
+    report.paePath
+      ? h(PaesModule, { paePath: report.paePath, residues, services, onHover: setHover })
+      : null,
   )
 }
 

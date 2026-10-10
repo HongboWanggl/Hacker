@@ -24,7 +24,8 @@ description: 蛋白质结构预测工作流：UniProt 取序列、ESMFold 结构
        `prediction_id="<id>"`（传相同 sequences）再调用即可取结果，不会重复计费提交
      - **未配置密钥时自动走本地开源权重**（boltz-community CLI，Apple MPS）：报告带
        `engine: "boltz2-local"`，指标口径一致，但每个目标要跑几分钟、首次运行会下载
-       ~10GB 权重；大复合物（>500 残基）建议配 API key
+       ~10GB 权重；大复合物（>500 残基）建议配 API key；本地运行还会把 PAE 误差矩阵
+       （`*_pae.npz`）存进工作区，面板自动渲染为可交互的误差热图（悬停读残基对误差）
      - **长链回退**：单链 ≥400 残基时本工具也接受（ESMFold 免费端点对长链直接 413）；
        此时报告只含 pTM（无接口指标），verdict 形如 "high-confidence single-chain fold"。
      - 两者都没有时工具会返回配置指引，向用户转述即可（密钥放 `AGH_HOME/secrets/boltz/default`
