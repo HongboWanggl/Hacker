@@ -49,10 +49,12 @@ if (stats.batchRows > 0) {
       detail3d: document.querySelectorAll('.pv-batch-detail .pv-3d').length,
       detailCurve: document.querySelectorAll('.pv-batch-detail .pv-curve').length,
       detailStrip: document.querySelectorAll('.pv-batch-detail .pv-seq-tile').length,
+      detailExport: document.querySelectorAll('.pv-batch-detail .pv-export').length,
     }))
     if (detail.detail3d > 0 && detail.detailCurve > 0) break
   }
   if (!detail || !detail.detailStrip) { console.log('FAIL drill-down missing sequence strip', JSON.stringify(detail)); process.exitCode = 1 }
+  if (detail.detailExport < 2) { console.log('FAIL drill-down missing export toolbars', JSON.stringify(detail)); process.exitCode = 1 }
   console.log('drill-down:', JSON.stringify(detail), 'errors:', JSON.stringify(errors.slice(0, 3)))
   await page.screenshot({ path: '/tmp/pv-drill.png' })
 }

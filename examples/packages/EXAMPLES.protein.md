@@ -82,7 +82,7 @@ MKTAYIAKQRQISFVKSHFSRQ，EIAJKQGQVTMVIKKSMLEK，
 | 对比卡「导出 CSV」 | 每残基原始数值：双侧 pLDDT、Δ、叠合后 Cα 距离（`*.compare.csv`），可直接进 Excel/Python 做进一步分析 |
 | 对比卡「复制结论」 | 一键复制 Markdown 格式的对比结论（双侧 label、全链/核心 RMSD、平均 Δ、结论、分歧最大残基），直接进论文/纪要 |
 | 批处理卡片「导出 CSV」 | 整表下载为 CSV（含失败行及原因，可直接进表格软件） |
-| 批处理卡片点击某行 | 就地展开该蛋白的 3D + 曲线 |
+| 批处理卡片点击某行 | 就地展开该蛋白的 3D + 曲线（各带「导出 PNG」，与单蛋白面板一致） |
 
 ## 结果判读速记
 

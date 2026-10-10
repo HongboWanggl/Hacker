@@ -750,6 +750,18 @@ function BatchRowDetail({ job, services }) {
       h(
         'div',
         { className: 'pv-3d-col' },
+        // Same per-column export toolbars as the single-prediction panel —
+        // batch drill-downs save figures too.
+        h(
+          'div',
+          { className: 'pv-3d-toolbar' },
+          h('div', { className: 'pv-section-title' }, `${job.accession} 3D 结构`),
+          h(
+            'button',
+            { className: 'pv-export', onClick: (e) => export3DPng(e, `${job.accession}.3d.png`, residues, isMultiChain(residues) ? 'chain' : 'plddt') },
+            '导出 PNG',
+          ),
+        ),
         h(Structure3D, {
           residues,
           hover,
@@ -776,6 +788,20 @@ function BatchRowDetail({ job, services }) {
       h(
         'div',
         { className: 'pv-curve-col' },
+        h(
+          'div',
+          { className: 'pv-3d-toolbar' },
+          h('div', { className: 'pv-section-title' }, 'pLDDT 置信度曲线'),
+          h(
+            'div',
+            { className: 'pv-toolbar-controls' },
+            h(
+              'button',
+              { className: 'pv-export', onClick: (e) => exportCurvePng(e, `${job.accession}.plddt.png`, residues) },
+              '导出 PNG',
+            ),
+          ),
+        ),
         h(Curve, {
           residues,
           hover,
