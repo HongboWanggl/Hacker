@@ -26,9 +26,17 @@ for (let i = 0; i < 72; i++) {
 }
 console.log('batch panel:', JSON.stringify(stats), 'errors:', JSON.stringify(errors.slice(0, 3)))
 
-// expand first row and wait for drill-down 3D + curve
+// expand first row and wait for drill-down 3D + curve.
+// After the turn ends the panel lives inside the turn's collapsible step ("Completed ·
+// took Ns") plus a collapsed copy in the trace — expand every collapsed details first,
+// then click a *visible* row.
 if (stats.batchRows > 0) {
-  await page.locator('.pv-batch-row--ok').first().click()
+  for (const d of await page.locator('details:not([open])').all())
+    await d.locator('summary').click().catch(() => {})
+  await page.waitForTimeout(1000)
+  const row = page.locator('.pv-batch-row--ok:visible').first()
+  if (await row.count() === 0) { console.log('FAIL no visible batch row', JSON.stringify(stats)); process.exitCode = 1 }
+  else await row.click()
   let detail = null
   for (let i = 0; i < 24; i++) {
     await page.waitForTimeout(2500)

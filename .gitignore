@@ -54,3 +54,4 @@ examples/packages/protein-predictor/structures/*
 !examples/packages/protein-predictor/structures/P61626_lysozyme_C_148aa.pdb
 !examples/packages/protein-predictor/structures/human_lysozyme_P61626_148aa.pdb
 !examples/packages/protein-predictor/structures/p53_human_P04637_393aa.pdb
+!examples/packages/protein-predictor/structures/p53_R248W_393aa.pdb

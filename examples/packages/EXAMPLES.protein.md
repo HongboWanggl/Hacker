@@ -42,7 +42,8 @@
 ## 任意两结构对比（突变/构建体研究）
 
 ```text
-对比 structures/p53_wt_393aa.pdb 和 structures/p53_mut_393aa.pdb
+对比 structures/p53_human_P04637_393aa.pdb（WT）和
+structures/p53_R248W_393aa.pdb（R248W 热点突变体，ESMFold 预测）
 （compare_structures），label 分别设为「WT」和「突变体」，
 说明折叠是否一致、置信度分歧最大的残基在哪里。
 ```
