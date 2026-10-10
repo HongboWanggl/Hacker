@@ -1231,6 +1231,19 @@ function BatchCard({ report, services }) {
                 h('span', { className: 'pv-batch-acc' }, j.accession),
                 h('span', { className: 'pv-batch-name' }, j.name ?? ''),
                 h('span', { className: 'pv-batch-meta' }, `${j.residues} 残基${j.lowSegments ? ` · ${j.lowSegments} 低置信区段` : ''}`),
+                // mini confidence bar: pLDDT share in the band color, so the
+                // table reads at a glance before the number registers
+                h(
+                  'span',
+                  { className: 'pv-batch-bar', title: `平均 pLDDT ${(j.meanPlddt ?? 0).toFixed(1)}` },
+                  h('span', {
+                    className: 'pv-batch-bar-fill',
+                    style: {
+                      width: `${Math.max(2, Math.min(100, j.meanPlddt ?? 0))}%`,
+                      background: bandColor(j.meanPlddt ?? 0),
+                    },
+                  }),
+                ),
                 h('span', { className: `pv-batch-score pv-batch-score--${verdictTone(j.meanPlddt)}` }, (j.meanPlddt ?? 0).toFixed(1)),
                 h('span', { className: 'pv-batch-caret' }, openAcc === j.accession ? '▾' : '▸'),
               ),

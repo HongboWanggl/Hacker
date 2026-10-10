@@ -137,6 +137,15 @@ button.pv-delta-bar--neg:hover { background: #ff9d70; }
   font-size: 12px;
 }
 .pv-batch-row--failed { background: rgb(255 125 69 / 6%); }
+.pv-batch-bar {
+  width: 64px;
+  height: 6px;
+  flex: none;
+  border-radius: 3px;
+  background: rgb(0 0 0 / 8%);
+  overflow: hidden;
+}
+.pv-batch-bar-fill { display: block; height: 100%; }
 .pv-batch-row--ok { cursor: pointer; transition: background 0.15s; }
 .pv-batch-row--ok:hover { background: rgb(0 83 214 / 5%); }
 .pv-batch-row--open { background: rgb(0 83 214 / 8%); }
