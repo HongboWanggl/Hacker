@@ -52,6 +52,7 @@ const checks = [
   ['3D floating tip mounted', html.includes('pv-3d-tip')],
   ['compare export button mounted', html.includes('导出 PNG')],
   ['compare CSV export button mounted', html.includes('导出 CSV')],
+  ['copy-summary button mounted', html.includes('复制结论')],
   ['sparkline still present', html.includes('pv-delta-bars')],
   ['divergence strip renders 20 tiles', (html.match(/pv-seq-tile/g) ?? []).length === 20],
   ['strip tile carries Δ tooltip', /· Δ -?\d/.test(html)],
@@ -95,4 +96,20 @@ if (chip) {
   checks.push(['largest-delta chip rendered', false])
 }
 for (const [name, ok] of checks.slice(checks.length - (chip ? 1 : 1))) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
+
+// copy-summary: stub the clipboard, click 复制结论, inspect the markdown payload.
+const clipTexts = []
+try { Object.defineProperty(win.navigator, 'clipboard', { value: { writeText: (t) => clipTexts.push(t) }, configurable: true }) } catch {}
+const copyBtn = [...container.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === '复制结论')
+checks.push(['copy button rendered in chips row', !!copyBtn])
+if (copyBtn) {
+  copyBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 200))
+  const md = clipTexts.join('\n')
+  checks.push(['copy payload: title + CA-RMSD', /结构对比：/.test(md) && /CA-RMSD 全链: 21\.01 Å/.test(md)])
+  checks.push(['copy payload: mean delta + overlap', /平均 pLDDT 差: 11\.1/.test(md) && /重叠残基: 393/.test(md)])
+  checks.push(['copy payload: verdict + top divergence', /结论: significant deviation/.test(md) && /#3 \(Δ\+45\.2\)/.test(md)])
+  checks.push(['copy button confirms', (copyBtn.textContent ?? '').includes('已复制')])
+}
+for (const [name, ok] of checks.slice(copyBtn ? -5 : -1)) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 process.exit(failed ? 1 : 0)

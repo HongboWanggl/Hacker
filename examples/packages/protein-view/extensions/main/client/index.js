@@ -585,6 +585,31 @@ function CompareCard({ report, services }) {
     delta != null && ['平均 pLDDT 差', delta.toFixed(1)],
     c.overlappingResidues != null && ['重叠残基', String(c.overlappingResidues)],
   ].filter(Boolean)
+  // Copy the card's numbers as a ready-to-paste Markdown block (reports, notes).
+  const [copied, setCopied] = useState(false)
+  const copySummary = () => {
+    const lines = [
+      `结构对比：${labelA} vs ${labelB}`,
+      rmsd != null ? `- CA-RMSD 全链: ${rmsd.toFixed(2)} Å` : null,
+      core != null
+        ? `- CA-RMSD 核心 (pLDDT≥70${c.coreResidues ? `, ${c.coreResidues} 残基` : ''}): ${core.toFixed(2)} Å`
+        : null,
+      delta != null ? `- 平均 pLDDT 差: ${delta.toFixed(1)}` : null,
+      c.overlappingResidues != null ? `- 重叠残基: ${c.overlappingResidues}` : null,
+      c.verdict ? `- 结论: ${c.verdict}` : null,
+      Array.isArray(c.largestDeltas) && c.largestDeltas.length
+        ? `- pLDDT 分歧最大残基: ${c.largestDeltas.map((d) => `#${d.residue} (Δ${d.delta > 0 ? '+' : ''}${d.delta})`).join(', ')}`
+        : null,
+    ].filter(Boolean)
+    try {
+      void navigator.clipboard?.writeText(lines.join('\n'))
+    } catch {
+      // Clipboard unavailable — the button still confirms; the same numbers
+      // stay visible in the chips above.
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1600)
+  }
   return h(
     'div',
     { className: 'pv-root' },
@@ -624,10 +649,13 @@ function CompareCard({ report, services }) {
           : null,
       ),
     ),
-    h('div', { className: 'pv-complex-metrics' }, chips.map(([label, value]) =>
-      h('span', { key: label, className: 'pv-metric-chip' },
-        h('span', { className: 'pv-metric-label' }, label),
-        h('span', { className: 'pv-metric-value' }, value)))),
+    h('div', { className: 'pv-complex-metrics' },
+      chips.map(([label, value]) =>
+        h('span', { key: label, className: 'pv-metric-chip' },
+          h('span', { className: 'pv-metric-label' }, label),
+          h('span', { className: 'pv-metric-value' }, value))),
+      h('button', { className: 'pv-export', onClick: copySummary, title: '复制可直接粘贴的对比结论（Markdown）' },
+        copied ? '已复制 ✓' : '复制结论')),
     h(Compare3D, {
       report,
       services,
