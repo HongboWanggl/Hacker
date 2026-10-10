@@ -849,6 +849,51 @@ function exportCanvasPng(e, canvasClass, name) {
   } catch {}
 }
 
+// 3D PNG export composites the chain legend for multi-chain complexes, with
+// the legend strip extending the 3D backdrop gradient so the figure is seamless.
+function export3DPng(e, name, residues, colorMode) {
+  const col = e.currentTarget.closest('.pv-3d-col')
+  const canvas = col?.querySelector('canvas.pv-3d')
+  if (!canvas || typeof canvas.toDataURL !== 'function') return
+  try {
+    if (colorMode !== 'chain' || !isMultiChain(residues)) {
+      downloadCanvas(canvas, name)
+      return
+    }
+    const s = canvas.width / (canvas.clientWidth || canvas.width) || 1
+    const m = new Map()
+    for (const r of residues) {
+      if (!m.has(r.chain)) m.set(r.chain, { chain: r.chain, n: 0, sum: 0 })
+      const en = m.get(r.chain)
+      en.n++
+      en.sum += r.b
+    }
+    const stats = [...m.values()]
+    const c = document.createElement('canvas')
+    const rowH = 18 * s
+    c.width = canvas.width
+    c.height = Math.round(canvas.height + 8 * s + stats.length * rowH)
+    const g = c.getContext('2d')
+    g.drawImage(canvas, 0, 0)
+    // legend band continues the backdrop gradient (#0e1420 → #141c2b)
+    const bg = g.createLinearGradient(0, 0, 0, c.height)
+    bg.addColorStop(0, '#0e1420')
+    bg.addColorStop(1, '#141c2b')
+    g.fillStyle = bg
+    g.fillRect(0, canvas.height, c.width, c.height - canvas.height)
+    g.font = `${11 * s}px ui-sans-serif, system-ui`
+    g.textBaseline = 'middle'
+    stats.forEach((st, k) => {
+      const y = canvas.height + 8 * s + k * rowH + rowH / 2
+      g.fillStyle = CHAIN_COLORS[k % CHAIN_COLORS.length]
+      g.fillRect(6 * s, y - 5 * s, 10 * s, 10 * s)
+      g.fillStyle = 'rgba(255,255,255,0.9)'
+      g.fillText(`链 ${st.chain} · ${st.n} aa · 均值 pLDDT ${(st.sum / st.n).toFixed(1)}`, 22 * s, y)
+    })
+    downloadCanvas(c, name)
+  } catch {}
+}
+
 // Curve PNG export composites the sequence strip below the curve, so the saved
 // figure carries the band heat map too (main panel; strip-less columns fall
 // back to the plain canvas).
@@ -1552,23 +1597,28 @@ function ProteinToolView({ owner, services }) {
                 ),
                 h(
                   'button',
-                  { className: 'pv-export', onClick: (e) => exportCanvasPng(e, 'pv-3d', `${pdbName}.3d.png`) },
+                  { className: 'pv-export', onClick: (e) => export3DPng(e, `${pdbName}.3d.png`, residues, colorMode) },
                   '导出 PNG',
                 ),
                 h('input', {
                   className: 'pv-jump',
-                  placeholder: isMultiChain(residues) ? '残基号或 B:17…' : '跳转残基…',
+                  placeholder: isMultiChain(residues) ? '残基号或 B:17…' : '残基号 / K101…',
                   title: isMultiChain(residues)
                     ? '输入残基号或 链:残基号（如 B:17）回车，3D 与曲线同步高亮'
-                    : '输入残基号回车，3D 与曲线同步高亮',
+                    : '输入残基号、氨基酸+编号（如 K101）回车，3D 与曲线同步高亮',
                   onKeyDown: (e) => {
                     if (e.key !== 'Enter') return
                     if (!residues) return
                     const raw = e.currentTarget.value.trim()
                     const cm = /^([A-Za-z][A-Za-z0-9]{0,2}):(\d+)$/.exec(raw)
+                    // single-chain panels also accept aa+number ("K101") — ambiguous
+                    // with chain letters on complexes, so only offered there
+                    const am = !isMultiChain(residues) ? /^([A-Za-z])(\d+)$/.exec(raw) : null
                     const idx = cm
                       ? residues.findIndex((r) => r.chain && r.chain.toUpperCase() === cm[1].toUpperCase() && r.i === Number(cm[2]))
-                      : residues.findIndex((r) => r.i === Number(raw))
+                      : am
+                        ? residues.findIndex((r) => r.i === Number(am[2]) && (r.aa ?? '')[0]?.toUpperCase() === am[1].toUpperCase())
+                        : residues.findIndex((r) => r.i === Number(raw))
                     if (idx >= 0) {
                       setSelected(idx)
                       setHover(idx)

@@ -60,6 +60,11 @@ async function run(services, report) {
   ok('clicking tile selects residue', (container.querySelector('.pv-hoverline')?.textContent ?? '').includes('A17'))
   const line = await jump('17')
   ok('hoverline shows residue 17 after jump', line.includes('A17') && line.includes('57.0'))
+  const lineAa = await jump('A18')
+  ok('aa+number jump (A18) targets residue 18', lineAa.includes('A18'))
+  const lineMiss = await jump('W99')
+  ok('aa mismatch keeps last selection', lineMiss.includes('A18'))
+  await jump('17') // resync for the keyboard block below
   const line2 = await jump('999')
   ok('unknown residue keeps last selection', line2.includes('A17'))
   // keyboard: ←/→ steps the selection along the residues
