@@ -553,6 +553,11 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
   gap: 8px;
   min-width: 0;
 }
+.pv-legend-note {
+  font-size: 11px;
+  color: var(--pv-muted, rgba(128, 128, 128, 0.9));
+  margin-left: 4px;
+}
 .pv-pae-pairs {
   display: flex;
   flex-wrap: wrap;

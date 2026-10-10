@@ -145,6 +145,23 @@ function ChainLegend({ residues, hidden, onToggle }) {
   )
 }
 
+// Legend for the interface-error 3D coloring: viridis scale over mean
+// inter-chain PAE, mirroring the heatmap legend's semantics.
+function InterfaceLegend() {
+  return h(
+    'div',
+    { className: 'pv-chain-legend' },
+    h(
+      'span',
+      { className: 'pv-chain-chip', title: '每个残基按其对其它链的平均 PAE 着色（0–32 Å）' },
+      h('span', null, '0 Å'),
+      h('span', { className: 'pv-pae-legendbar', style: { width: '80px' } }),
+      h('span', null, '32 Å'),
+      h('span', { className: 'pv-legend-note' }, '紫=界面可信，黄=界面误差大'),
+    ),
+  )
+}
+
 const verdictTone = (mean) =>
   mean >= 90 ? 'high' : mean >= 70 ? 'ok' : mean >= 50 ? 'caution' : 'warn'
 const VERDICT_ZH = {
@@ -1723,7 +1740,7 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
 // 3D backbone viewer. Canvas 2D, painter's algorithm, orthographic + depth fog.
 // `ghostColorOf(aIdx, bIdx)` lets the compare card recolor ghost segments
 // (e.g. by post-superposition Cα distance); null falls back to the gray ghost.
-function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, autoSpin, ghost, ghostColorOf, hintText, hiddenChains }) {
+function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, autoSpin, interfaceErr, ghost, ghostColorOf, hintText, hiddenChains }) {
   // Chain visibility toggle: hidden residues keep their indices (curve/strip
   // cross-linking stays aligned) but are skipped in drawing and hit-testing.
   const isHidden = useCallback((k) => !!(hiddenChains?.size && hiddenChains.has(residues?.[k]?.chain)), [hiddenChains, residues])
@@ -1850,6 +1867,11 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
         const r = residues[k]
         if (colorMode === 'chain') return hexToRgb(CHAIN_COLORS[(geo.chainIdx?.[k] ?? 0) % CHAIN_COLORS.length])
         if (colorMode === 'rainbow') return rainbowAt(k / Math.max(1, residues.length - 1)).match(/\d+/g).map(Number)
+        // Interface mode: viridis over the residue's mean inter-chain PAE —
+        // same semantics as the heatmap (purple = confident interface).
+        if (colorMode === 'interface' && interfaceErr) {
+          return viridisRgb(Math.min(1, (interfaceErr[k] ?? 0) / 32))
+        }
         return hexToRgb(bandColor(r.b))
       }
 
@@ -1931,7 +1953,7 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       cancelAnimationFrame(frame.current)
       clearTimeout(wake.current)
     }
-  }, [geo, size, residues, hover, selected, colorMode, autoSpin, ghost, ghostColorOf, isHidden])
+  }, [geo, size, residues, hover, selected, colorMode, autoSpin, interfaceErr, ghost, ghostColorOf, isHidden])
 
   const pick = useCallback(
     (ev) => {
@@ -2070,7 +2092,7 @@ function viridisRgb(t) {
   ]
 }
 
-function PaesModule({ paePath, residues, services, onHover, hover, name = 'structure' }) {
+function PaesModule({ paePath, residues, services, onHover, hover, onInterface, name = 'structure' }) {
   const [pae, setPae] = useState(null) // { n, bytes, scale }
   const [error, setError] = useState(null)
   const [hoverCell, setHoverCell] = useState(null) // { i, j } pooled-matrix indices
@@ -2166,6 +2188,41 @@ function PaesModule({ paePath, residues, services, onHover, hover, name = 'struc
       })
       .sort((x, y) => x.meanA - y.meanA)
   }, [pae, n, residues, scale])
+
+  // Per-residue mean PAE toward the *other* chains (Å, residue resolution —
+  // pooled cells are re-expanded). Lifted to the parent so the 3D view can
+  // offer interface-error coloring; null on single-chain panels.
+  const interfaceErr = useMemo(() => {
+    if (!pae || !n || !residues || !residues.length) return null
+    const cellChain = []
+    for (let c = 0; c < n; c++) {
+      const r = residues[Math.min(c * scale, residues.length - 1)]
+      cellChain.push(r ? r.chain : '?')
+    }
+    const out = new Float32Array(residues.length)
+    let any = false
+    for (let i = 0; i < n; i++) {
+      const my = cellChain[i]
+      let sum = 0
+      let cnt = 0
+      for (let j = 0; j < n; j++) {
+        if (cellChain[j] === my) continue
+        sum += pae.bytes[i * n + j]
+        cnt++
+      }
+      if (!cnt) continue
+      any = true
+      // every residue inside pooled cell i inherits the cell's cross-chain mean
+      const first = i * scale
+      const last = Math.min((i + 1) * scale, residues.length)
+      for (let r = first; r < last; r++) out[r] = (sum / cnt / 255) * 32
+    }
+    return any ? out : null
+  }, [pae, n, residues, scale])
+
+  useEffect(() => {
+    onInterface?.(interfaceErr ?? null)
+  }, [onInterface, interfaceErr])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -2440,6 +2497,9 @@ function ProteinToolView({ owner, services }) {
   const [seqCopied, setSeqCopied] = useState(false)
   const [hiddenChains, setHiddenChains] = useState(() => new Set())
   const [highlightSeg, setHighlightSeg] = useState(null)
+  // Per-residue mean inter-chain PAE (Å), reported up by PaesModule once the
+  // matrix loads; enables the "按界面误差着色" 3D mode on complex panels.
+  const [interfaceErr, setInterfaceErr] = useState(null)
 
   useEffect(() => {
     if (!pdbPath || !services) return
@@ -2447,6 +2507,7 @@ function ProteinToolView({ owner, services }) {
     setStructure(null)
     setLoadError(null)
     setHiddenChains(new Set())
+    setInterfaceErr(null)
     services
       .call('protein.structure', { path: pdbPath })
       .then((s) => {
@@ -2561,6 +2622,7 @@ function ProteinToolView({ owner, services }) {
                   h('option', { value: 'plddt' }, '按 pLDDT 着色'),
                   h('option', { value: 'rainbow' }, '彩虹 (N→C)'),
                   isMultiChain(residues) ? h('option', { value: 'chain' }, '按链着色') : null,
+                  interfaceErr ? h('option', { value: 'interface' }, '按界面误差着色') : null,
                 ),
                 h(
                   'label',
@@ -2641,14 +2703,18 @@ function ProteinToolView({ owner, services }) {
               },
               colorMode,
               autoSpin,
+              interfaceErr,
               hiddenChains,
             }),
             colorMode === 'chain' ? h(ChainLegend, { residues, hidden: hiddenChains, onToggle: toggleChain }) : null,
+            colorMode === 'interface' ? h(InterfaceLegend) : null,
             h(
               'div',
               { className: 'pv-hoverline' },
               hover != null && residues[hover]
-                ? `${resLabel(residues, residues[hover])} · pLDDT ${residues[hover].b.toFixed(1)}`
+                ? colorMode === 'interface' && interfaceErr
+                  ? `${resLabel(residues, residues[hover])} · 界面误差 ${interfaceErr[hover].toFixed(2)} Å`
+                  : `${resLabel(residues, residues[hover])} · pLDDT ${residues[hover].b.toFixed(1)}`
                 : selected != null && residues[selected]
                   ? `已选 ${resLabel(residues, residues[selected])} · pLDDT ${residues[selected].b.toFixed(1)}（点击曲线取消）`
                   : '',
@@ -2707,7 +2773,7 @@ function ProteinToolView({ owner, services }) {
               ),
         ),
     report.paePath
-      ? h(PaesModule, { paePath: report.paePath, residues, services, onHover: setHover, hover, name: pdbName })
+      ? h(PaesModule, { paePath: report.paePath, residues, services, onHover: setHover, hover, onInterface: setInterfaceErr, name: pdbName })
       : null,
   )
 }

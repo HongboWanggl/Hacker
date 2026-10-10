@@ -65,6 +65,9 @@ check('caption present', container.querySelector('.pv-pae-caption')?.textContent
 // mean 183.75 → 23.06 Å
 const pairChip = container.querySelector('.pv-pae-pair')?.textContent ?? ''
 check(`chain-pair mean chip (got "${pairChip}")`, pairChip === 'A–B 23.06 Å')
+// PaesModule lifts per-residue inter-chain means to the parent → the 3D
+// color-by select gains the interface option on complex panels
+check('interface color mode offered', !!container.querySelector('select.pv-select option[value=interface]'))
 
 // side profile strip: one bar per row = mean PAE against other residues.
 // Tested before the heatmap hover (no mouseleave in happy-dom → hoverCell
