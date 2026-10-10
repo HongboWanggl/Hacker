@@ -98,7 +98,6 @@ const v2f64 = Buffer.concat([npyHeader('<f8', false, [2, 2], 2), Buffer.from(mat
 const zipV2 = buildZip([{ name: 'pae.npy', payload: v2f64, method: 8 }])
 const zipNoNpy = buildZip([{ name: 'other.npy', payload: rowMajor, method: 0 }])
 const zipNonSquare = buildZip([{ name: 'pae.npy', payload: Buffer.concat([npyHeader('<f4', false, [2, 3]), Buffer.from(Float32Array.from([0, 8, 16, 32, 0, 8]).buffer)]), method: 8 }])
-const zipTooBig = buildZip([{ name: 'pae.npy', payload: Buffer.concat([npyHeader('<f4', false, [801, 801]), Buffer.alloc(801 * 801 * 4)]), method: 0 }])
 
 const run = async (buf) => {
   const out = await pae.handler({ path: 'structures/x.npz' }, { fs: { read: async () => buf }, cwd: '/tmp' })
@@ -116,9 +115,30 @@ check('n reported', (await (async () => {
 await reject('non-npz bytes', 'structures/x.npz', Buffer.from('not a zip'))
 check('missing pae.npy falls back to first entry', (await run(zipNoNpy)).join() === '0,64,128,255')
 await reject('non-square matrix', 'structures/x.npz', zipNonSquare)
-await reject('matrix over 800 cap', 'structures/x.npz', zipTooBig)
+// (matrices over 800 no longer reject — they pool; see the oversize block below)
 await reject('path traversal', '../etc.npz', zipStored)
 await reject('non-npz extension', 'structures/x.txt', zipStored)
+
+// >800 matrices are mean-pooled blockwise: 1602² with constant-per-block
+// values pools losslessly (scale = ceil(1602/800) = 3 → 534×534). Block
+// values stay under 32 Å so the quantizer never saturates.
+const N = 1602
+const K = 3
+const M = Math.ceil(N / K)
+const blockVal = (bi, bj) => (bi % 12) * 2.5 + (bj % 12) * 0.2
+const big = new Float32Array(N * N)
+for (let i = 0; i < N; i++) {
+  for (let j = 0; j < N; j++) big[i * N + j] = blockVal(Math.floor(i / K), Math.floor(j / K))
+}
+const bigNpz = buildZip([{ name: 'pae.npy', payload: Buffer.concat([npyHeader('<f4', false, [N, N]), Buffer.from(big.buffer, big.byteOffset, big.byteLength)]), method: 0 }])
+const bigOut = await pae.handler({ path: 'structures/big.npz' }, { fs: { read: async () => bigNpz }, cwd: '/tmp' })
+check('oversize matrix pools to ≤800', bigOut.n === M && M <= 800)
+check('scale reported', bigOut.scale === K)
+const bigBytes = Buffer.from(bigOut.data, 'base64')
+const cell = (bi, bj) => Math.round((blockVal(bi, bj) / 32) * 255)
+check('pooled block mean exact (corner)', bigBytes[0] === cell(0, 0))
+check('pooled block mean exact (interior)', bigBytes[100 * M + 200] === cell(100, 200))
+check('pooled block mean exact (last row/col)', bigBytes[(M - 1) * M + (M - 1)] === cell(M - 1, M - 1))
 
 if (failed) throw new Error(`${failed} pae service checks failed`)
 console.log('PAE SERVICE TESTS DONE')

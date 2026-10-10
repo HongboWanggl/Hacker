@@ -29,8 +29,11 @@ const services = {
       return { n: 4, sequence: 'AAAA', residues }
     }
     if (name === 'protein.pae') {
-      if (input.path !== 'structures/x_pae.npz') throw new Error('unexpected pae path ' + input.path)
-      return { n: 4, data: Buffer.from(mat).toString('base64') }
+      if (input.path === 'structures/pooled_pae.npz') {
+        return { n: 2, data: Buffer.from(pooled).toString('base64'), scale: 2 }
+      }
+      if (input.path === 'structures/x_pae.npz') return { n: 4, data: Buffer.from(mat).toString('base64') }
+      throw new Error('unexpected pae path ' + input.path)
     }
     throw new Error('unexpected ' + name)
   },
@@ -67,6 +70,26 @@ canvas.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: 3
 await new Promise((r) => setTimeout(r, 200))
 const readout = container.querySelector('.pv-pae-side .pv-hoverline')?.textContent ?? ''
 check(`hover readout cell(1,2) (got "${readout}")`, readout === 'A:A2 → B:A1 · 15.06 Å')
+
+// --- pooled matrix (scale > 1): labels become residue ranges ----------------
+const pooled = Uint8Array.from([0, 255, 64, 128])
+const container2 = win.document.createElement('div')
+win.document.body.appendChild(container2)
+// Same slot component binds its own ctx services — the mock above dispatches
+// on input.path, so this render just uses a different paePath.
+createRoot(container2).render(React.createElement(complexReg.comp, { owner: { callId: 'c-pool', toolName: 'predict_complex', block: { resultPreview: JSON.stringify({ ...report, paePath: 'structures/pooled_pae.npz' }) } } }))
+await new Promise((r) => setTimeout(r, 500))
+const html2 = container2.innerHTML
+check('pooled title notes scale', html2.includes('每格 2 残基'))
+const canvas2 = container2.querySelector('canvas.pv-pae-canvas')
+check('pooled canvas 2×2 native (upscaled 16×16)', canvas2?.width === 16)
+canvas2.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 })
+// cell (1,0): n=2 → 50px cells; clientX 62.5 → i=1, clientY 12.5 → j=0.
+// cell(1) covers residues[2..3] = B:A1–B:A2; byte pooled[2]=64 → 8.03 Å.
+canvas2.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: 62.5, clientY: 12.5 }))
+await new Promise((r) => setTimeout(r, 200))
+const readout2 = container2.querySelector('.pv-pae-side .pv-hoverline')?.textContent ?? ''
+check(`pooled hover readout ranges (got "${readout2}")`, readout2 === 'B:A1–B:A2 → A:A1–A:A2 · 8.03 Å')
 
 process.exit(failed ? 1 : 0)
 console.log('PAE PANEL TESTS DONE')

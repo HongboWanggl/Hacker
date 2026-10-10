@@ -1329,10 +1329,18 @@ function exportPaePng(e, name, n, bytes, chainSizes) {
 }
 
 // Raw pair errors as CSV (chain-prefixed 1-based indices, long format) —
-// downstream analysis in Excel/Python without re-parsing the npz.
-function exportPaeCsv(name, n, bytes, residues) {
+// downstream analysis in Excel/Python without re-parsing the npz. A pooled
+// matrix labels each row/col with the residue range it averages.
+function exportPaeCsv(name, n, bytes, residues, scale = 1) {
   try {
-    const label = (k) => (residues?.[k] ? `${residues[k].chain}:${residues[k].i}` : String(k + 1))
+    const label = (c) => {
+      const a = c * scale
+      const b = Math.min((c + 1) * scale, residues?.length ?? a + 1) - 1
+      const la = residues?.[a] ? `${residues[a].chain}:${residues[a].i}` : String(a + 1)
+      if (b <= a) return la
+      const lb = residues?.[b] ? `${residues[b].chain}:${residues[b].i}` : String(b + 1)
+      return `${la}-${lb}`
+    }
     const rows = ['residue_i,residue_j,error_a']
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
@@ -2031,10 +2039,10 @@ function viridisRgb(t) {
   ]
 }
 
-function PaesModule({ paePath, residues, services, onHover, name = 'structure' }) {
-  const [pae, setPae] = useState(null) // { n, bytes }
+function PaesModule({ paePath, residues, services, onHover, hover, name = 'structure' }) {
+  const [pae, setPae] = useState(null) // { n, bytes, scale }
   const [error, setError] = useState(null)
-  const [hoverCell, setHoverCell] = useState(null) // { i, j } residue indices
+  const [hoverCell, setHoverCell] = useState(null) // { i, j } pooled-matrix indices
   const canvasRef = useRef(null)
 
   useEffect(() => {
@@ -2050,7 +2058,8 @@ function PaesModule({ paePath, residues, services, onHover, name = 'structure' }
         const bin = atob(m.data)
         const bytes = new Uint8Array(bin.length)
         for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k)
-        setPae({ n: m.n, bytes })
+        // scale > 1 means the matrix was mean-pooled (one cell = scale residues)
+        setPae({ n: m.n, bytes, scale: m.scale === 1 || m.scale >= 2 ? m.scale : 1 })
       })
       .catch((e) => {
         if (alive) setError(String(e?.message ?? e).slice(0, 160))
@@ -2077,6 +2086,7 @@ function PaesModule({ paePath, residues, services, onHover, name = 'structure' }
   }, [residues])
 
   const n = pae?.n ?? 0
+  const scale = pae?.scale ?? 1
   const cell = n ? Math.max(1, Math.min(8, Math.floor(480 / n))) : 0
   const px = n * cell
 
@@ -2109,7 +2119,8 @@ function PaesModule({ paePath, residues, services, onHover, name = 'structure' }
       let acc = 0
       for (let s = 0; s < chainSizes.length - 1; s++) {
         acc += chainSizes[s]
-        const line = acc * cell + 0.5
+        // chain boundaries are residue-indexed; pooled cells cover `scale` each
+        const line = (acc / scale) * cell + 0.5
         ctx2d.setLineDash([3, 3])
         ctx2d.beginPath()
         ctx2d.moveTo(line, 0)
@@ -2120,7 +2131,22 @@ function PaesModule({ paePath, residues, services, onHover, name = 'structure' }
         ctx2d.setLineDash([])
       }
     }
-  }, [pae, n, px, cell, chainSizes])
+    // Reverse linkage: a residue hovered in the 3D view / curve / strip draws a
+    // crosshair over its row+column so the pair-error profile reads at a glance.
+    if (hover != null && hover >= 0) {
+      const line = Math.floor(hover / scale) * cell + 0.5
+      if (line < px) {
+        ctx2d.strokeStyle = 'rgba(255,255,255,0.85)'
+        ctx2d.lineWidth = 1
+        ctx2d.beginPath()
+        ctx2d.moveTo(line, 0)
+        ctx2d.lineTo(line, px)
+        ctx2d.moveTo(0, line)
+        ctx2d.lineTo(px, line)
+        ctx2d.stroke()
+      }
+    }
+  }, [pae, n, px, cell, chainSizes, hover, scale])
 
   if (error || !pae) {
     return h(
@@ -2133,13 +2159,20 @@ function PaesModule({ paePath, residues, services, onHover, name = 'structure' }
     )
   }
 
-  const cellLabel = (k) => (residues && residues[k] ? resLabel(residues, residues[k]) : `${k + 1}`)
+  // A pooled cell covers residues [c*scale, (c+1)*scale) — readouts show the
+  // range (single label when scale is 1).
+  const cellLabel = (c) => {
+    const a = c * scale
+    const b = Math.min((c + 1) * scale, residues?.length ?? a + 1) - 1
+    const la = residues && residues[a] ? resLabel(residues, residues[a]) : `${a + 1}`
+    if (b <= a) return la
+    const lb = residues && residues[b] ? resLabel(residues, residues[b]) : `${b + 1}`
+    return `${la}–${lb}`
+  }
   const readout =
-    hoverCell && residues && residues[hoverCell.i] && residues[hoverCell.j]
+    hoverCell
       ? `${cellLabel(hoverCell.i)} → ${cellLabel(hoverCell.j)} · ${(pae.bytes[hoverCell.i * n + hoverCell.j] / 255 * 32).toFixed(2)} Å`
-      : hoverCell
-        ? `残基 ${hoverCell.i + 1} → ${hoverCell.j + 1} · ${(pae.bytes[hoverCell.i * n + hoverCell.j] / 255 * 32).toFixed(2)} Å`
-        : ''
+      : ''
 
   return h(
     'div',
@@ -2147,7 +2180,7 @@ function PaesModule({ paePath, residues, services, onHover, name = 'structure' }
     h(
       'div',
       { className: 'pv-3d-toolbar' },
-      h('div', { className: 'pv-section-title' }, `PAE 误差热图 · ${n}×${n}`),
+      h('div', { className: 'pv-section-title' }, `PAE 误差热图 · ${n}×${n}${scale > 1 ? `（每格 ${scale} 残基）` : ''}`),
       h(
         'div',
         { className: 'pv-toolbar-controls' },
@@ -2165,7 +2198,7 @@ function PaesModule({ paePath, residues, services, onHover, name = 'structure' }
         ),
         h(
           'button',
-          { className: 'pv-export', onClick: () => exportPaeCsv(`${name}.pae.csv`, n, pae.bytes, residues) },
+          { className: 'pv-export', onClick: () => exportPaeCsv(`${name}.pae.csv`, n, pae.bytes, residues, scale) },
           '导出 CSV',
         ),
       ),
@@ -2185,8 +2218,10 @@ function PaesModule({ paePath, residues, services, onHover, name = 'structure' }
           const j = Math.floor((e.clientY - rect.top) / (rect.height / n))
           if (i < 0 || j < 0 || i >= n || j >= n) return
           setHoverCell({ i, j })
-          // Sync the 3D/curve hover to the row residue — cross-view linkage.
-          if (residues && residues[i] && onHover) onHover(i)
+          // Sync the 3D/curve hover to the row's first residue — cross-view
+          // linkage (pooled cells map back to residue i*scale).
+          const r = i * scale
+          if (residues && residues[r] && onHover) onHover(r)
         },
         onMouseLeave: () => setHoverCell(null),
       }),
@@ -2197,7 +2232,9 @@ function PaesModule({ paePath, residues, services, onHover, name = 'structure' }
         h(
           'div',
           { className: 'pv-pae-caption' },
-          '紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界，块外亮区提示接口或折叠不确定性。悬停读出残基对误差并联动 3D。',
+          scale > 1
+            ? `矩阵按 ${scale} 残基/格均值降采样显示；紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界。悬停读出残基范围误差并联动 3D。`
+            : '紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界，块外亮区提示接口或折叠不确定性。悬停读出残基对误差并联动 3D。',
         ),
       ),
     ),
@@ -2514,7 +2551,7 @@ function ProteinToolView({ owner, services }) {
               ),
         ),
     report.paePath
-      ? h(PaesModule, { paePath: report.paePath, residues, services, onHover: setHover, name: pdbName })
+      ? h(PaesModule, { paePath: report.paePath, residues, services, onHover: setHover, hover, name: pdbName })
       : null,
   )
 }

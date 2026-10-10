@@ -158,6 +158,7 @@ export const runtime = {
         properties: {
           n: { type: 'number' },
           data: { type: 'string' },
+          scale: { type: 'number' },
         },
         required: ['n', 'data'],
         additionalProperties: false,
@@ -177,10 +178,21 @@ export const runtime = {
         const buf = Buffer.from(await svc.fs.read(rel))
         const npy = readNpzEntry(buf, 'pae.npy') ?? Object.values(readNpzEntries(buf))[0]
         if (!npy) throw new Error(`no pae array in ${rel}`)
-        const { shape, fortran, float } = parseNpy(npy)
-        const n = shape[0]
+        const parsed = parseNpy(npy)
+        let { shape, fortran, float } = parsed
+        let n = shape[0]
         if (!Number.isInteger(n) || n < 2 || n !== shape[1]) throw new Error(`pae matrix is not square (shape ${shape.join('x')})`)
-        if (n > 800) throw new Error(`pae matrix too large (${n} residues; cap 800)`)
+        // The 1 MiB result budget fits 800×800 bytes; longer chains are
+        // mean-pooled blockwise so the heatmap stays available (display only —
+        // scale tells the panel each cell covers `scale` residues).
+        let scale = 1
+        if (n > 800) {
+          scale = Math.ceil(n / 800)
+          const pooled = meanPool(float, fortran, n, scale)
+          n = pooled.n
+          float = pooled.float
+          fortran = false
+        }
         const out = Buffer.alloc(n * n)
         for (let i = 0; i < n; i++) {
           for (let j = 0; j < n; j++) {
@@ -189,7 +201,7 @@ export const runtime = {
             out[i * n + j] = Math.max(0, Math.min(255, Math.round((Number.isFinite(v) ? v : 32) / 32 * 255)))
           }
         }
-        return { n, data: out.toString('base64') }
+        return scale > 1 ? { n, data: out.toString('base64'), scale } : { n, data: out.toString('base64') }
       },
     })
   },
@@ -199,6 +211,31 @@ export const runtime = {
 // Minimal .npz (zip) / .npy readers — just enough for what numpy's savez
 // writes. Central-directory based, so data-descriptor (streamed) entries with
 // zeroed local sizes parse correctly; stored and deflate both handled.
+
+// Mean-pool an n×n float matrix into k×k blocks (n = pooled count). Used to
+// bring PAE matrices over the 800-cell result budget down to display size;
+// each output cell is the arithmetic mean of its block (NaN/Inf → 32 Å, the
+// same worst-case clamp the quantizer applies).
+function meanPool(float, fortran, n, k) {
+  const m = Math.ceil(n / k)
+  const out = new Float32Array(m * m)
+  const at = (i, j) => float[fortran ? i + j * n : i * n + j]
+  for (let bi = 0; bi < m; bi++) {
+    for (let bj = 0; bj < m; bj++) {
+      let sum = 0
+      let cnt = 0
+      for (let i = bi * k; i < Math.min((bi + 1) * k, n); i++) {
+        for (let j = bj * k; j < Math.min((bj + 1) * k, n); j++) {
+          const v = at(i, j)
+          sum += Number.isFinite(v) ? v : 32
+          cnt++
+        }
+      }
+      out[bi * m + bj] = cnt ? sum / cnt : 32
+    }
+  }
+  return { n: m, float: out }
+}
 
 function readNpzEntries(buf) {
   // Locate the end-of-central-directory record (signature 0x06054b50), scanning
