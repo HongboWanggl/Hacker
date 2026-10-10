@@ -580,6 +580,27 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
   border-color: rgba(255, 255, 255, 0.9);
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
 }
+.pv-ligand-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  font-size: 11px;
+  margin-top: 6px;
+}
+.pv-ligand-el {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--pv-fg, #dfe5ee);
+}
+.pv-ligand-el i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.4);
+}
 .pv-pae-caption {
   font-size: 11px;
   color: var(--pv-muted, rgba(128, 128, 128, 0.9));

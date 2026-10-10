@@ -136,5 +136,10 @@ const csvText = csvBlob ? await csvBlob.text() : ''
 check(`CSV header carries interface_pae (got "${csvText.split('\n')[0]}")`, csvText.startsWith('residue,aa,plddt,interface_pae\n'))
 // residue 0 row: i=0 cross-chain cells are 160,255 → mean 207.5 → 26.04 Å
 check(`CSV row carries interface PAE (got "${csvText.split('\n')[1]}")`, csvText.split('\n')[1] === 'A:1,A,80.0,26.04')
+
+// ligand element legend: 5 element dots (C/N/O/S/P) under the 3D view while
+// the ligand is shown
+const legendEls = [...container.querySelectorAll('.pv-ligand-el')].map((e) => e.textContent.trim())
+check(`ligand element legend (got "${legendEls.join(',')}")`, legendEls.join(',') === 'C,N,O,S,P')
 process.exit(failed ? 1 : 0)
 console.log('CONTACT LINE TESTS DONE')

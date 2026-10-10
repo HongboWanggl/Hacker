@@ -162,6 +162,23 @@ function InterfaceLegend() {
   )
 }
 
+// Element key for the ligand pose: same palette the 3D view paints with.
+function LigandLegend() {
+  return h(
+    'div',
+    { className: 'pv-ligand-legend' },
+    ['C', 'N', 'O', 'S', 'P'].map((el) =>
+      h(
+        'span',
+        { key: el, className: 'pv-ligand-el', title: `配体 ${el} 原子按元素着色` },
+        h('i', { style: { background: `rgb(${ligandColor(el).join(',')})` } }),
+        el,
+      ),
+    ),
+    h('span', { className: 'pv-legend-note' }, '配体按元素着色 · 悬停读出原子'),
+  )
+}
+
 const verdictTone = (mean) =>
   mean >= 90 ? 'high' : mean >= 70 ? 'ok' : mean >= 50 ? 'caution' : 'warn'
 const VERDICT_ZH = {
@@ -2879,6 +2896,7 @@ function ProteinToolView({ owner, services }) {
             }),
             colorMode === 'chain' ? h(ChainLegend, { residues, hidden: hiddenChains, onToggle: toggleChain }) : null,
             colorMode === 'interface' ? h(InterfaceLegend) : null,
+            ligandInfo && showLigand ? h(LigandLegend) : null,
             h(
               'div',
               { className: 'pv-hoverline' },
