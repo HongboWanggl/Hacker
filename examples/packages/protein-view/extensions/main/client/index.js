@@ -798,7 +798,27 @@ function SearchCard({ report }) {
                 title: `点击复制 ${hit.accession ?? ''}`,
                 onClick: () => copy(hit.accession),
               },
-              h('span', { className: 'pv-search-acc' }, hit.accession ?? '—', copied === hit.accession ? ' ✓' : ''),
+              h(
+                'span',
+                { className: 'pv-search-acccell' },
+                h('span', { className: 'pv-search-acc' }, hit.accession ?? '—', copied === hit.accession ? ' ✓' : ''),
+                // Direct entry link — stopPropagation so the row's copy-on-click
+                // doesn't fire; researchers jump to the live UniProt entry.
+                hit.accession
+                  ? h(
+                      'a',
+                      {
+                        className: 'pv-search-link',
+                        href: `https://www.uniprot.org/uniprotkb/${encodeURIComponent(hit.accession)}`,
+                        target: '_blank',
+                        rel: 'noreferrer noopener',
+                        title: '在 UniProt 网站打开',
+                        onClick: (e) => e.stopPropagation(),
+                      },
+                      '↗',
+                    )
+                  : null,
+              ),
               h('span', { className: 'pv-search-name' }, hit.proteinName ?? hit.id ?? '—'),
               h('span', { className: 'pv-search-org' }, hit.organism ?? '—'),
               h('span', { className: 'pv-search-len' }, hit.length != null ? `${hit.length} aa` : '—'),

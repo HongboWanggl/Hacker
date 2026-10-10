@@ -145,6 +145,7 @@ const schks = [
   ['copy hint footer', shtml.includes('点击行复制 accession')],
   ['sortable header cells', shtml.includes('pv-search-head-cell') && shtml.includes('点击排序')],
   ['sort hint footer', shtml.includes('点击表头排序')],
+  ['uniprot entry links', shtml.includes('uniprotkb/P04637') && shtml.includes('在 UniProt 网站打开')],
 ]
 for (const [name, ok] of schks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 // empty hits → friendly fallback, no table

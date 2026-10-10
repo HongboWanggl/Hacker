@@ -367,6 +367,16 @@
   color: #8fb0ff;
   font-size: 12px;
 }
+/* accession cell: mono code + external UniProt link */
+.pv-search-acccell { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.pv-search-link {
+  color: #8d99af;
+  font-size: 10.5px;
+  text-decoration: none;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+.pv-search-link:hover { color: #8fb0ff; background: rgb(143 176 255 / 15%); text-decoration: underline; }
 .pv-search-name { color: #e8ecf5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pv-search-org { color: #9aa7bd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pv-search-len { color: #b9c2d4; text-align: right; font-variant-numeric: tabular-nums; }
