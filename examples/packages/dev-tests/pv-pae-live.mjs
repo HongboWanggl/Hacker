@@ -62,8 +62,21 @@ check('export PNG button', [...container.querySelectorAll('.pv-pae button.pv-exp
 check('export CSV button', [...container.querySelectorAll('.pv-pae button.pv-export')].some((b) => b.textContent === '导出 CSV'))
 check('caption present', container.querySelector('.pv-pae-caption')?.textContent.includes('链边界') ?? false)
 
+// side profile strip: one bar per row = mean PAE against other residues.
+// Tested before the heatmap hover (no mouseleave in happy-dom → hoverCell
+// would otherwise stick and win the readout priority).
+const strip = container.querySelector('canvas.pv-pae-strip')
+check('strip canvas present, sized to heatmap', !!strip && strip.width === 28 && strip.height === 32)
+strip.getBoundingClientRect = () => ({ left: 0, top: 0, width: 28, height: 100 })
+// row 1 = A:A2; bytes [90,0,120,200] minus self → (90+120+200)/3 = 136.67 → 17.15 Å
+strip.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: 10, clientY: 30 }))
+await new Promise((r) => setTimeout(r, 200))
+const stripReadout = container.querySelector('.pv-pae-side .pv-hoverline')?.textContent ?? ''
+check(`strip hover mean readout (got "${stripReadout}")`, stripReadout === 'A:A2 · 平均 17.15 Å')
+
 // hover readout: stub rect (0,0,100,100), n=4 → 25 px cells. clientX 37.5 →
 // i=1, clientY 62.5 → j=2 (62.5/25 = 2.5) → byte 120 → "A:A2 → B:A1 · 15.06 Å".
+// The pair readout takes priority over the strip mean once the heatmap is hovered.
 const canvas = container.querySelector('canvas.pv-pae-canvas')
 canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 })
 canvas.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: 37.5, clientY: 62.5 }))
@@ -83,6 +96,14 @@ const html2 = container2.innerHTML
 check('pooled title notes scale', html2.includes('每格 2 残基'))
 const canvas2 = container2.querySelector('canvas.pv-pae-canvas')
 check('pooled canvas 2×2 native (upscaled 16×16)', canvas2?.width === 16)
+// pooled strip: row 0 mean excluding self = byte 255 → 32.00 Å, range label
+const strip2 = container2.querySelector('canvas.pv-pae-strip')
+check('pooled strip present', !!strip2 && strip2.height === 16)
+strip2.getBoundingClientRect = () => ({ left: 0, top: 0, width: 28, height: 100 })
+strip2.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: 10, clientY: 20 }))
+await new Promise((r) => setTimeout(r, 200))
+const stripReadout2 = container2.querySelector('.pv-pae-side .pv-hoverline')?.textContent ?? ''
+check(`pooled strip range readout (got "${stripReadout2}")`, stripReadout2 === 'A:A1–A:A2 · 平均 32.00 Å')
 canvas2.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 })
 // cell (1,0): n=2 → 50px cells; clientX 62.5 → i=1, clientY 12.5 → j=0.
 // cell(1) covers residues[2..3] = B:A1–B:A2; byte pooled[2]=64 → 8.03 Å.

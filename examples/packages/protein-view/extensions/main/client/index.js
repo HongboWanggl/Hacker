@@ -2043,7 +2043,9 @@ function PaesModule({ paePath, residues, services, onHover, hover, name = 'struc
   const [pae, setPae] = useState(null) // { n, bytes, scale }
   const [error, setError] = useState(null)
   const [hoverCell, setHoverCell] = useState(null) // { i, j } pooled-matrix indices
+  const [stripRow, setStripRow] = useState(null) // row hovered in the side profile
   const canvasRef = useRef(null)
+  const stripRef = useRef(null)
 
   useEffect(() => {
     setPae(null)
@@ -2089,6 +2091,19 @@ function PaesModule({ paePath, residues, services, onHover, hover, name = 'struc
   const scale = pae?.scale ?? 1
   const cell = n ? Math.max(1, Math.min(8, Math.floor(480 / n))) : 0
   const px = n * cell
+
+  // Per-residue mean PAE (diagonal excluded — that's self-error, always 0).
+  // Long bars flag interface residues / uncertain folds at a glance.
+  const rowMeans = useMemo(() => {
+    if (!pae || !n) return null
+    const m = new Float32Array(n)
+    for (let i = 0; i < n; i++) {
+      let s = 0
+      for (let j = 0; j < n; j++) if (j !== i) s += pae.bytes[i * n + j]
+      m[i] = n > 1 ? s / (n - 1) : 0
+    }
+    return m
+  }, [pae, n])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -2148,6 +2163,46 @@ function PaesModule({ paePath, residues, services, onHover, hover, name = 'struc
     }
   }, [pae, n, px, cell, chainSizes, hover, scale])
 
+  // Side profile: one bar per (pooled) row = that residue's mean PAE against
+  // all partners. Same hover linkage as the heatmap — the hovered row lights up.
+  useEffect(() => {
+    const canvas = stripRef.current
+    if (!canvas || !rowMeans || !n) return
+    const ctx2d = canvas.getContext('2d')
+    if (!ctx2d) return
+    const stripW = canvas.width
+    ctx2d.clearRect(0, 0, stripW, px)
+    for (let i = 0; i < n; i++) {
+      const [r, g, b] = viridisRgb(rowMeans[i] / 255)
+      ctx2d.fillStyle = `rgb(${r},${g},${b})`
+      const w = Math.max(1, (rowMeans[i] / 255) * stripW)
+      ctx2d.fillRect(0, i * cell, w, Math.max(1, cell - (cell > 2 ? 1 : 0)))
+    }
+    if (chainSizes && cell > 1) {
+      ctx2d.strokeStyle = 'rgba(255,255,255,0.65)'
+      ctx2d.lineWidth = 1
+      ctx2d.setLineDash([3, 3])
+      let acc = 0
+      for (let s = 0; s < chainSizes.length - 1; s++) {
+        acc += chainSizes[s]
+        const line = (acc / scale) * cell + 0.5
+        ctx2d.beginPath()
+        ctx2d.moveTo(0, line)
+        ctx2d.lineTo(stripW, line)
+        ctx2d.stroke()
+      }
+      ctx2d.setLineDash([])
+    }
+    if (hover != null && hover >= 0) {
+      const line = Math.floor(hover / scale) * cell
+      if (line < px) {
+        ctx2d.strokeStyle = 'rgba(255,255,255,0.9)'
+        ctx2d.lineWidth = 1
+        ctx2d.strokeRect(0.5, line + 0.5, stripW - 1, Math.max(1, cell - 1))
+      }
+    }
+  }, [rowMeans, n, px, cell, chainSizes, hover, scale])
+
   if (error || !pae) {
     return h(
       'div',
@@ -2169,9 +2224,10 @@ function PaesModule({ paePath, residues, services, onHover, hover, name = 'struc
     const lb = residues && residues[b] ? resLabel(residues, residues[b]) : `${b + 1}`
     return `${la}–${lb}`
   }
-  const readout =
-    hoverCell
-      ? `${cellLabel(hoverCell.i)} → ${cellLabel(hoverCell.j)} · ${(pae.bytes[hoverCell.i * n + hoverCell.j] / 255 * 32).toFixed(2)} Å`
+  const readout = hoverCell
+    ? `${cellLabel(hoverCell.i)} → ${cellLabel(hoverCell.j)} · ${(pae.bytes[hoverCell.i * n + hoverCell.j] / 255 * 32).toFixed(2)} Å`
+    : stripRow != null && rowMeans
+      ? `${cellLabel(stripRow)} · 平均 ${(rowMeans[stripRow] / 255 * 32).toFixed(2)} Å`
       : ''
 
   return h(
@@ -2206,25 +2262,45 @@ function PaesModule({ paePath, residues, services, onHover, hover, name = 'struc
     h(
       'div',
       { className: 'pv-pae-body' },
-      h('canvas', {
-        ref: canvasRef,
-        className: 'pv-pae-canvas',
-        width: px,
-        height: px,
-        style: { width: `${px}px`, height: `${px}px` },
-        onMouseMove: (e) => {
-          const rect = e.currentTarget.getBoundingClientRect()
-          const i = Math.floor((e.clientX - rect.left) / (rect.width / n))
-          const j = Math.floor((e.clientY - rect.top) / (rect.height / n))
-          if (i < 0 || j < 0 || i >= n || j >= n) return
-          setHoverCell({ i, j })
-          // Sync the 3D/curve hover to the row's first residue — cross-view
-          // linkage (pooled cells map back to residue i*scale).
-          const r = i * scale
-          if (residues && residues[r] && onHover) onHover(r)
-        },
-        onMouseLeave: () => setHoverCell(null),
-      }),
+      h(
+        'div',
+        { style: { display: 'flex', gap: '6px', alignItems: 'flex-start' } },
+        h('canvas', {
+          ref: canvasRef,
+          className: 'pv-pae-canvas',
+          width: px,
+          height: px,
+          style: { width: `${px}px`, height: `${px}px` },
+          onMouseMove: (e) => {
+            const rect = e.currentTarget.getBoundingClientRect()
+            const i = Math.floor((e.clientX - rect.left) / (rect.width / n))
+            const j = Math.floor((e.clientY - rect.top) / (rect.height / n))
+            if (i < 0 || j < 0 || i >= n || j >= n) return
+            setHoverCell({ i, j })
+            // Sync the 3D/curve hover to the row's first residue — cross-view
+            // linkage (pooled cells map back to residue i*scale).
+            const r = i * scale
+            if (residues && residues[r] && onHover) onHover(r)
+          },
+          onMouseLeave: () => setHoverCell(null),
+        }),
+        h('canvas', {
+          ref: stripRef,
+          className: 'pv-pae-strip',
+          width: 28,
+          height: px,
+          style: { width: '28px', height: `${px}px` },
+          onMouseMove: (e) => {
+            const rect = e.currentTarget.getBoundingClientRect()
+            const i = Math.floor((e.clientY - rect.top) / (rect.height / n))
+            if (i < 0 || i >= n) return
+            setStripRow(i)
+            const r = i * scale
+            if (residues && residues[r] && onHover) onHover(r)
+          },
+          onMouseLeave: () => setStripRow(null),
+        }),
+      ),
       h(
         'div',
         { className: 'pv-pae-side' },
@@ -2233,8 +2309,8 @@ function PaesModule({ paePath, residues, services, onHover, hover, name = 'struc
           'div',
           { className: 'pv-pae-caption' },
           scale > 1
-            ? `矩阵按 ${scale} 残基/格均值降采样显示；紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界。悬停读出残基范围误差并联动 3D。`
-            : '紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界，块外亮区提示接口或折叠不确定性。悬停读出残基对误差并联动 3D。',
+            ? `矩阵按 ${scale} 残基/格均值降采样显示；紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界。右侧条形为各残基平均误差（不含自身）——长条提示界面或无序区。悬停读出并联动 3D。`
+            : '紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界，块外亮区提示接口或折叠不确定性。右侧条形为各残基平均误差（不含自身）——长条提示界面残基或无序区。悬停读出残基对误差并联动 3D。',
         ),
       ),
     ),
