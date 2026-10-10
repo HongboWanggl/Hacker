@@ -27,16 +27,19 @@ for (let i = 0; i < 72; i++) {
 console.log('batch panel:', JSON.stringify(stats), 'errors:', JSON.stringify(errors.slice(0, 3)))
 
 // expand first row and wait for drill-down 3D + curve.
-// After the turn ends the panel lives inside the turn's collapsible step ("Completed ·
-// took Ns") plus a collapsed copy in the trace — expand every collapsed details first,
-// then click a *visible* row.
+// The panel mounts inside collapsible containers while streaming (collapsed
+// turn-process) and again under the turn's "Completed · took Ns" step afterwards —
+// expand all collapsed details and retry until a *visible* row appears.
 if (stats.batchRows > 0) {
-  for (const d of await page.locator('details:not([open])').all())
-    await d.locator('summary').click().catch(() => {})
-  await page.waitForTimeout(1000)
-  const row = page.locator('.pv-batch-row--ok:visible').first()
-  if (await row.count() === 0) { console.log('FAIL no visible batch row', JSON.stringify(stats)); process.exitCode = 1 }
-  else await row.click()
+  let clicked = false
+  for (let i = 0; i < 20 && !clicked; i++) {
+    for (const d of await page.locator('details:not([open])').all())
+      await d.locator('summary').click().catch(() => {})
+    const row = page.locator('.pv-batch-row--ok:visible').first()
+    if (await row.count() > 0) { await row.click(); clicked = true; break }
+    await page.waitForTimeout(5000)
+  }
+  if (!clicked) { console.log('FAIL no visible batch row after expanding', JSON.stringify(stats)); process.exitCode = 1 }
   let detail = null
   for (let i = 0; i < 24; i++) {
     await page.waitForTimeout(2500)
