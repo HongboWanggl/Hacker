@@ -50,7 +50,19 @@ async function run(services, report) {
   const { container, jump } = await run(services, report)
   const html = container.innerHTML
   ok('jump box mounted', html.includes('pv-jump'))
-  ok('export buttons mounted', container.querySelectorAll('.pv-export').length === 2)
+  ok('export buttons mounted', container.querySelectorAll('.pv-export').length === 3)
+  // 复制序列: stub the clipboard, click, assert the FASTA payload (single chain → one record, 60-col lines).
+  const clipTexts1 = []
+  try { Object.defineProperty(win.navigator, 'clipboard', { value: { writeText: (t) => clipTexts1.push(t) }, configurable: true }) } catch {}
+  const seqBtn = [...container.querySelectorAll('.pv-export')].find((b) => (b.textContent ?? '').includes('复制序列'))
+  ok('copy-sequence button mounted', !!seqBtn)
+  if (seqBtn) {
+    seqBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 120))
+    const fasta = clipTexts1.join('\n')
+    ok('FASTA payload: header + 40 aa', fasta === `>x_40aa\n${'A'.repeat(40)}`)
+    ok('copy-sequence button confirms', (seqBtn.textContent ?? '').includes('已复制'))
+  }
   // sequence strip: one band-colored tile per residue
   ok('sequence strip renders 40 tiles', container.querySelectorAll('.pv-seq-tile').length === 40)
   const tile17 = container.querySelectorAll('.pv-seq-tile')[16]

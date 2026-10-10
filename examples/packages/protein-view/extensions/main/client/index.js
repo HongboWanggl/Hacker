@@ -713,6 +713,7 @@ function BatchRowDetail({ job, services }) {
   const [loadError, setLoadError] = useState(null)
   const [hover, setHover] = useState(null)
   const [selected, setSelected] = useState(null)
+  const [seqCopied, setSeqCopied] = useState(false)
 
   useEffect(() => {
     if (!job.savedTo || !services) return
@@ -760,6 +761,21 @@ function BatchRowDetail({ job, services }) {
             'button',
             { className: 'pv-export', onClick: (e) => export3DPng(e, `${job.accession}.3d.png`, residues, isMultiChain(residues) ? 'chain' : 'plddt') },
             '导出 PNG',
+          ),
+          h(
+            'button',
+            {
+              className: 'pv-export',
+              onClick: () => {
+                try {
+                  void navigator.clipboard?.writeText(fastaOf(residues, job.accession))
+                } catch {}
+                setSeqCopied(true)
+                setTimeout(() => setSeqCopied(false), 1600)
+              },
+              title: '复制 FASTA 序列',
+            },
+            seqCopied ? '已复制 ✓' : '复制序列',
           ),
         ),
         h(Structure3D, {
@@ -1123,6 +1139,25 @@ function SegmentChips({ segments, selected, onSelect }) {
 // Per-residue pLDDT curve. Pure canvas; hover → crosshair + tooltip, click → select.
 // One-click PNG export of a rendered canvas (3D or curve) for slides/papers.
 // Reads the live canvas at device resolution — no backend round-trip.
+// FASTA text for copy-out: one record per chain when the model carries chain
+// ids (suffix _A/_B…), a single record otherwise; 60-char lines per spec.
+function fastaOf(residues, name) {
+  const hasChains = residues.some((r) => r.chain)
+  const byChain = new Map()
+  for (const r of residues) {
+    const k = hasChains ? (r.chain ?? 'A') : ''
+    if (!byChain.has(k)) byChain.set(k, [])
+    byChain.get(k).push((r.aa ?? 'X').slice(0, 1).toUpperCase())
+  }
+  return [...byChain.entries()]
+    .map(([c, aas]) => {
+      const seq = aas.join('')
+      const lines = []
+      for (let i = 0; i < seq.length; i += 60) lines.push(seq.slice(i, i + 60))
+      return `>${name}${c ? `_${c}` : ''}\n${lines.join('\n')}`
+    })
+    .join('\n')
+}
 function downloadCanvas(canvas, name) {
   const a = document.createElement('a')
   a.href = canvas.toDataURL('image/png')
@@ -1894,6 +1929,7 @@ function ProteinToolView({ owner, services }) {
   const [selected, setSelected] = useState(null)
   const [colorMode, setColorMode] = useState('plddt')
   const [autoSpin, setAutoSpin] = useState(true)
+  const [seqCopied, setSeqCopied] = useState(false)
   const [highlightSeg, setHighlightSeg] = useState(null)
 
   useEffect(() => {
@@ -2014,6 +2050,24 @@ function ProteinToolView({ owner, services }) {
                   'button',
                   { className: 'pv-export', onClick: (e) => export3DPng(e, `${pdbName}.3d.png`, residues, colorMode) },
                   '导出 PNG',
+                ),
+                h(
+                  'button',
+                  {
+                    className: 'pv-export',
+                    onClick: () => {
+                      if (!residues) return
+                      try {
+                        void navigator.clipboard?.writeText(fastaOf(residues, pdbName))
+                      } catch {
+                        // Clipboard unavailable — sequence stays visible in the strip.
+                      }
+                      setSeqCopied(true)
+                      setTimeout(() => setSeqCopied(false), 1600)
+                    },
+                    title: '复制 FASTA 序列（多链复合物按链分条）',
+                  },
+                  seqCopied ? '已复制 ✓' : '复制序列',
                 ),
                 h('input', {
                   className: 'pv-jump',
