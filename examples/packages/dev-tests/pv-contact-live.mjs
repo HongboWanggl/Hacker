@@ -1,0 +1,89 @@
+// Verifies the ligand-pocket contact-line draw path executes: ligand atom
+// within 5 Å of a residue → setLineDash([3,3]) + dashed segments beneath atoms.
+import { Window } from '/Users/wanghanbao/agnes-harness/node_modules/.pnpm/happy-dom@20.14.3/node_modules/happy-dom/lib/index.js'
+const win = new Window()
+globalThis.window = win
+globalThis.document = win.document
+Object.defineProperty(globalThis, 'navigator', { value: win.navigator, configurable: true })
+globalThis.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} }
+globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(16), 16)
+globalThis.cancelAnimationFrame = (id) => clearTimeout(id)
+globalThis.devicePixelRatio = 1
+
+// Recording 2d context: log setLineDash + segment endpoints.
+const calls = []
+const anyFn = new Proxy(function () {}, {
+  get: (t, k) => (k === Symbol.toPrimitive ? () => 0 : anyFn),
+  apply: () => anyFn,
+})
+const recording = new Proxy({}, {
+  get(t, k) {
+    if (k === 'canvas') return { width: 300, height: 300 }
+    return (...args) => {
+      if (k === 'setLineDash' || k === 'moveTo' || k === 'lineTo') calls.push([k, ...args])
+      return anyFn
+    }
+  },
+  set() { return true },
+})
+win.HTMLCanvasElement.prototype.getContext = function () { return recording }
+
+const React = (await import('/Users/wanghanbao/agnes-harness/node_modules/.pnpm/react@18.3.1/node_modules/react/index.js')).default
+const { createRoot } = await import('/Users/wanghanbao/agnes-harness/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/client.js')
+
+const mod = await import('/tmp/pv-client-test/index.js')
+const mat = Uint8Array.from([0, 90, 160, 255, 90, 0, 120, 200, 160, 120, 0, 60, 255, 200, 60, 0])
+const services = {
+  call: async (name, input) => {
+    if (name === 'protein.structure') {
+      const residues = []
+      for (const chain of ['A', 'B']) {
+        for (let i = 1; i <= 2; i++) residues.push({ i, chain, aa: 'A', x: i, y: 1, z: 2, b: 80 })
+      }
+      return {
+        n: 4, sequence: 'AAAA', residues,
+        // atom 0 sits 1.5 Å from residue (1,1,2), atom 1 far from all
+        ligandAtoms: [{ el: 'C', x: 2.5, y: 1, z: 2 }, { el: 'O', x: 50, y: 50, z: 50 }],
+        ligandBonds: [[0, 1]],
+      }
+    }
+    if (name === 'protein.pae' && input.path === 'structures/x_pae.npz') {
+      return { n: 4, data: Buffer.from(mat).toString('base64') }
+    }
+    throw new Error('unexpected ' + name)
+  },
+}
+const ctx = { slots: { registrations: [], register(def, comp) { this.registrations.push({ def, comp }) }, spec: () => ({ kind: 'keyed' }), entriesOfSlot() { return this.registrations.map((r) => ({ options: r.def })) }, subscribeDeclaration: () => () => {} }, agnes: { services }, effect: (f) => { const off = f(); return typeof off === 'function' ? off : undefined } }
+mod.apply(ctx)
+const complexReg = ctx.slots.registrations.find((r) => r.def.key === 'predict_complex')
+const report = {
+  predictionId: 'pred_c', savedTo: 'structures/complex_boltz.pdb', chains: 2, hasLigand: true, residues: 4,
+  ptm: 88.1, iptm: 82.5, bindingConfidence: 87.3, verdict: 'high confidence', paePath: 'structures/x_pae.npz',
+}
+const container = win.document.createElement('div')
+win.document.body.appendChild(container)
+createRoot(container).render(React.createElement(complexReg.comp, { owner: { callId: 'c', toolName: 'predict_complex', block: { resultPreview: JSON.stringify(report) } }, services }))
+await new Promise((r) => setTimeout(r, 600))
+
+let failed = 0
+const check = (name, ok) => { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
+const dashCalls = calls.filter((c) => c[0] === 'setLineDash' && c[1].length === 2 && c[1][0] === 3 && c[1][1] === 3)
+check('dashed mode engaged (setLineDash [3,3])', dashCalls.length > 0)
+check('dash reset after contacts', calls.some((c) => c[0] === 'setLineDash' && c[1].length === 0))
+// Walk every [3,3]→[] window (heatmap/strip chain-boundary dashes share the
+// pattern, and all canvases record into one array): the contact-line window is
+// the one with 4 segments — residues (1,1,2)/(2,1,2) × chains A/B all sit
+// within 5 Å of ligand atom 0.
+const windows = []
+for (let i = 0; i < calls.length; i++) {
+  const c = calls[i]
+  if (c[0] === 'setLineDash' && c[1].length === 2 && c[1][0] === 3 && c[1][1] === 3) {
+    let j = i + 1
+    while (j < calls.length && !(calls[j][0] === 'setLineDash' && calls[j][1].length === 0)) j++
+    windows.push(calls.slice(i, j).filter((x) => x[0] === 'lineTo').length)
+    i = j
+  }
+}
+check(`contact segments drawn beneath atoms (windows: ${windows.join(',')})`, windows.includes(4))
+process.exit(failed ? 1 : 0)
+console.log('CONTACT LINE TESTS DONE')

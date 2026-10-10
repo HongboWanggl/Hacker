@@ -1805,11 +1805,23 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
     }
     // Ligand (HETATM atoms from the service): same centroid/scale as the protein.
     let ligandCentered = null
+    let ligandContacts = null
     if (ligand?.atoms?.length) {
       ligandCentered = ligand.atoms.map((a) => [a.x - c[0], a.y - c[1], a.z - c[2]])
       for (const v of ligandCentered) maxR = Math.max(maxR, Math.hypot(...v))
+      // Pocket contacts: residues whose Cα sits within 5 Å of any ligand atom
+      // (deduped to the closest atom per residue). Drawn as faint dashed lines
+      // so the binding pocket reads without hovering.
+      const best = new Map()
+      ligandCentered.forEach((la, li) => {
+        pts.forEach((p, k) => {
+          const d = Math.hypot(la[0] - p[0], la[1] - p[1], la[2] - p[2])
+          if (d < 5 && (!best.has(k) || d < best.get(k)[2])) best.set(k, [li, k, d])
+        })
+      })
+      ligandContacts = [...best.values()].map(([li, k]) => [li, k])
     }
-    return { centered, bonds, radius: maxR || 1, ghostCentered, ghostBonds, ligandCentered, chainIdx }
+    return { centered, bonds, radius: maxR || 1, ghostCentered, ghostBonds, ligandCentered, ligandContacts, chainIdx }
   }, [residues, ghost, ligand])
   // NOTE: `ligand` here is the normalized { n, atoms, bonds } the parent builds
   // from the service's flat ligandAtoms/ligandBonds arrays.
@@ -1913,6 +1925,25 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
           items.push({ kind: 'ligb', a, b, z: (ligProjected[a].z + ligProjected[b].z) / 2 })
         }
         ligProjected.forEach((p, k) => items.push({ kind: 'liga', k, z: p.z }))
+      }
+      // Pocket contact lines: faint dashed ties from ligand atoms to nearby
+      // Cαs, drawn beneath the atoms so the binding pocket reads at a glance
+      // without cluttering the pose itself.
+      if (ligProjected && geo.ligandContacts?.length) {
+        ctx2d.setLineDash([3, 3])
+        ctx2d.lineWidth = 0.8
+        for (const [li, k] of geo.ligandContacts) {
+          if (isHidden(k)) continue
+          const p1 = ligProjected[li]
+          const p2 = projected[k]
+          const d = depth01((p1.z + p2.z) / 2)
+          ctx2d.strokeStyle = `rgba(255,255,255,${0.3 * (1 - 0.5 * d)})`
+          ctx2d.beginPath()
+          ctx2d.moveTo(p1.x, p1.y)
+          ctx2d.lineTo(p2.x, p2.y)
+          ctx2d.stroke()
+        }
+        ctx2d.setLineDash([])
       }
       items.sort((m, n2) => m.z - n2.z)
 
