@@ -1317,7 +1317,7 @@ function exportCurvePng(e, name, residues) {
 
 // PAE heatmap export: title + heatmap + legend composed on white, matching
 // the other panel exports (paper/group-meeting ready).
-function exportPaePng(e, name, n, bytes, chainSizes, scale = 1) {
+function exportPaePng(e, name, n, bytes, chainSizes, scale = 1, chainPairs = null) {
   const mod = e.currentTarget.closest('.pv-pae')
   const canvas = mod?.querySelector('canvas.pv-pae-canvas')
   if (!canvas || typeof canvas.toDataURL !== 'function') return
@@ -1326,12 +1326,13 @@ function exportPaePng(e, name, n, bytes, chainSizes, scale = 1) {
     const pad = 12 * s
     const titleH = 22 * s
     const legendH = 18 * s
+    const chipsH = chainPairs?.length ? 24 * s : 0
     const noteH = 16 * s
     const stripW = 28 * s
     const stripX = pad + canvas.width + 6 * s
     const c = document.createElement('canvas')
     c.width = Math.max(stripX + stripW + pad, pad * 2 + 26 * s + 160 * s + 260 * s)
-    c.height = canvas.height + pad * 2 + titleH + legendH + noteH
+    c.height = canvas.height + pad * 2 + titleH + legendH + chipsH + noteH
     const g = c.getContext('2d')
     if (!g) return
     g.fillStyle = '#ffffff'
@@ -1388,7 +1389,37 @@ function exportPaePng(e, name, n, bytes, chainSizes, scale = 1) {
     if (chainSizes?.length > 1) {
       g.fillText(`虚线为链边界（${chainSizes.join(' / ')} 残基）`, barX + barW + 48 * s, barY + barH / 2)
     }
-    g.fillText('右侧条形：各残基平均误差（不含自身）——长条提示界面残基或无序区', pad, barY + barH + noteH / 2 + 2 * s)
+    // chain-pair mean chips, same pills the live panel shows — the export
+    // stays self-contained for papers/minutes
+    const pillH = 16 * s
+    const pillY = barY + barH / 2 + legendH / 2
+    if (chainPairs?.length) {
+      g.font = `600 ${10 * s}px system-ui, sans-serif`
+      let cx = pad
+      for (const p of chainPairs) {
+        const text = `${p.a}–${p.b} ${p.meanA.toFixed(2)} Å`
+        const tw = g.measureText(text).width
+        const pw = tw + 14 * s
+        const bg = viridisRgb(Math.min(1, p.meanA / 32))
+        g.fillStyle = `rgb(${bg[0]},${bg[1]},${bg[2]})`
+        const r = pillH / 2
+        g.beginPath()
+        g.moveTo(cx + r, pillY)
+        g.arcTo(cx + pw, pillY, cx + pw, pillY + pillH, r)
+        g.arcTo(cx + pw, pillY + pillH, cx, pillY + pillH, r)
+        g.arcTo(cx, pillY + pillH, cx, pillY, r)
+        g.arcTo(cx, pillY, cx + pw, pillY, r)
+        g.closePath()
+        g.fill()
+        g.fillStyle = '#ffffff'
+        g.fillText(text, cx + 7 * s, pillY + pillH / 2 + 0.5 * s)
+        cx += pw + 6 * s
+      }
+    }
+    const noteY = chainPairs?.length ? pillY + pillH + 6 * s + noteH / 2 : barY + barH + noteH / 2 + 2 * s
+    g.fillStyle = '#6b7280'
+    g.font = `${10 * s}px system-ui, sans-serif`
+    g.fillText('右侧条形：各残基平均误差（不含自身）——长条提示界面残基或无序区', pad, noteY)
     downloadCanvas(c, name)
   } catch {}
 }
@@ -2521,7 +2552,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
         ),
         h(
           'button',
-          { className: 'pv-export', onClick: (e) => exportPaePng(e, `${name}.pae.png`, n, pae.bytes, chainSizes, scale) },
+          { className: 'pv-export', onClick: (e) => exportPaePng(e, `${name}.pae.png`, n, pae.bytes, chainSizes, scale, chainPairs) },
           '导出 PNG',
         ),
         h(
