@@ -59,5 +59,46 @@ const mkSvcCtx = (pdb: string) => ({ fs: { read: async () => Buffer.from(pdb) },
   ok('dup within chain deduped, bad coords skipped', out.n === 2 && out.residues[1].b === 84)
 }
 
+// --- 4. ligand: HETATM parsed with elements + distance bonds, waters skipped
+{
+  const pdb = [
+    'ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 85.00           C',
+    'ATOM      2  CA  GLY A   2       3.800   0.000   0.000  1.00 84.00           C',
+    // aspirin-ish: two bonded carbons, an O 1.4 Å away, a water, a far C
+    'HETATM    3  C1  LIG B   1      10.000  10.000  10.000  1.00 60.00           C',
+    'HETATM    4  C2  LIG B   1      11.300  10.000  10.000  1.00 60.00           C',
+    'HETATM    5  O1  LIG B   1      11.900  10.900  10.000  1.00 57.00           O',
+    'HETATM    6  O2  HOH B   2      11.000  11.000  11.000  1.00 30.00           O',
+    'HETATM    7  C9  LIG B   1      99.000  99.000  99.000  1.00 60.00           C',
+  ].join('\n')
+  const out = await svc.handler({ path: 'structures/lig.pdb' }, mkSvcCtx(pdb))
+  ok('ligand parsed', out.ligandAtoms?.length === 4)
+  ok('water excluded', out.ligandAtoms.every((a: any) => !(a.x === 11 && a.y === 11 && a.z === 11)))
+  ok('elements from column 77-78', out.ligandAtoms[0].el === 'C' && out.ligandAtoms[2].el === 'O')
+  ok('coords rounded', out.ligandAtoms[1].x === 11.3)
+  const hasBond = out.ligandBonds.some((b: any) => b[0] === 0 && b[1] === 1)
+  const oBond = out.ligandBonds.some((b: any) => b[0] === 1 && b[1] === 2)
+  ok('distance bonds inferred (C-C and C-O)', hasBond && oBond)
+  ok('far atom unbonded', !out.ligandBonds.some((b: any) => b[1] === 3 || b[0] === 3))
+  ok('protein residues unaffected', out.n === 2)
+  ok('no ligand key without HETATM', !((await svc.handler({ path: 'structures/x.pdb' }, mkSvcCtx(pdb.split('HETATM')[0])))).ligandAtoms)
+}
+
+// --- 5. ligand atom cap at 400 (strict PDB columns: name 13-16, resName 18-20,
+// x/y/z 31-54, element 77-78 — long names must not shift the coords)
+{
+  const lines: string[] = ['ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 85.00           C']
+  for (let k = 0; k < 405; k++) {
+    lines.push(
+      'HETATM ' + String(k + 2).padStart(5) + ('C' + k).padStart(4) + ' LIG B' +
+      String(1).padStart(4) + '    ' +
+      ((k * 3).toFixed(3)).padStart(8) + (0).toFixed(3).padStart(8) + (0).toFixed(3).padStart(8) +
+      '  1.00 60.00          C  ',
+    )
+  }
+  const out = await svc.handler({ path: 'structures/cap.pdb' }, mkSvcCtx(lines.join('\n')))
+  ok('ligand capped at 400 atoms', out.ligandAtoms?.length === 400)
+}
+
 console.log('STRUCTURE SERVICE TESTS DONE')
 process.exit(process.exitCode ?? 0)

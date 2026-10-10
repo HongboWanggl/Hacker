@@ -1740,7 +1740,12 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
 // 3D backbone viewer. Canvas 2D, painter's algorithm, orthographic + depth fog.
 // `ghostColorOf(aIdx, bIdx)` lets the compare card recolor ghost segments
 // (e.g. by post-superposition Cα distance); null falls back to the gray ghost.
-function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, autoSpin, interfaceErr, ghost, ghostColorOf, hintText, hiddenChains }) {
+// Element colors for ligand ball rendering (RGB triples, muted for the dark
+// backdrop; unknown elements fall back to gray).
+const EL_COLORS = { C: [138, 147, 158], N: [88, 132, 220], O: [214, 98, 98], S: [219, 187, 70], P: [226, 148, 70], F: [140, 200, 170], CL: [140, 200, 150], BR: [160, 110, 80] }
+const ligandColor = (el) => EL_COLORS[el] ?? [154, 165, 181]
+
+function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, autoSpin, interfaceErr, ligand, showLigand = true, ghost, ghostColorOf, hintText, hiddenChains }) {
   // Chain visibility toggle: hidden residues keep their indices (curve/strip
   // cross-linking stays aligned) but are skipped in drawing and hit-testing.
   const isHidden = useCallback((k) => !!(hiddenChains?.size && hiddenChains.has(residues?.[k]?.chain)), [hiddenChains, residues])
@@ -1798,8 +1803,16 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       }
       for (const v of ghostCentered) maxR = Math.max(maxR, Math.hypot(...v))
     }
-    return { centered, bonds, radius: maxR || 1, ghostCentered, ghostBonds, chainIdx }
-  }, [residues, ghost])
+    // Ligand (HETATM atoms from the service): same centroid/scale as the protein.
+    let ligandCentered = null
+    if (ligand?.atoms?.length) {
+      ligandCentered = ligand.atoms.map((a) => [a.x - c[0], a.y - c[1], a.z - c[2]])
+      for (const v of ligandCentered) maxR = Math.max(maxR, Math.hypot(...v))
+    }
+    return { centered, bonds, radius: maxR || 1, ghostCentered, ghostBonds, ligandCentered, chainIdx }
+  }, [residues, ghost, ligand])
+  // NOTE: `ligand` here is the normalized { n, atoms, bonds } the parent builds
+  // from the service's flat ligandAtoms/ligandBonds arrays.
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -1850,6 +1863,13 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
         const z2 = y * sp + z1 * cp
         return { x: cx0 + x1 * scale, y: cy0 + y1 * scale, z: z2 }
       })
+      const ligProjected = showLigand ? geo.ligandCentered?.map(([x, y, z]) => {
+        const x1 = x * cy + z * sy
+        const z1 = -x * sy + z * cy
+        const y1 = y * cp - z1 * sp
+        const z2 = y * sp + z1 * cp
+        return { x: cx0 + x1 * scale, y: cy0 + y1 * scale, z: z2 }
+      }) : null
 
       const zmin = Math.min(...projected.map((p) => p.z))
       const zmax = Math.max(...projected.map((p) => p.z))
@@ -1885,6 +1905,15 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
           items.push({ kind: 'ghost', a, b, z: (ghostProjected[a].z + ghostProjected[b].z) / 2 })
         }
       }
+      // Ligand bonds/atoms join the same depth sort so the pose reads inside
+      // the pocket instead of painted over the protein.
+      if (ligProjected && ligand) {
+        for (const [a, b] of ligand.bonds ?? []) {
+          if (a >= ligProjected.length || b >= ligProjected.length) continue
+          items.push({ kind: 'ligb', a, b, z: (ligProjected[a].z + ligProjected[b].z) / 2 })
+        }
+        ligProjected.forEach((p, k) => items.push({ kind: 'liga', k, z: p.z }))
+      }
       items.sort((m, n2) => m.z - n2.z)
 
       for (const it of items) {
@@ -1902,6 +1931,29 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
           ctx2d.beginPath()
           ctx2d.moveTo(p1.x, p1.y)
           ctx2d.lineTo(p2.x, p2.y)
+          ctx2d.stroke()
+        } else if (it.kind === 'ligb') {
+          const p1 = ligProjected[it.a]
+          const p2 = ligProjected[it.b]
+          const d = depth01(it.z)
+          ctx2d.strokeStyle = `rgba(196,204,218,${0.6 * (1 - 0.4 * d)})`
+          ctx2d.lineWidth = 0.8 + 0.8 * (1 - d)
+          ctx2d.lineCap = 'round'
+          ctx2d.beginPath()
+          ctx2d.moveTo(p1.x, p1.y)
+          ctx2d.lineTo(p2.x, p2.y)
+          ctx2d.stroke()
+        } else if (it.kind === 'liga') {
+          const p = ligProjected[it.k]
+          const d = depth01(it.z)
+          const col = ligandColor(ligand.atoms[it.k]?.el)
+          ctx2d.fillStyle = fog(col, d)
+          ctx2d.beginPath()
+          ctx2d.arc(p.x, p.y, 2.2 + 1.8 * (1 - d), 0, Math.PI * 2)
+          ctx2d.fill()
+          // faint rim keeps light atoms (C) readable against the backdrop
+          ctx2d.strokeStyle = `rgba(255,255,255,${0.25 * (1 - d)})`
+          ctx2d.lineWidth = 0.6
           ctx2d.stroke()
         } else if (it.kind === 'bond') {
           const p1 = projected[it.a]
@@ -1953,7 +2005,7 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       cancelAnimationFrame(frame.current)
       clearTimeout(wake.current)
     }
-  }, [geo, size, residues, hover, selected, colorMode, autoSpin, interfaceErr, ghost, ghostColorOf, isHidden])
+  }, [geo, size, residues, hover, selected, colorMode, autoSpin, interfaceErr, ligand, showLigand, ghost, ghostColorOf, isHidden])
 
   const pick = useCallback(
     (ev) => {
@@ -2500,6 +2552,13 @@ function ProteinToolView({ owner, services }) {
   // Per-residue mean inter-chain PAE (Å), reported up by PaesModule once the
   // matrix loads; enables the "按界面误差着色" 3D mode on complex panels.
   const [interfaceErr, setInterfaceErr] = useState(null)
+  const [showLigand, setShowLigand] = useState(true)
+  // The service returns flat ligandAtoms/ligandBonds (nested object schemas are
+  // rejected by the protocol); normalize to the { n, atoms, bonds } Structure3D expects.
+  const ligandInfo = useMemo(
+    () => (structure?.ligandAtoms?.length ? { n: structure.ligandAtoms.length, atoms: structure.ligandAtoms, bonds: structure.ligandBonds ?? [] } : null),
+    [structure],
+  )
 
   useEffect(() => {
     if (!pdbPath || !services) return
@@ -2634,6 +2693,18 @@ function ProteinToolView({ owner, services }) {
                   }),
                   '自动旋转',
                 ),
+                ligandInfo
+                  ? h(
+                      'label',
+                      { className: 'pv-toggle', title: '显示/隐藏配体（HETATM 原子，按元素着色）' },
+                      h('input', {
+                        type: 'checkbox',
+                        checked: showLigand,
+                        onChange: (e) => setShowLigand(e.target.checked),
+                      }),
+                      `配体 (${ligandInfo.n})`,
+                    )
+                  : null,
                 h(
                   'button',
                   { className: 'pv-export', onClick: (e) => export3DPng(e, `${pdbName}.3d.png`, residues, colorMode) },
@@ -2704,6 +2775,8 @@ function ProteinToolView({ owner, services }) {
               colorMode,
               autoSpin,
               interfaceErr,
+              ligand: ligandInfo,
+              showLigand,
               hiddenChains,
             }),
             colorMode === 'chain' ? h(ChainLegend, { residues, hidden: hiddenChains, onToggle: toggleChain }) : null,

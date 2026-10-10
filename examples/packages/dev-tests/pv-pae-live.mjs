@@ -26,7 +26,11 @@ const services = {
       for (const chain of ['A', 'B']) {
         for (let i = 1; i <= 2; i++) residues.push({ i, chain, aa: 'A', x: i, y: 1, z: 2, b: 80 })
       }
-      return { n: 4, sequence: 'AAAA', residues }
+      return {
+        n: 4, sequence: 'AAAA', residues,
+        ligandAtoms: [{ el: 'C', x: 9, y: 9, z: 9 }, { el: 'O', x: 10.1, y: 9, z: 9 }],
+        ligandBonds: [[0, 1]],
+      }
     }
     if (name === 'protein.pae') {
       if (input.path === 'structures/pooled_pae.npz') {
@@ -68,6 +72,9 @@ check(`chain-pair mean chip (got "${pairChip}")`, pairChip === 'A–B 23.06 Å')
 // PaesModule lifts per-residue inter-chain means to the parent → the 3D
 // color-by select gains the interface option on complex panels
 check('interface color mode offered', !!container.querySelector('select.pv-select option[value=interface]'))
+// ligand toggle appears when the structure carries HETATM atoms
+const ligLabel = [...container.querySelectorAll('.pv-toggle')].map((l) => l.textContent).find((t) => t.includes('配体')) ?? ''
+check(`ligand toggle counts atoms (got "${ligLabel}")`, ligLabel === '配体 (2)')
 
 // side profile strip: one bar per row = mean PAE against other residues.
 // Tested before the heatmap hover (no mouseleave in happy-dom → hoverCell
