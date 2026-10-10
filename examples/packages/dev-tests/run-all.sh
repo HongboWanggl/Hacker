@@ -41,6 +41,7 @@ if [ "${1:-}" = "--live" ]; then
   echo "=== live E2E (needs daemon + web on 4177) ==="
   run pv-e2e-verify2.mjs        # historical-session regression
   live pv-jump-e2e.mjs          # fresh predict + residue jump
+  live pv-agnes-e2e.mjs         # full flow on agnes-ai route (unaffected by Ark 429)
   live pv-drill-live.mjs        # batch_predict + row drill-down
   live pv-pairwise-live.mjs     # compare_structures cross-check
   live pv-hover-e2e3.mjs        # compare overlay hover readout
