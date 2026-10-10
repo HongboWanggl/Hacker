@@ -2405,6 +2405,23 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       )
     })(),
     h('div', { className: 'pv-3d-hint' }, hintText ?? '拖拽旋转 · 滚轮缩放 · 双击复位'),
+    // Maximized mode hides the siblings below the canvas — re-render the
+    // active color legend (plus the ligand key) inside the overlay.
+    maxed
+      ? h(
+          'div',
+          { className: 'pv-3d-maxlegend' },
+          colorMode === 'chain' && isMultiChain(residues) ? h(ChainLegend, { residues }) : null,
+          colorMode === 'interface' && interfaceErr
+            ? h(InterfaceLegend)
+            : colorMode === 'rainbow'
+              ? h(RainbowLegend)
+              : colorMode === 'plddt'
+                ? h(PlddtLegend)
+                : null,
+          ligand && showLigand ? h(LigandLegend) : null,
+        )
+      : null,
     h(
       'button',
       {

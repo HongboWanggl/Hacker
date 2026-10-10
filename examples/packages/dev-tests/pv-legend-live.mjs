@@ -106,9 +106,14 @@ if (maxBtn && wrap) {
   await new Promise((r) => setTimeout(r, 300))
   maxChecks.push(['wrap gains maximized class', wrap.className.includes('pv-3d-wrap--max')])
   maxChecks.push(['button flips to exit label', (maxBtn.textContent ?? '').includes('退出全屏')])
+  const maxLegend = container.querySelector('.pv-3d-maxlegend')
+  // colorMode was left on rainbow by the earlier test — the overlay must
+  // mirror the active lens (N→C gradient bar), not the default bands.
+  maxChecks.push(['maximized legend overlay mirrors active coloring', !!maxLegend && (maxLegend.querySelectorAll('.pv-pae-legendbar') ?? []).length >= 1])
   win.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
   await new Promise((r) => setTimeout(r, 300))
   maxChecks.push(['Escape exits maximized mode', !wrap.className.includes('pv-3d-wrap--max')])
+  maxChecks.push(['legend overlay removed on exit', !container.querySelector('.pv-3d-maxlegend')])
 }
 for (const [name, ok] of maxChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 process.exit(failed ? 1 : 0)
