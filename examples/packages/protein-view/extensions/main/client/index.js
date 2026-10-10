@@ -413,6 +413,24 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
             { className: 'pv-section-title' },
             `3D 叠合 · ${pw ? pw[0] : '预测'} ${pred.n} aa${ghostResidues ? ` + ${pw ? pw[1] : '参考'} ${ghostResidues.length} aa` : ''}`,
           ),
+          // Export composites the 3D overlay with the current strip mode below —
+          // one figure carries the superposition and the divergence heat map.
+          h(
+            'button',
+            {
+              className: 'pv-export',
+              onClick: (e) =>
+                exportComparePng(
+                  e,
+                  `${(predPath ?? 'compare').split('/').pop().replace(/\.pdb$/i, '')}.${stripMode === 'dist' ? 'cadist' : 'plddt'}.png`,
+                  pred.residues,
+                  stripMode,
+                  distMap,
+                  gmap,
+                ),
+            },
+            '导出 PNG',
+          ),
         ),
       h(Structure3D, {
         residues: pred.residues,
@@ -1115,6 +1133,57 @@ function exportCurvePng(e, name, residues) {
     residues.forEach((r, idx) => {
       g.fillStyle = bandColor(r.b)
       g.fillRect((idx % perRow) * pitch + 6 * s, canvas.height + top + Math.floor(idx / perRow) * pitch, pitch - 1, pitch - 1)
+    })
+    downloadCanvas(c, name)
+  } catch {}
+}
+
+// Compare PNG export composites the 3D overlay with the divergence strip below,
+// drawn on a backdrop band that continues the 3D gradient. `mode` picks the
+// strip coloring (ΔpLDDT or Cα distance); unmatched residues stay gray.
+function exportComparePng(e, name, residues, mode, distMap, gmap) {
+  const col = e.currentTarget.closest('.pv-3d-col')
+  const canvas = col?.querySelector('canvas.pv-3d')
+  if (!canvas || typeof canvas.toDataURL !== 'function' || !residues?.length) return
+  try {
+    const s = canvas.width / (canvas.clientWidth || canvas.width) || 1
+    const pitch = Math.max(8, Math.round(14 * s))
+    const perRow = Math.max(1, Math.floor((canvas.width - 12 * s) / pitch))
+    const rows = Math.ceil(residues.length / perRow)
+    const labelH = Math.round(20 * s)
+    const top = 8 * s
+    const c = document.createElement('canvas')
+    c.width = canvas.width
+    c.height = Math.round(canvas.height + top + labelH + rows * pitch)
+    const g = c.getContext('2d')
+    g.drawImage(canvas, 0, 0)
+    // band continues the 3D backdrop gradient (#0e1420 → #141c2b)
+    const bg = g.createLinearGradient(0, 0, 0, c.height)
+    bg.addColorStop(0, '#0e1420')
+    bg.addColorStop(1, '#141c2b')
+    g.fillStyle = bg
+    g.fillRect(0, canvas.height, c.width, c.height - canvas.height)
+    g.font = `${11 * s}px ui-sans-serif, system-ui`
+    g.textBaseline = 'middle'
+    g.fillStyle = 'rgba(255,255,255,0.85)'
+    g.fillText(
+      mode === 'dist'
+        ? 'Cα 偏差（叠合后） · teal ≤0.5 Å → 红 ≥5 Å'
+        : '|ΔpLDDT| 置信度差异 · 0 → ≥30',
+      6 * s,
+      canvas.height + top + labelH / 2,
+    )
+    residues.forEach((r, idx) => {
+      const d = distMap?.get(r.i)
+      g.fillStyle =
+        mode === 'dist'
+          ? d != null
+            ? distColor(d)
+            : '#b6b6b6'
+          : gmap.has(r.i)
+            ? deltaColor(r.b - gmap.get(r.i))
+            : '#b6b6b6'
+      g.fillRect((idx % perRow) * pitch + 6 * s, canvas.height + top + labelH + Math.floor(idx / perRow) * pitch, pitch - 1, pitch - 1)
     })
     downloadCanvas(c, name)
   } catch {}
