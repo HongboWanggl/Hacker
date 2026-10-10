@@ -341,6 +341,16 @@
   color: #8d99af;
   background: rgb(255 255 255 / 4%);
 }
+/* Sortable header cells (search card): plain buttons reset to the grid text */
+.pv-search-head-cell {
+  all: unset;
+  cursor: pointer;
+  font-size: 11px;
+  color: #8d99af;
+  white-space: nowrap;
+}
+.pv-search-head-cell:hover { color: #c9d4ee; }
+.pv-search-head-cell--sorted { color: #8fb0ff; font-weight: 600; }
 .pv-search-row {
   width: 100%;
   border: none;

@@ -35,6 +35,7 @@ run pv-render-test.mjs
 echo "=== panel render: client-side (createRoot, happy-dom) ==="
 run pv-render-complex-live.mjs
 run pv-render-compare3d-live.mjs
+run pv-render-search-sort.mjs
 run pv-jump-live.mjs
 
 if [ "${1:-}" = "--live" ]; then

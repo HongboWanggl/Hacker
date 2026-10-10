@@ -716,7 +716,24 @@ function BatchRowDetail({ job, services }) {
 // accession so the researcher can paste it into the next prompt.
 function SearchCard({ report }) {
   const [copied, setCopied] = useState(null)
+  // Column sort: null = UniProt relevance order; clicking a header toggles
+  // asc → desc → back to relevance.
+  const [sort, setSort] = useState(null)
   const hits = Array.isArray(report.hits) ? report.hits : []
+  const sorted = useMemo(() => {
+    if (!sort) return hits
+    const dir = sort.dir === 'asc' ? 1 : -1
+    const key = sort.key
+    return [...hits].sort((a, b) => {
+      if (key === 'length') return ((a.length ?? 0) - (b.length ?? 0)) * dir
+      const av = String(a[key] ?? '')
+      const bv = String(b[key] ?? '')
+      return av.localeCompare(bv, 'zh-Hans-CN') * dir
+    })
+  }, [hits, sort])
+  const toggleSort = (key) =>
+    setSort((s) => (s?.key !== key ? { key, dir: 'asc' } : s.dir === 'asc' ? { key, dir: 'desc' } : null))
+  const arrow = (key) => (sort?.key !== key ? '' : sort.dir === 'asc' ? ' ▲' : ' ▼')
   const copy = (acc) => {
     try {
       void navigator.clipboard?.writeText(acc)
@@ -726,6 +743,16 @@ function SearchCard({ report }) {
     setCopied(acc)
     setTimeout(() => setCopied((c) => (c === acc ? null : c)), 1500)
   }
+  const headCell = (key, label, extra = '') =>
+    h(
+      'button',
+      {
+        className: 'pv-search-head-cell' + (sort?.key === key ? ' pv-search-head-cell--sorted' : '') + (extra ? ` ${extra}` : ''),
+        title: '点击排序',
+        onClick: () => toggleSort(key),
+      },
+      label + arrow(key),
+    )
   return h(
     'div',
     { className: 'pv-root' },
@@ -745,12 +772,12 @@ function SearchCard({ report }) {
           h(
             'div',
             { className: 'pv-search-head' },
-            h('span', null, 'Accession'),
-            h('span', null, '蛋白'),
-            h('span', null, '物种'),
-            h('span', { className: 'pv-search-len' }, '长度'),
+            headCell('accession', 'Accession'),
+            headCell('proteinName', '蛋白'),
+            headCell('organism', '物种'),
+            headCell('length', '长度', 'pv-search-len'),
           ),
-          ...hits.map((hit, k) =>
+          ...sorted.map((hit, k) =>
             h(
               'button',
               {
@@ -767,7 +794,7 @@ function SearchCard({ report }) {
           ),
         )
       : h('div', { className: 'pv-fallback' }, '没有匹配的蛋白，换个关键词再试。'),
-    h('div', { className: 'pv-search-hint' }, '点击行复制 accession；回复「预测 <accession>」继续，或用 batch_predict 一次预测多个。'),
+    h('div', { className: 'pv-search-hint' }, '点击行复制 accession，点击表头排序；回复「预测 <accession>」继续，或用 batch_predict 一次预测多个。'),
   )
 }
 
