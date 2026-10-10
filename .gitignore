@@ -35,3 +35,22 @@ learn/
 outputs/
 spikes/
 docs/task-records/
+
+# protein-predictor runtime outputs: live runs and tool tests drop new confidence/PDB
+# files here every round. Curated examples are re-included explicitly; everything else
+# stays untracked so regression runs don't dirty the tree.
+examples/packages/protein-predictor/reports/*
+examples/packages/protein-predictor/structures/*
+!examples/packages/protein-predictor/reports/P04637.vs-alphafold.json
+!examples/packages/protein-predictor/reports/P61626_lysozyme_C_148aa.confidence.json
+!examples/packages/protein-predictor/reports/human_lysozyme_P61626_148aa.confidence.json
+!examples/packages/protein-predictor/reports/p53_human_P04637_393aa.confidence.json
+!examples/packages/protein-predictor/reports/p53_human_P04637_393aa.vs-P04637_alphafold_ref.compare.json
+!examples/packages/protein-predictor/structures/LYSC_HUMAN_P61626_148aa.pdb
+!examples/packages/protein-predictor/structures/P04637_393aa.pdb
+!examples/packages/protein-predictor/structures/P04637_alphafold_ref.pdb
+!examples/packages/protein-predictor/structures/P0A7B8_176aa.pdb
+!examples/packages/protein-predictor/structures/P61626_148aa.pdb
+!examples/packages/protein-predictor/structures/P61626_lysozyme_C_148aa.pdb
+!examples/packages/protein-predictor/structures/human_lysozyme_P61626_148aa.pdb
+!examples/packages/protein-predictor/structures/p53_human_P04637_393aa.pdb
