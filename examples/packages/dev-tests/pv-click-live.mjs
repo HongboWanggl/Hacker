@@ -1,7 +1,7 @@
 // Live E2E: 3D click-to-select. A click (pointerdown→up, <5px movement) on the
 // 3D canvas selects the picked residue — hoverline gains the 已选 readout and
 // the selection survives hover-elsewhere (hover keeps priority in the readout).
-// Uses the historical compare_structures session (Compare3D overlay).
+// Uses the historical compare_structures session (now titled 比较两个PDB文件结构).
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
 const exe = '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
 const browser = await chromium.launch({ executablePath: exe, headless: true })
@@ -12,7 +12,7 @@ await page.goto('http://127.0.0.1:4177/', { waitUntil: 'domcontentloaded', timeo
 await page.waitForTimeout(5000)
 const clicked = await page.evaluate(() => {
   const spans = [...document.querySelectorAll('.session-title')]
-  const el = spans.find((s) => s.textContent.includes('compare_structures'))
+  const el = spans.find((s) => s.textContent.includes('比较两个PDB文件结构'))
   if (!el) return 'not found'
   el.closest('li, [role=button], button, div')?.click()
   el.click()

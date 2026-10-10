@@ -1405,13 +1405,22 @@ function exportPaeCsv(name, n, bytes, residues, scale = 1) {
 }
 
 // Single-model per-residue CSV: residue, aa, pLDDT (chain-prefixed keys on
-// complexes) — the raw numbers behind the confidence curve.
-function exportResiduesCsv(name, residues) {
+// complexes) — the raw numbers behind the confidence curve. On complex panels
+// with PAE an `interface_pae` column appends each residue's mean PAE toward
+// the other chains (Å) so interface analysis doesn't need the npz.
+function exportResiduesCsv(name, residues, interfaceErr) {
   try {
-    const rows = residues.map((r) =>
-      [r.chain ? `${r.chain}:${r.i}` : r.i, r.aa ?? '', r.b != null ? r.b.toFixed(1) : ''].join(','),
+    const withPae = !!interfaceErr
+    const rows = residues.map((r, k) =>
+      [
+        r.chain ? `${r.chain}:${r.i}` : r.i,
+        r.aa ?? '',
+        r.b != null ? r.b.toFixed(1) : '',
+        ...(withPae ? [interfaceErr[k] != null ? interfaceErr[k].toFixed(2) : ''] : []),
+      ].join(','),
     )
-    const url = URL.createObjectURL(new Blob(['residue,aa,plddt\n' + rows.join('\n')], { type: 'text/csv' }))
+    const header = withPae ? 'residue,aa,plddt,interface_pae\n' : 'residue,aa,plddt\n'
+    const url = URL.createObjectURL(new Blob([header + rows.join('\n')], { type: 'text/csv' }))
     const a = document.createElement('a')
     a.href = url
     a.download = name
@@ -2883,7 +2892,7 @@ function ProteinToolView({ owner, services }) {
                 ),
                 h(
                   'button',
-                  { className: 'pv-export', onClick: () => exportResiduesCsv(`${pdbName}.plddt.csv`, residues) },
+                  { className: 'pv-export', onClick: () => exportResiduesCsv(`${pdbName}.plddt.csv`, residues, interfaceErr) },
                   '导出 CSV',
                 ),
               ),

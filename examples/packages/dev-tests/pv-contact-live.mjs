@@ -95,5 +95,17 @@ strip.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: 10
 await new Promise((r) => setTimeout(r, 200))
 const readout = [...container.querySelectorAll('.pv-hoverline')].map((e) => e.textContent).find((t) => t.includes('pLDDT')) ?? ''
 check(`pocket readout shows ligand distance (got "${readout}")`, readout === 'A:A2 · pLDDT 80.0 · 距配体 0.5 Å')
+
+// curve CSV gains the interface_pae column when PAE is present: stub
+// createObjectURL, click 导出 CSV, inspect the blob text.
+let csvBlob = null
+URL.createObjectURL = (b) => ((csvBlob = b), 'blob:mock')
+const csvBtn = [...container.querySelectorAll('button.pv-export')].find((b) => b.textContent === '导出 CSV')
+csvBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+await new Promise((r) => setTimeout(r, 100))
+const csvText = csvBlob ? await csvBlob.text() : ''
+check(`CSV header carries interface_pae (got "${csvText.split('\n')[0]}")`, csvText.startsWith('residue,aa,plddt,interface_pae\n'))
+// residue 0 row: i=0 cross-chain cells are 160,255 → mean 207.5 → 26.04 Å
+check(`CSV row carries interface PAE (got "${csvText.split('\n')[1]}")`, csvText.split('\n')[1] === 'A:1,A,80.0,26.04')
 process.exit(failed ? 1 : 0)
 console.log('CONTACT LINE TESTS DONE')

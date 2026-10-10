@@ -23,11 +23,11 @@ for (let i = 0; i < 60; i++) {
     return {
       done,
       guide: txt.includes('BOLTZ_API_KEY') && txt.includes('secrets/boltz'),
-      chmod: txt.includes('chmod 600'),
+      local: txt.includes('开源权重') || txt.includes('boltz2-local'),
     }
   })
   if (i % 8 === 0) console.log(`t=${(i + 1) * 5}s`, JSON.stringify(out))
-  if (out.done >= 1 && out.guide) break
+  if (out.done >= 1) break
 }
 console.log('final:', JSON.stringify(out), 'errors:', JSON.stringify(errors.slice(0, 3)))
 const txt = await page.evaluate(() => document.body.innerText)
@@ -35,3 +35,4 @@ const idx = txt.indexOf('Boltz')
 console.log('answer tail:', txt.slice(idx, idx + 400).replace(/\n+/g, ' | '))
 await page.screenshot({ path: '/tmp/pv-complex-guide.png' })
 await browser.close()
+process.exit(out.local ? 0 : 1)
