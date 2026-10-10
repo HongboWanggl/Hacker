@@ -61,13 +61,14 @@ if (!stats.exports || stats.exports.length < 2) {
 await page.evaluate(() => document.querySelectorAll('details.turn-process:not([open]) summary').forEach((s) => s.click()))
 await page.waitForTimeout(1500)
 
-// click the 3D export button and capture the download
+// click the 3D export button and capture the download — locate by column and
+// text, not index: the toolbars now carry 复制序列 / 导出 CSV too (no downloads).
 if (stats.exports?.length >= 2) {
   const dl3d = page.waitForEvent('download', { timeout: 10000 }).catch(() => null)
-  await page.locator('.pv-export').first().click()
+  await page.locator('.pv-3d-col .pv-export', { hasText: '导出 PNG' }).first().click()
   const d1 = await dl3d
   const dlCurve = page.waitForEvent('download', { timeout: 10000 }).catch(() => null)
-  await page.locator('.pv-export').nth(1).click()
+  await page.locator('.pv-curve-col .pv-export', { hasText: '导出 PNG' }).first().click()
   const d2 = await dlCurve
   console.log('3D download:', d1 ? d1.suggestedFilename() : 'NONE')
   console.log('curve download:', d2 ? d2.suggestedFilename() : 'NONE')

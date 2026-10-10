@@ -279,31 +279,30 @@ function complexMetricChips(report) {
 // ---------------------------------------------------------------------------
 // ΔpLDDT profile sparkline: signed per-bin deltas around a midline.
 // Positive bins (ESMFold more confident) blue, negative bins orange.
-function DeltaSparkline({ series, note }) {
+function DeltaSparkline({ series, note, onPick }) {
   if (!Array.isArray(series) || series.length < 2) return null
   const maxAbs = Math.max(...series.map((d) => Math.abs(d.delta)), 1)
   const n = series.length
+  const bar = (d, i) => {
+    const el = {
+      key: i,
+      className: `pv-delta-bar ${d.delta >= 0 ? 'pv-delta-bar--pos' : 'pv-delta-bar--neg'}`,
+      style: {
+        left: `${(i / n) * 100}%`,
+        width: `${(100 / n) * 0.86}%`,
+        height: `${Math.max((Math.abs(d.delta) / maxAbs) * 48, 4)}%`,
+        ...(d.delta >= 0 ? { bottom: '50%' } : { top: '50%' }),
+      },
+      title: `残基 ${d.residue} 起 · Δ ${d.delta > 0 ? '+' : ''}${d.delta}${onPick ? '（点击定位）' : ''}`,
+    }
+    // Click-to-locate: a bin lands the nearest chip-locatable residue in the 3D overlay.
+    return onPick ? h('button', { ...el, type: 'button', onClick: () => onPick(d.residue) }) : h('div', el)
+  }
   return h(
     'div',
     { className: 'pv-delta' },
     h('div', { className: 'pv-section-title' }, '逐残基 pLDDT 差值轮廓'),
-    h(
-      'div',
-      { className: 'pv-delta-bars', role: 'img', 'aria-label': 'ΔpLDDT profile' },
-      series.map((d, i) =>
-        h('div', {
-          key: i,
-          className: `pv-delta-bar ${d.delta >= 0 ? 'pv-delta-bar--pos' : 'pv-delta-bar--neg'}`,
-          style: {
-            left: `${(i / n) * 100}%`,
-            width: `${(100 / n) * 0.86}%`,
-            height: `${Math.max((Math.abs(d.delta) / maxAbs) * 48, 4)}%`,
-            ...(d.delta >= 0 ? { bottom: '50%' } : { top: '50%' }),
-          },
-          title: `残基 ${d.residue} 起 · Δ ${d.delta > 0 ? '+' : ''}${d.delta}`,
-        }),
-      ),
-    ),
+    h('div', { className: 'pv-delta-bars', role: 'img', 'aria-label': 'ΔpLDDT profile' }, series.map(bar)),
     h(
       'div',
       { className: 'pv-legend' },
@@ -684,7 +683,7 @@ function CompareCard({ report, services }) {
       selectedRes: selRes,
       onPickRes: (i) => setSelRes((prev) => (prev === i ? null : i)),
     }),
-    h(DeltaSparkline, { series: c.deltaSeries, note: c.deltaSeriesNote }),
+    h(DeltaSparkline, { series: c.deltaSeries, note: c.deltaSeriesNote, onPick: (i) => setSelRes((prev) => (prev === i ? null : i)) }),
     Array.isArray(c.largestDeltas) && c.largestDeltas.length
       ? h(
           'div',

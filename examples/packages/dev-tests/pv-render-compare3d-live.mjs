@@ -113,4 +113,19 @@ if (copyBtn) {
   checks.push(['copy button confirms', (copyBtn.textContent ?? '').includes('已复制')])
 }
 for (const [name, ok] of checks.slice(copyBtn ? -5 : -1)) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
+
+// delta-sparkline click-to-locate: bars are buttons; clicking one outlines the
+// bin's residue tile (same locate path as the largest-delta chips).
+const deltaChecks = []
+const deltaBars = [...container.querySelectorAll('button.pv-delta-bar')]
+deltaChecks.push(['delta bars clickable', deltaBars.length >= 4])
+if (deltaBars.length >= 2) {
+  // Bin 0 starts at residue 1 — the only sparkline bin inside the 20-residue
+  // fixture, so its tile is the one that can light up.
+  deltaBars[0].dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 250))
+  const sel = container.querySelector('.pv-seq-tile--sel')
+  deltaChecks.push(['delta bar click outlines tile', !!sel && (sel.title ?? '').includes('A1')])
+}
+for (const [name, ok] of deltaChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 process.exit(failed ? 1 : 0)

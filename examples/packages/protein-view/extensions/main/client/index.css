@@ -110,6 +110,9 @@
 .pv-delta-bar { position: absolute; border-radius: 1px 1px 0 0; }
 .pv-delta-bar--pos { background: #38a3e8; border-radius: 1px 1px 0 0; }
 .pv-delta-bar--neg { background: #ff7d45; border-radius: 0 0 1px 1px; }
+button.pv-delta-bar { cursor: pointer; border: 0; padding: 0; }
+button.pv-delta-bar--pos:hover { background: #6cc1f2; }
+button.pv-delta-bar--neg:hover { background: #ff9d70; }
 
 /* Batch prediction table */
 .pv-batch { display: flex; flex-direction: column; gap: 4px; }
