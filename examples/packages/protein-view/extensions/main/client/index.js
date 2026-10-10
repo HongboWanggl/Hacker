@@ -1283,7 +1283,7 @@ function exportCurvePng(e, name, residues) {
 
 // PAE heatmap export: title + heatmap + legend composed on white, matching
 // the other panel exports (paper/group-meeting ready).
-function exportPaePng(e, name, n, bytes, chainSizes) {
+function exportPaePng(e, name, n, bytes, chainSizes, scale = 1) {
   const mod = e.currentTarget.closest('.pv-pae')
   const canvas = mod?.querySelector('canvas.pv-pae-canvas')
   if (!canvas || typeof canvas.toDataURL !== 'function') return
@@ -1292,9 +1292,12 @@ function exportPaePng(e, name, n, bytes, chainSizes) {
     const pad = 12 * s
     const titleH = 22 * s
     const legendH = 18 * s
+    const noteH = 16 * s
+    const stripW = 28 * s
+    const stripX = pad + canvas.width + 6 * s
     const c = document.createElement('canvas')
-    c.width = Math.max(canvas.width + pad * 2, pad * 2 + 26 * s + 160 * s + 200 * s)
-    c.height = canvas.height + pad * 2 + titleH + legendH
+    c.width = Math.max(stripX + stripW + pad, pad * 2 + 26 * s + 160 * s + 260 * s)
+    c.height = canvas.height + pad * 2 + titleH + legendH + noteH
     const g = c.getContext('2d')
     if (!g) return
     g.fillStyle = '#ffffff'
@@ -1304,6 +1307,33 @@ function exportPaePng(e, name, n, bytes, chainSizes) {
     g.textBaseline = 'middle'
     g.fillText(`PAE 误差热图 · ${n}×${n}（0–32 Å）`, pad, pad + titleH / 2)
     g.drawImage(canvas, pad, pad + titleH)
+    // mean-PAE profile strip, recomputed clean (no hover highlight)
+    const rowH = canvas.height / n
+    for (let i = 0; i < n; i++) {
+      let sum = 0
+      for (let j = 0; j < n; j++) if (j !== i) sum += bytes[i * n + j]
+      const mean = n > 1 ? sum / (n - 1) : 0
+      const [r, gg, b] = viridisRgb(mean / 255)
+      g.fillStyle = `rgb(${r},${gg},${b})`
+      const w = Math.max(1 * s, (mean / 255) * stripW)
+      g.fillRect(stripX, pad + titleH + i * rowH, w, Math.max(1, rowH - (rowH > 2 ? 1 : 0)))
+    }
+    if (chainSizes?.length > 1) {
+      g.strokeStyle = 'rgba(120,120,130,0.8)'
+      g.lineWidth = 1
+      g.setLineDash([3 * s, 3 * s])
+      let acc = 0
+      for (let k = 0; k < chainSizes.length - 1; k++) {
+        acc += chainSizes[k]
+        // chain boundaries are residue-indexed; pooled rows cover `scale` each
+        const y = pad + titleH + (acc / scale) * (canvas.height / n) + 0.5
+        g.beginPath()
+        g.moveTo(stripX, y)
+        g.lineTo(stripX + stripW, y)
+        g.stroke()
+      }
+      g.setLineDash([])
+    }
     // legend row: "0 Å" [gradient bar] "32 Å" (chain sizes noted when present)
     const barW = 160 * s
     const barH = 8 * s
@@ -1324,6 +1354,7 @@ function exportPaePng(e, name, n, bytes, chainSizes) {
     if (chainSizes?.length > 1) {
       g.fillText(`虚线为链边界（${chainSizes.join(' / ')} 残基）`, barX + barW + 48 * s, barY + barH / 2)
     }
+    g.fillText('右侧条形：各残基平均误差（不含自身）——长条提示界面残基或无序区', pad, barY + barH + noteH / 2 + 2 * s)
     downloadCanvas(c, name)
   } catch {}
 }
@@ -2249,7 +2280,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, name = 'struc
         ),
         h(
           'button',
-          { className: 'pv-export', onClick: (e) => exportPaePng(e, `${name}.pae.png`, n, pae.bytes, chainSizes) },
+          { className: 'pv-export', onClick: (e) => exportPaePng(e, `${name}.pae.png`, n, pae.bytes, chainSizes, scale) },
           '导出 PNG',
         ),
         h(
