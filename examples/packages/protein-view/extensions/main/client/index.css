@@ -1,0 +1,416 @@
+/* @aghes/protein-view panel styles. Uses workbench neutral tokens where available,
+   falls back gracefully when rendered outside the workbench. */
+
+.pv-root {
+  --pv-bg: #141c2b;
+  --pv-line: rgba(140, 150, 170, 0.16);
+  --pv-text: #1d232e;
+  --pv-muted: #6b7280;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fafbfe 0%, #f2f5fa 100%);
+  border: 1px solid var(--pv-line);
+  color: var(--pv-text);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'PingFang SC', sans-serif;
+}
+
+.pv-fallback {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--pv-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Summary header */
+.pv-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.pv-score {
+  min-width: 92px;
+  text-align: center;
+  padding: 10px 12px 8px;
+  border-radius: 12px;
+  color: #fff;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 18%);
+}
+.pv-score--high { background: linear-gradient(160deg, #2e6bff, #0053d6); }
+.pv-score--ok { background: linear-gradient(160deg, #38a3e8, #1b7fc4); }
+.pv-score--caution { background: linear-gradient(160deg, #f0b429, #d19208); }
+.pv-score--warn { background: linear-gradient(160deg, #ff8a50, #ef5a2a); }
+.pv-score-value {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.pv-score-label { font-size: 10px; opacity: 0.85; margin-top: 2px; letter-spacing: 0.04em; }
+
+.pv-summary-main { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pv-verdict { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.pv-residue-count { font-weight: 400; color: var(--pv-muted); }
+.pv-verdict-dot { width: 8px; height: 8px; border-radius: 50%; }
+.pv-verdict-dot--high { background: #0053d6; }
+.pv-verdict-dot--ok { background: #3aa0dd; }
+.pv-verdict-dot--caution { background: #e8b70f; }
+.pv-verdict-dot--warn { background: #ff7d45; }
+
+.pv-bandbar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #e5e9f0;
+}
+.pv-bandbar-seg { min-width: 2px; }
+.pv-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 10.5px; color: var(--pv-muted); }
+.pv-legend-item { display: inline-flex; align-items: center; gap: 4px; }
+.pv-complex-metrics { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.pv-metric-chip {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: rgb(0 83 214 / 8%); color: var(--pv-text);
+  border: 1px solid rgb(0 83 214 / 18%);
+}
+.pv-metric-label { color: var(--pv-muted); }
+.pv-metric-value { font-variant-numeric: tabular-nums; font-weight: 600; }
+.pv-legend-swatch { width: 9px; height: 9px; border-radius: 3px; }
+
+/* AlphaFold comparison card */
+.pv-compare-bars { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.pv-compare-bar-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.pv-compare-bar-label { width: 92px; color: var(--pv-muted); white-space: nowrap; }
+.pv-compare-bar { flex: 1; height: 8px; border-radius: 4px; background: #e5e9f0; overflow: hidden; display: flex; }
+.pv-compare-bar-value { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--pv-text); }
+
+/* ΔpLDDT sparkline — bars absolutely positioned from the dashed midline */
+.pv-delta { display: flex; flex-direction: column; gap: 5px; }
+.pv-delta-bars {
+  position: relative;
+  height: 52px;
+  border-radius: 6px;
+  background: #fff;
+  border: 1px solid var(--pv-line);
+  overflow: hidden;
+}
+.pv-delta-bars::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 50%;
+  border-top: 1px dashed rgb(107 114 128 / 45%);
+  pointer-events: none;
+}
+.pv-delta-bar { position: absolute; border-radius: 1px 1px 0 0; }
+.pv-delta-bar--pos { background: #38a3e8; border-radius: 1px 1px 0 0; }
+.pv-delta-bar--neg { background: #ff7d45; border-radius: 0 0 1px 1px; }
+
+/* Batch prediction table */
+.pv-batch { display: flex; flex-direction: column; gap: 4px; }
+.pv-batch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid var(--pv-line);
+  font-size: 12px;
+}
+.pv-batch-row--failed { background: rgb(255 125 69 / 6%); }
+.pv-batch-row--ok { cursor: pointer; transition: background 0.15s; }
+.pv-batch-row--ok:hover { background: rgb(0 83 214 / 5%); }
+.pv-batch-row--open { background: rgb(0 83 214 / 8%); }
+.pv-batch-caret { color: var(--pv-muted); font-size: 10px; min-width: 10px; text-align: center; }
+.pv-batch-detail {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid rgb(0 83 214 / 22%);
+}
+.pv-batch-detail--err { color: #b34a1e; font-size: 12px; }
+.pv-batch-loading {
+  min-height: 80px;
+  display: grid;
+  place-items: center;
+  color: #9aa7bd;
+  font-size: 12px;
+}
+.pv-batch-loading .pv-spinner {
+  border-color: rgb(0 83 214 / 15%);
+  border-top-color: #1b7fc4;
+}
+.pv-batch-acc { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 64px; }
+.pv-batch-name { flex: 1; color: var(--pv-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-batch-error { color: #b34a1e; font-weight: 400; }
+.pv-batch-meta { color: var(--pv-muted); font-size: 11px; white-space: nowrap; }
+.pv-batch-score {
+  min-width: 44px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #fff;
+}
+.pv-batch-score--high { background: #0053d6; }
+.pv-batch-score--ok { background: #1b7fc4; }
+.pv-batch-score--caution { background: #d19208; }
+.pv-batch-score--warn { background: #ef5a2a; }
+
+/* Segments */
+.pv-section-title { font-size: 11px; font-weight: 600; color: var(--pv-muted); letter-spacing: 0.03em; }
+.pv-segments { display: flex; flex-direction: column; gap: 6px; }
+.pv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 125 69 / 35%);
+  background: rgb(255 125 69 / 8%);
+  color: #b34a1e;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.pv-chip:hover { background: rgb(255 125 69 / 16%); transform: translateY(-1px); }
+.pv-chip--active { background: #ff7d45; color: #fff; border-color: #ff7d45; }
+.pv-chip-range { font-weight: 600; font-variant-numeric: tabular-nums; }
+.pv-chip-score { opacity: 0.8; font-variant-numeric: tabular-nums; }
+
+/* Layout: 3D left, curve right */
+.pv-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 12px;
+}
+@media (max-width: 760px) { .pv-grid { grid-template-columns: 1fr; } }
+
+.pv-3d-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pv-curve-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pv-3d-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.pv-3d-toolbar .pv-section-title { white-space: nowrap; }
+.pv-toolbar-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pv-toolbar-controls .pv-select { white-space: nowrap; }
+.pv-select {
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--pv-line);
+  background: #fff;
+  color: var(--pv-text);
+}
+.pv-export {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid rgb(0 83 214 / 30%);
+  background: rgb(0 83 214 / 6%);
+  color: #0053d6;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.pv-export:hover { background: rgb(0 83 214 / 14%); }
+.pv-export:active { transform: translateY(1px); }
+.pv-jump {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--pv-line);
+  background: #fff;
+  color: var(--pv-text);
+  width: 88px;
+  outline: none;
+}
+.pv-jump::placeholder { color: var(--pv-muted); }
+.pv-jump:focus { border-color: rgb(0 83 214 / 45%); }
+.pv-toggle { font-size: 11px; color: var(--pv-muted); display: inline-flex; gap: 4px; align-items: center; cursor: pointer; white-space: nowrap; }
+.pv-fmt { font-size: 11px; color: #b34a1e; background: rgb(255 125 69 / 10%); border-radius: 6px; padding: 3px 8px; align-self: flex-start; }
+
+.pv-3d {
+  border-radius: 10px;
+  touch-action: none;
+  cursor: grab;
+  display: block;
+}
+.pv-3d:active { cursor: grabbing; }
+.pv-3d-hint { font-size: 10px; color: var(--pv-muted); text-align: right; margin-top: 2px; }
+.pv-hoverline {
+  min-height: 16px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--pv-text);
+  font-weight: 500;
+}
+
+.pv-curve-wrap { display: flex; flex-direction: column; gap: 6px; }
+.pv-curve-holder { position: relative; }
+.pv-curve { display: block; border-radius: 8px; background: #fff; border: 1px solid var(--pv-line); cursor: crosshair; }
+.pv-curve-tip {
+  position: absolute;
+  top: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgb(20 24 32 / 82%);
+  color: #fff;
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pv-curve-tip--on { opacity: 1; }
+
+.pv-loading {
+  border-radius: 10px;
+  background: var(--pv-bg);
+  min-height: 140px;
+  display: grid;
+  place-items: center;
+  color: #9aa7bd;
+  font-size: 12px;
+}
+.pv-loading-inner { display: flex; align-items: center; gap: 10px; }
+.pv-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgb(255 255 255 / 20%);
+  border-top-color: #6c8dff;
+  animation: pv-spin 0.9s linear infinite;
+}
+@keyframes pv-spin { to { transform: rotate(360deg); } }
+
+/* Chain legend for multi-chain complexes (Boltz-2) — 'chain' color mode. */
+.pv-chain-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.pv-chain-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  font-size: 11px;
+  color: #b9c2d4;
+}
+.pv-chain-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 2px rgb(255 255 255 / 12%);
+}
+
+/* uniprot_search results table */
+.pv-search-table {
+  margin-top: 8px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.pv-search-head,
+.pv-search-row {
+  display: grid;
+  grid-template-columns: 92px 1fr 1fr 64px;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  text-align: left;
+}
+.pv-search-head {
+  font-size: 11px;
+  color: #8d99af;
+  background: rgb(255 255 255 / 4%);
+}
+.pv-search-row {
+  width: 100%;
+  border: none;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.pv-search-row:hover { background: rgb(108 141 255 / 12%); }
+.pv-search-acc {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #8fb0ff;
+  font-size: 12px;
+}
+.pv-search-name { color: #e8ecf5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-search-org { color: #9aa7bd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-search-len { color: #b9c2d4; text-align: right; font-variant-numeric: tabular-nums; }
+.pv-search-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #8d99af;
+}
+
+/* Panel is keyboard-focusable (←/→ steps through residues); keep the focus
+   ring subtle so screenshots stay clean. */
+.pv-root:focus { outline: none; }
+.pv-root:focus-visible { box-shadow: 0 0 0 2px rgb(108 141 255 / 35%); }
+
+/* Residue sequence strip: band-colored tiles under the curve */
+.pv-seqstrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  margin-top: 6px;
+  padding: 4px 2px 2px;
+  border-top: 1px dashed rgb(128 128 128 / 25%);
+}
+.pv-seq-tile {
+  width: 13px;
+  height: 13px;
+  border-radius: 2px;
+  font-size: 8px;
+  line-height: 13px;
+  text-align: center;
+  color: rgb(255 255 255 / 88%);
+  cursor: pointer;
+  user-select: none;
+  flex: none;
+}
+.pv-seq-tile--hover { outline: 1.5px solid rgb(20 20 20 / 85%); transform: scale(1.25); position: relative; z-index: 2; }
+.pv-seq-tile--sel { outline: 2px solid rgb(10 10 10 / 95%); position: relative; z-index: 1; }
+
+/* Divergence strip legend (compare card) */
+.pv-divlegend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 10px;
+  color: rgb(90 90 90 / 90%);
+}
+.pv-divlegend-bar { width: 80px; height: 8px; border-radius: 4px; }
+
+/* Dense mode for long sequences (>800 residues) */
+.pv-seqstrip--dense .pv-seq-tile {
+  width: 9px;
+  height: 9px;
+  font-size: 6px;
+  line-height: 9px;
+  border-radius: 1px;
+}

@@ -1,0 +1,31 @@
+{
+  "file": "structures/P61626_lysozyme_C_148aa.pdb",
+  "residues": 148,
+  "meanPlddt": 91.9,
+  "bands": {
+    "veryHigh_gt90": {
+      "count": 128,
+      "pct": 86.5
+    },
+    "confident_70_90": {
+      "count": 8,
+      "pct": 5.4
+    },
+    "low_50_70": {
+      "count": 12,
+      "pct": 8.1
+    },
+    "veryLow_lt50": {
+      "count": 0,
+      "pct": 0
+    }
+  },
+  "lowConfidenceSegments": [
+    {
+      "residues": "6-17",
+      "length": 12,
+      "meanPlddt": 60.7
+    }
+  ],
+  "verdict": "high confidence overall"
+}

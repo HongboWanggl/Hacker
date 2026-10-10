@@ -1,0 +1,19 @@
+{
+  "name": "@aghes/protein-predictor",
+  "version": "0.2.0",
+  "description": "Protein structure prediction tools: UniProt sequence retrieval, ESMFold prediction, confidence analysis",
+  "type": "module",
+  "exports": "./index.mjs",
+  "agnes": {
+    "plugins": [
+      {
+        "export": "proteinPredictor",
+        "id": "ext:aghes/protein-predictor",
+        "inject": [
+          "extension"
+        ]
+      }
+    ]
+  },
+  "license": "Apache-2.0"
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@aghes/protein-view",
+  "version": "0.2.0",
+  "description": "Interactive structure & confidence viewer for protein prediction results (3D backbone, pLDDT curve, band analysis)",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": "./extensions/main/index.mjs",
+  "agnes": {
+    "plugins": [
+      {
+        "export": "runtime",
+        "id": "ext:aghes/protein-view/runtime",
+        "runtime": "in-process"
+      }
+    ],
+    "clientDescriptors": [
+      {
+        "rowId": "ext:aghes/protein-view/runtime",
+        "path": "./extensions/main/agnes.client.json"
+      }
+    ]
+  }
+}

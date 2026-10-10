@@ -1,0 +1,56 @@
+{
+  "file": "structures/p53_human_P04637_393aa.pdb",
+  "residues": 393,
+  "meanPlddt": 80.3,
+  "bands": {
+    "veryHigh_gt90": {
+      "count": 152,
+      "pct": 38.7
+    },
+    "confident_70_90": {
+      "count": 128,
+      "pct": 32.6
+    },
+    "low_50_70": {
+      "count": 108,
+      "pct": 27.5
+    },
+    "veryLow_lt50": {
+      "count": 5,
+      "pct": 1.3
+    }
+  },
+  "lowConfidenceSegments": [
+    {
+      "residues": "27-60",
+      "length": 34,
+      "meanPlddt": 56.1
+    },
+    {
+      "residues": "88-95",
+      "length": 8,
+      "meanPlddt": 59.8
+    },
+    {
+      "residues": "309-329",
+      "length": 21,
+      "meanPlddt": 61.7
+    },
+    {
+      "residues": "294-307",
+      "length": 14,
+      "meanPlddt": 62.3
+    },
+    {
+      "residues": "356-372",
+      "length": 17,
+      "meanPlddt": 64.4
+    },
+    {
+      "residues": "376-386",
+      "length": 11,
+      "meanPlddt": 64.4
+    }
+  ],
+  "verdict": "backbone mostly reliable; inspect low-confidence segments"
+}
