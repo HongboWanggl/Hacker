@@ -48,4 +48,21 @@ const checks = [
 ]
 let failed = 0
 for (const [name, ok] of checks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
+
+// chain visibility toggle: chips are buttons; clicking one marks it off, the
+// last visible chain refuses to hide, re-clicking restores.
+const chips = [...container.querySelectorAll('button.pv-chain-chip')]
+checks.push(['legend chips are toggle buttons', chips.length === 2])
+if (chips.length === 2) {
+  chips[0].dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 200))
+  checks.push(['click hides chain A chip', chips[0].className.includes('pv-chain-chip--off') && !chips[1].className.includes('pv-chain-chip--off')])
+  chips[1].dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 200))
+  checks.push(['last visible chain refuses to hide', !chips[1].className.includes('pv-chain-chip--off')])
+  chips[0].dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 200))
+  checks.push(['re-click restores chain A', !chips[0].className.includes('pv-chain-chip--off')])
+}
+for (const [name, ok] of checks.slice(chips.length === 2 ? -4 : -1)) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 process.exit(failed ? 1 : 0)

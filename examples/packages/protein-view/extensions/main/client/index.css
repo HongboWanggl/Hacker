@@ -337,6 +337,9 @@
   display: inline-block;
   box-shadow: 0 0 0 2px rgb(255 255 255 / 12%);
 }
+button.pv-chain-chip { cursor: pointer; transition: background 0.15s; }
+button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
+.pv-chain-chip--off { opacity: 0.4; text-decoration: line-through; }
 
 /* uniprot_search results table */
 .pv-search-table {

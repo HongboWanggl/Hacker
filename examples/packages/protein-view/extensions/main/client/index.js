@@ -110,7 +110,7 @@ function distColorRgb(d) {
 const distColor = (d) => `rgb(${distColorRgb(d).join(',')})`
 const isMultiChain = (residues) => Array.isArray(residues) && residues.length > 1 && residues.some((r) => r.chain && r.chain !== residues[0].chain)
 
-function ChainLegend({ residues }) {
+function ChainLegend({ residues, hidden, onToggle }) {
   const m = new Map()
   for (const r of residues) {
     if (!m.has(r.chain)) m.set(r.chain, { chain: r.chain, n: 0, sum: 0 })
@@ -122,14 +122,26 @@ function ChainLegend({ residues }) {
   return h(
     'div',
     { className: 'pv-chain-legend' },
-    stats.map((s, k) =>
-      h(
-        'span',
-        { className: 'pv-chain-chip', key: s.chain ?? k },
-        h('span', { className: 'pv-chain-dot', style: { background: CHAIN_COLORS[k % CHAIN_COLORS.length] } }),
-        `链 ${s.chain} · ${s.n} aa · 均值 pLDDT ${s.mean.toFixed(1)}`,
-      ),
-    ),
+    stats.map((s, k) => {
+      const inner = [
+        h('span', { className: 'pv-chain-dot', key: 'dot', style: { background: CHAIN_COLORS[k % CHAIN_COLORS.length] } }),
+        h('span', { key: 'label' }, `链 ${s.chain} · ${s.n} aa · 均值 pLDDT ${s.mean.toFixed(1)}`),
+      ]
+      // Toggleable chips hide/show chains in the 3D view (main panel passes
+      // onToggle; other call sites keep the plain display chips).
+      return onToggle
+        ? h(
+            'button',
+            {
+              className: `pv-chain-chip${hidden?.has(s.chain) ? ' pv-chain-chip--off' : ''}`,
+              key: s.chain ?? k,
+              onClick: () => onToggle(s.chain),
+              title: hidden?.has(s.chain) ? '点击显示该链' : '点击隐藏该链',
+            },
+            inner,
+          )
+        : h('span', { className: 'pv-chain-chip', key: s.chain ?? k }, inner)
+    }),
   )
 }
 
@@ -1572,7 +1584,10 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
 // 3D backbone viewer. Canvas 2D, painter's algorithm, orthographic + depth fog.
 // `ghostColorOf(aIdx, bIdx)` lets the compare card recolor ghost segments
 // (e.g. by post-superposition Cα distance); null falls back to the gray ghost.
-function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, autoSpin, ghost, ghostColorOf, hintText }) {
+function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, autoSpin, ghost, ghostColorOf, hintText, hiddenChains }) {
+  // Chain visibility toggle: hidden residues keep their indices (curve/strip
+  // cross-linking stays aligned) but are skipped in drawing and hit-testing.
+  const isHidden = useCallback((k) => !!(hiddenChains?.size && hiddenChains.has(residues?.[k]?.chain)), [hiddenChains, residues])
   const canvasRef = useRef(null)
   const tipRef = useRef(null)
   const wrapRef = useRef(null)
@@ -1701,8 +1716,9 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
 
       // Bonds back → front
       const items = geo.bonds
+        .filter(([a, b]) => !isHidden(a) && !isHidden(b))
         .map(([a, b]) => ({ kind: 'bond', a, b, z: (projected[a].z + projected[b].z) / 2 }))
-        .concat(projected.map((p, k) => ({ kind: 'ca', k, z: p.z })))
+        .concat(projected.map((p, k) => ({ kind: 'ca', k, z: p.z })).filter((it) => !isHidden(it.k)))
       if (ghostProjected && geo.ghostBonds) {
         for (const [a, b] of geo.ghostBonds) {
           items.push({ kind: 'ghost', a, b, z: (ghostProjected[a].z + ghostProjected[b].z) / 2 })
@@ -1776,7 +1792,7 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       cancelAnimationFrame(frame.current)
       clearTimeout(wake.current)
     }
-  }, [geo, size, residues, hover, selected, colorMode, autoSpin, ghost, ghostColorOf])
+  }, [geo, size, residues, hover, selected, colorMode, autoSpin, ghost, ghostColorOf, isHidden])
 
   const pick = useCallback(
     (ev) => {
@@ -1792,6 +1808,7 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       let best = null
       let bestD = 12 * 12
       geo.centered.forEach(([x, y, z], k) => {
+        if (isHidden(k)) return
         const x1 = x * cy + z * sy
         const z1 = -x * sy + z * cy
         const y1 = y * cp - z1 * sp
@@ -1805,7 +1822,7 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       })
       return best
     },
-    [geo],
+    [geo, isHidden],
   )
 
   return h(
@@ -1930,6 +1947,7 @@ function ProteinToolView({ owner, services }) {
   const [colorMode, setColorMode] = useState('plddt')
   const [autoSpin, setAutoSpin] = useState(true)
   const [seqCopied, setSeqCopied] = useState(false)
+  const [hiddenChains, setHiddenChains] = useState(() => new Set())
   const [highlightSeg, setHighlightSeg] = useState(null)
 
   useEffect(() => {
@@ -1937,6 +1955,7 @@ function ProteinToolView({ owner, services }) {
     let alive = true
     setStructure(null)
     setLoadError(null)
+    setHiddenChains(new Set())
     services
       .call('protein.structure', { path: pdbPath })
       .then((s) => {
@@ -1952,6 +1971,22 @@ function ProteinToolView({ owner, services }) {
 
   const residues = structure?.residues ?? null
   const segRange = useMemo(() => (highlightSeg ? parseSeg(highlightSeg) : null), [highlightSeg])
+  // Chain visibility: toggle from the legend chips; the last visible chain
+  // can't be hidden (an empty canvas would read as "broken").
+  const toggleChain = useCallback((c) => {
+    setHiddenChains((prev) => {
+      const n = new Set(prev)
+      if (n.has(c)) {
+        n.delete(c)
+        return n
+      }
+      const chains = new Set((structure?.residues ?? []).map((r) => r.chain))
+      const visible = [...chains].filter((x) => !n.has(x))
+      if (visible.length <= 1) return prev
+      n.add(c)
+      return n
+    })
+  }, [structure])
 
   // Multi-chain complexes (Boltz-2) default to per-chain coloring once loaded.
   useEffect(() => {
@@ -2115,8 +2150,9 @@ function ProteinToolView({ owner, services }) {
               },
               colorMode,
               autoSpin,
+              hiddenChains,
             }),
-            colorMode === 'chain' ? h(ChainLegend, { residues }) : null,
+            colorMode === 'chain' ? h(ChainLegend, { residues, hidden: hiddenChains, onToggle: toggleChain }) : null,
             h(
               'div',
               { className: 'pv-hoverline' },
