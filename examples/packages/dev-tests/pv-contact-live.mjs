@@ -20,7 +20,7 @@ const recording = new Proxy({}, {
   get(t, k) {
     if (k === 'canvas') return { width: 300, height: 300 }
     return (...args) => {
-      if (k === 'setLineDash' || k === 'moveTo' || k === 'lineTo') calls.push([k, ...args])
+      if (k === 'setLineDash' || k === 'moveTo' || k === 'lineTo' || k === 'fillText') calls.push([k, ...args])
       return anyFn
     }
   },
@@ -113,6 +113,31 @@ check(`contact segments drawn beneath atoms (windows: ${windows.join(',')})`, wi
   check(`ligand atom hover readout (got "${ligReadout}")`, ligReadout === '配体原子 O · 距最近残基 A:A2 83.7 Å')
   cv.dispatchEvent(new win.MouseEvent('pointerleave', { bubbles: true }))
   await new Promise((r) => setTimeout(r, 80))
+
+  // click-to-select a residue (same projection): pointerdown+up at the
+  // projected Cα of residues[0] → selection tag `A:A1` painted on the canvas
+  {
+    const l = [-0.5, 0, 0]
+    const yaw = -0.6
+    const pitch = 0.35
+    const cy = Math.cos(yaw)
+    const sy = Math.sin(yaw)
+    const cp = Math.cos(pitch)
+    const sp = Math.sin(pitch)
+    const scale = (300 * 0.42 * 1) / Math.hypot(48.5, 49, 48)
+    const x1 = l[0] * cy + l[2] * sy
+    const z1 = -l[0] * sy + l[2] * cy
+    const y1 = l[1] * cp - z1 * sp
+    const sx = 150 + x1 * scale
+    const syp = 150 + y1 * scale
+    cv.setPointerCapture = () => {}
+    const mk = (type) => new win.MouseEvent(type, { bubbles: true, clientX: sx, clientY: syp })
+    cv.dispatchEvent(mk('pointerdown'))
+    cv.dispatchEvent(mk('pointerup'))
+    await new Promise((r) => setTimeout(r, 150))
+    const tags = calls.filter((c) => c[0] === 'fillText').map((c) => c[1])
+    check(`selection tag painted (got "${tags.find((t) => String(t).includes('A:'))}")`, tags.some((t) => String(t) === 'A:A1'))
+  }
 }
 
 // hover readout gains the ligand distance for pocket residues: strip row 1 →

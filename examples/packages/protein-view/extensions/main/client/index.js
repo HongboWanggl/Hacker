@@ -2095,6 +2095,16 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
             ctx2d.strokeStyle = isSel ? '#ffffff' : 'rgba(255,255,255,0.85)'
             ctx2d.lineWidth = 1.6
             ctx2d.stroke()
+            // persistent tag so a selection stays identifiable while the pose
+            // auto-spins (hover tags read transiently, same placement)
+            const res = residues[it.k]
+            if (res) {
+              ctx2d.fillStyle = isSel ? '#ffffff' : 'rgba(255,255,255,0.85)'
+              ctx2d.font = `${11}px ui-sans-serif, system-ui`
+              ctx2d.textBaseline = 'bottom'
+              const label = `${res.chain ? res.chain + ':' : ''}${res.aa ?? ''}${res.i}`
+              ctx2d.fillText(label, p.x + r + 3, p.y - r - 2)
+            }
           }
         }
       }
