@@ -553,6 +553,20 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
   gap: 8px;
   min-width: 0;
 }
+.pv-pae-pairs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pv-pae-pair {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  padding: 3px 9px;
+  border-radius: 999px;
+  letter-spacing: 0.2px;
+}
 .pv-pae-caption {
   font-size: 11px;
   color: var(--pv-muted, rgba(128, 128, 128, 0.9));

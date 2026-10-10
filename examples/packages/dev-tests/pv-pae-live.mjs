@@ -61,6 +61,10 @@ check('legend bar present', !!container.querySelector('.pv-pae-legendbar'))
 check('export PNG button', [...container.querySelectorAll('.pv-pae button.pv-export')].some((b) => b.textContent === '导出 PNG'))
 check('export CSV button', [...container.querySelectorAll('.pv-pae button.pv-export')].some((b) => b.textContent === '导出 CSV'))
 check('caption present', container.querySelector('.pv-pae-caption')?.textContent.includes('链边界') ?? false)
+// chain-pair mean chips: A={0,1}, B={2,3}; cross cells 160,255,120,200 →
+// mean 183.75 → 23.06 Å
+const pairChip = container.querySelector('.pv-pae-pair')?.textContent ?? ''
+check(`chain-pair mean chip (got "${pairChip}")`, pairChip === 'A–B 23.06 Å')
 
 // side profile strip: one bar per row = mean PAE against other residues.
 // Tested before the heatmap hover (no mouseleave in happy-dom → hoverCell
@@ -94,6 +98,9 @@ createRoot(container2).render(React.createElement(complexReg.comp, { owner: { ca
 await new Promise((r) => setTimeout(r, 500))
 const html2 = container2.innerHTML
 check('pooled title notes scale', html2.includes('每格 2 残基'))
+// pooled chain-pair chip: cross cells 255,64 → mean 159.5 → 20.02 Å
+const pairChip2 = container2.querySelector('.pv-pae-pair')?.textContent ?? ''
+check(`pooled chain-pair chip (got "${pairChip2}")`, pairChip2 === 'A–B 20.02 Å')
 const canvas2 = container2.querySelector('canvas.pv-pae-canvas')
 check('pooled canvas 2×2 native (upscaled 16×16)', canvas2?.width === 16)
 // pooled strip: row 0 mean excluding self = byte 255 → 32.00 Å, range label

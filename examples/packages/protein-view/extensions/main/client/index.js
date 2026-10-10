@@ -2136,6 +2136,37 @@ function PaesModule({ paePath, residues, services, onHover, hover, name = 'struc
     return m
   }, [pae, n])
 
+  // Mean inter-chain PAE per chain pair — the per-pair view iptm can't give:
+  // a low A–B mean says the modeled interface itself is confident.
+  const chainPairs = useMemo(() => {
+    if (!pae || !n || !residues || !residues.length) return null
+    const cellChain = []
+    for (let c = 0; c < n; c++) {
+      const r = residues[Math.min(c * scale, residues.length - 1)]
+      cellChain.push(r ? r.chain : '?')
+    }
+    const acc = new Map()
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue
+        const a = cellChain[i]
+        const b = cellChain[j]
+        if (a === b) continue
+        const key = a < b ? `${a}|${b}` : `${b}|${a}`
+        let e = acc.get(key)
+        if (!e) acc.set(key, (e = { sum: 0, cnt: 0 }))
+        e.sum += pae.bytes[i * n + j]
+        e.cnt++
+      }
+    }
+    return [...acc.entries()]
+      .map(([key, e]) => {
+        const [a, b] = key.split('|')
+        return { a, b, meanA: (e.sum / e.cnt / 255) * 32 }
+      })
+      .sort((x, y) => x.meanA - y.meanA)
+  }, [pae, n, residues, scale])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !n) return
@@ -2335,6 +2366,24 @@ function PaesModule({ paePath, residues, services, onHover, hover, name = 'struc
       h(
         'div',
         { className: 'pv-pae-side' },
+        chainPairs?.length
+          ? h(
+              'div',
+              { className: 'pv-pae-pairs' },
+              chainPairs.map((p) =>
+                h(
+                  'span',
+                  {
+                    key: `${p.a}|${p.b}`,
+                    className: 'pv-pae-pair',
+                    title: '链间平均 PAE——低值说明该链对的结合界面建模可信',
+                    style: { background: `rgb(${viridisRgb(Math.min(1, p.meanA / 32)).join(',')})` },
+                  },
+                  `${p.a}–${p.b} ${p.meanA.toFixed(2)} Å`,
+                ),
+              ),
+            )
+          : null,
         h('div', { className: 'pv-hoverline' }, readout),
         h(
           'div',
