@@ -86,6 +86,35 @@ for (let i = 0; i < calls.length; i++) {
 }
 check(`contact segments drawn beneath atoms (windows: ${windows.join(',')})`, windows.includes(4))
 
+// 3D pick on a ligand atom: replicate the draw projection (initial yaw/pitch,
+// centroid of the Cαs, radius over residues+ligand) and hover the far O atom.
+// Must run within 2.5 s of mount — after that auto-spin starts drifting yaw.
+{
+  const A = { x: 50, y: 50, z: 50 } // far O atom, ligandAtoms[1]
+  const c = [1.5, 1, 2] // centroid of the four Cαs
+  const l = [A.x - c[0], A.y - c[1], A.z - c[2]]
+  const maxR = Math.hypot(...l)
+  const yaw = -0.6
+  const pitch = 0.35
+  const cy = Math.cos(yaw)
+  const sy = Math.sin(yaw)
+  const cp = Math.cos(pitch)
+  const sp = Math.sin(pitch)
+  const scale = (300 * 0.42 * 1) / maxR
+  const x1 = l[0] * cy + l[2] * sy
+  const z1 = -l[0] * sy + l[2] * cy
+  const y1 = l[1] * cp - z1 * sp
+  const cv = container.querySelector('canvas.pv-3d')
+  check('3D canvas present for pick test', !!cv)
+  cv.getBoundingClientRect = () => ({ left: 0, top: 0, width: 300, height: 300 })
+  cv.dispatchEvent(new win.MouseEvent('pointermove', { bubbles: true, clientX: 150 + x1 * scale, clientY: 150 + y1 * scale }))
+  await new Promise((r) => setTimeout(r, 120))
+  const ligReadout = [...container.querySelectorAll('.pv-hoverline')].map((e) => e.textContent).find((t) => t.includes('配体原子')) ?? ''
+  check(`ligand atom hover readout (got "${ligReadout}")`, ligReadout === '配体原子 O · 距最近残基 A:A2 83.7 Å')
+  cv.dispatchEvent(new win.MouseEvent('pointerleave', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 80))
+}
+
 // hover readout gains the ligand distance for pocket residues: strip row 1 →
 // residues[1] = A:A2 at (2,1,2), 0.5 Å from ligand atom 0 at (2.5,1,2).
 const strip = container.querySelector('canvas.pv-pae-strip')

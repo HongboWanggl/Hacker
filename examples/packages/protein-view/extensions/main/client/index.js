@@ -1986,14 +1986,15 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
         } else if (it.kind === 'liga') {
           const p = ligProjected[it.k]
           const d = depth01(it.z)
+          const isHover = hover === -1 - it.k
           const col = ligandColor(ligand.atoms[it.k]?.el)
           ctx2d.fillStyle = fog(col, d)
           ctx2d.beginPath()
-          ctx2d.arc(p.x, p.y, 2.2 + 1.8 * (1 - d), 0, Math.PI * 2)
+          ctx2d.arc(p.x, p.y, (2.2 + 1.8 * (1 - d)) * (isHover ? 1.6 : 1), 0, Math.PI * 2)
           ctx2d.fill()
           // faint rim keeps light atoms (C) readable against the backdrop
-          ctx2d.strokeStyle = `rgba(255,255,255,${0.25 * (1 - d)})`
-          ctx2d.lineWidth = 0.6
+          ctx2d.strokeStyle = isHover ? '#ffffff' : `rgba(255,255,255,${0.25 * (1 - d)})`
+          ctx2d.lineWidth = isHover ? 1.4 : 0.6
           ctx2d.stroke()
         } else if (it.kind === 'bond') {
           const p1 = projected[it.a]
@@ -2073,9 +2074,25 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
           best = k
         }
       })
+      // Ligand atoms share the pick space, encoded as negative indices
+      // (-1 - atomIndex) so residue consumers can ignore them by sign.
+      if (showLigand && ligand && geo.ligandCentered) {
+        geo.ligandCentered.forEach(([x, y, z], k) => {
+          const x1 = x * cy + z * sy
+          const z1 = -x * sy + z * cy
+          const y1 = y * cp - z1 * sp
+          const dx = x1 * scale - mx
+          const dy = y1 * scale - my
+          const d = dx * dx + dy * dy
+          if (d < bestD) {
+            bestD = d
+            best = -1 - k
+          }
+        })
+      }
       return best
     },
-    [geo, isHidden],
+    [geo, isHidden, ligand, showLigand],
   )
 
   return h(
@@ -2131,7 +2148,8 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
         const moved = Math.hypot(ev.clientX - (v.downX ?? ev.clientX), ev.clientY - (v.downY ?? ev.clientY))
         if (moved < 5 && onSelect) {
           const k = pick(ev)
-          if (k != null) onSelect(k)
+          // negative picks are ligand atoms — hover-only, never selectable
+          if (k != null && k >= 0) onSelect(k)
         }
       },
       onPointerLeave: () => onHover?.(null),
@@ -2864,15 +2882,31 @@ function ProteinToolView({ owner, services }) {
             h(
               'div',
               { className: 'pv-hoverline' },
-              hover != null && residues[hover]
-                ? (colorMode === 'interface' && interfaceErr
-                    ? `${resLabel(residues, residues[hover])} · 界面误差 ${interfaceErr[hover].toFixed(2)} Å`
-                    : `${resLabel(residues, residues[hover])} · pLDDT ${residues[hover].b.toFixed(1)}`) +
-                  (ligandDist && ligandDist[hover] <= 6 ? ` · 距配体 ${ligandDist[hover].toFixed(1)} Å` : '')
-                : selected != null && residues[selected]
-                  ? `已选 ${resLabel(residues, residues[selected])} · pLDDT ${residues[selected].b.toFixed(1)}（点击曲线取消）` +
-                    (ligandDist && ligandDist[selected] <= 6 ? ` · 距配体 ${ligandDist[selected].toFixed(1)} Å` : '')
-                  : '',
+              hover != null && hover < 0 && ligandInfo
+                ? (() => {
+                    // negative hover = ligand atom (-1 - index), from the 3D pick
+                    const a = ligandInfo.atoms[-1 - hover]
+                    if (!a) return ''
+                    let m = Infinity
+                    let mk = null
+                    residues.forEach((r, k) => {
+                      const d = Math.hypot(a.x - r.x, a.y - r.y, a.z - r.z)
+                      if (d < m) {
+                        m = d
+                        mk = k
+                      }
+                    })
+                    return `配体原子 ${a.el}${mk != null ? ` · 距最近残基 ${resLabel(residues, residues[mk])} ${m.toFixed(1)} Å` : ''}`
+                  })()
+                : hover != null && residues[hover]
+                  ? (colorMode === 'interface' && interfaceErr
+                      ? `${resLabel(residues, residues[hover])} · 界面误差 ${interfaceErr[hover].toFixed(2)} Å`
+                      : `${resLabel(residues, residues[hover])} · pLDDT ${residues[hover].b.toFixed(1)}`) +
+                    (ligandDist && ligandDist[hover] <= 6 ? ` · 距配体 ${ligandDist[hover].toFixed(1)} Å` : '')
+                  : selected != null && residues[selected]
+                    ? `已选 ${resLabel(residues, residues[selected])} · pLDDT ${residues[selected].b.toFixed(1)}（点击曲线取消）` +
+                      (ligandDist && ligandDist[selected] <= 6 ? ` · 距配体 ${ligandDist[selected].toFixed(1)} Å` : '')
+                    : '',
             ),
           ),
           h(
