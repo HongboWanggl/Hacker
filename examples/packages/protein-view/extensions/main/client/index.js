@@ -1281,6 +1281,73 @@ function exportCurvePng(e, name, residues) {
   } catch {}
 }
 
+// PAE heatmap export: title + heatmap + legend composed on white, matching
+// the other panel exports (paper/group-meeting ready).
+function exportPaePng(e, name, n, bytes, chainSizes) {
+  const mod = e.currentTarget.closest('.pv-pae')
+  const canvas = mod?.querySelector('canvas.pv-pae-canvas')
+  if (!canvas || typeof canvas.toDataURL !== 'function') return
+  try {
+    const s = 2 // supersample for crisp text/legend
+    const pad = 12 * s
+    const titleH = 22 * s
+    const legendH = 18 * s
+    const c = document.createElement('canvas')
+    c.width = Math.max(canvas.width + pad * 2, pad * 2 + 26 * s + 160 * s + 200 * s)
+    c.height = canvas.height + pad * 2 + titleH + legendH
+    const g = c.getContext('2d')
+    if (!g) return
+    g.fillStyle = '#ffffff'
+    g.fillRect(0, 0, c.width, c.height)
+    g.fillStyle = '#1f2430'
+    g.font = `${13 * s}px system-ui, sans-serif`
+    g.textBaseline = 'middle'
+    g.fillText(`PAE 误差热图 · ${n}×${n}（0–32 Å）`, pad, pad + titleH / 2)
+    g.drawImage(canvas, pad, pad + titleH)
+    // legend row: "0 Å" [gradient bar] "32 Å" (chain sizes noted when present)
+    const barW = 160 * s
+    const barH = 8 * s
+    const barY = pad + titleH + canvas.height + (legendH - barH) / 2
+    const grad = g.createLinearGradient(pad, 0, pad + barW, 0)
+    for (const [t, rgb] of [[0, '#440154'], [0.25, '#3b528b'], [0.5, '#21918c'], [0.75, '#5ec962'], [1, '#fde725']]) {
+      grad.addColorStop(t, rgb)
+    }
+    g.fillStyle = '#6b7280'
+    g.font = `${10 * s}px system-ui, sans-serif`
+    g.textBaseline = 'middle'
+    g.fillText('0 Å', pad, barY + barH / 2)
+    const barX = pad + 26 * s
+    g.fillStyle = grad
+    g.fillRect(barX, barY, barW, barH)
+    g.fillStyle = '#6b7280'
+    g.fillText('32 Å', barX + barW + 6 * s, barY + barH / 2)
+    if (chainSizes?.length > 1) {
+      g.fillText(`虚线为链边界（${chainSizes.join(' / ')} 残基）`, barX + barW + 48 * s, barY + barH / 2)
+    }
+    downloadCanvas(c, name)
+  } catch {}
+}
+
+// Raw pair errors as CSV (chain-prefixed 1-based indices, long format) —
+// downstream analysis in Excel/Python without re-parsing the npz.
+function exportPaeCsv(name, n, bytes, residues) {
+  try {
+    const label = (k) => (residues?.[k] ? `${residues[k].chain}:${residues[k].i}` : String(k + 1))
+    const rows = ['residue_i,residue_j,error_a']
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        rows.push(`${label(i)},${label(j)},${((bytes[i * n + j] / 255) * 32).toFixed(3)}`)
+      }
+    }
+    const url = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 4000)
+  } catch {}
+}
+
 // Single-model per-residue CSV: residue, aa, pLDDT (chain-prefixed keys on
 // complexes) — the raw numbers behind the confidence curve.
 function exportResiduesCsv(name, residues) {
@@ -1964,7 +2031,7 @@ function viridisRgb(t) {
   ]
 }
 
-function PaesModule({ paePath, residues, services, onHover }) {
+function PaesModule({ paePath, residues, services, onHover, name = 'structure' }) {
   const [pae, setPae] = useState(null) // { n, bytes }
   const [error, setError] = useState(null)
   const [hoverCell, setHoverCell] = useState(null) // { i, j } residue indices
@@ -2083,10 +2150,24 @@ function PaesModule({ paePath, residues, services, onHover }) {
       h('div', { className: 'pv-section-title' }, `PAE 误差热图 · ${n}×${n}`),
       h(
         'div',
-        { className: 'pv-pae-legend' },
-        h('span', null, '0 Å'),
-        h('div', { className: 'pv-pae-legendbar' }),
-        h('span', null, '32 Å'),
+        { className: 'pv-toolbar-controls' },
+        h(
+          'div',
+          { className: 'pv-pae-legend' },
+          h('span', null, '0 Å'),
+          h('div', { className: 'pv-pae-legendbar' }),
+          h('span', null, '32 Å'),
+        ),
+        h(
+          'button',
+          { className: 'pv-export', onClick: (e) => exportPaePng(e, `${name}.pae.png`, n, pae.bytes, chainSizes) },
+          '导出 PNG',
+        ),
+        h(
+          'button',
+          { className: 'pv-export', onClick: () => exportPaeCsv(`${name}.pae.csv`, n, pae.bytes, residues) },
+          '导出 CSV',
+        ),
       ),
     ),
     h(
@@ -2433,7 +2514,7 @@ function ProteinToolView({ owner, services }) {
               ),
         ),
     report.paePath
-      ? h(PaesModule, { paePath: report.paePath, residues, services, onHover: setHover })
+      ? h(PaesModule, { paePath: report.paePath, residues, services, onHover: setHover, name: pdbName })
       : null,
   )
 }
