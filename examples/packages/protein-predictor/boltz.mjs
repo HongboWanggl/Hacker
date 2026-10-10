@@ -291,7 +291,9 @@ export const predictComplex = {
           const metrics = {
             ...(pct(out.conf?.ptm) !== undefined ? { ptm: pct(out.conf.ptm) } : {}),
             ...(pct(out.conf?.iptm) !== undefined ? { iptm: pct(out.conf.iptm) } : {}),
-            ...(pct(out.conf?.ligand_iptm) !== undefined ? { ligandIptm: pct(out.conf.ligand_iptm) } : {}),
+            // A ligand-free run still reports ligand_iptm: 0.0 — surfacing it
+            // would render a meaningless "ligand ipTM 0" chip.
+            ...(smiles && pct(out.conf?.ligand_iptm) !== undefined ? { ligandIptm: pct(out.conf.ligand_iptm) } : {}),
             ...(pct(out.conf?.protein_iptm) !== undefined ? { proteinIptm: pct(out.conf.protein_iptm) } : {}),
             ...(pct(out.aff?.affinity_probability_binary ?? out.aff?.affinity_probability) !== undefined
               ? { bindingConfidence: pct(out.aff.affinity_probability_binary ?? out.aff.affinity_probability) }

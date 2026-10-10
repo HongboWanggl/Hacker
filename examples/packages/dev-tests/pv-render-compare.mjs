@@ -63,7 +63,7 @@ const complexReg = regs.find((r) => r.def.key === 'predict_complex')
 const complexReport = {
   predictionId: 'pred_123', savedTo: 'structures/complex_boltz.pdb', chains: 2, hasLigand: true, residues: 210,
   structureConfidence: 84.2, ptm: 88.1, iptm: 82.5, ligandIptm: 79.9, proteinIptm: 83.4, bindingConfidence: 87.3,
-  verdict: 'predicted to bind with high confidence',
+  verdict: 'predicted to bind with high confidence', engine: 'boltz2-local', runtimeSec: 73,
 }
 const chtml = renderToString(React.createElement(complexReg.comp, { owner: { callId: 't1-x', toolName: 'predict_complex', block: { resultPreview: JSON.stringify(complexReport) } } }))
 const cchecks = [
@@ -71,11 +71,21 @@ const cchecks = [
   ['complex verdict', chtml.includes('预测高置信结合')],
   ['chains + ligand', chtml.includes('2 链 + 配体')],
   ['metric chips', chtml.includes('ipTM') && chtml.includes('82.5')],
+  ['local engine badge with runtime', chtml.includes('pv-engine-badge') && chtml.includes('本机引擎') && chtml.includes('73 秒')],
   ['no pLDDT band bar', !chtml.includes('pLDDT 置信度分布')],
   // renderToString does not run effects, so Compare3D stays in its loading state.
   ['3D deferred to client (SSR shows loading)', !chtml.includes('pv-3d-col') && chtml.includes('加载结构…')],
 ]
 for (const [name, ok] of cchecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
+// Ligand-free runs report ligand_iptm as 0.0 — the chip must stay hidden.
+const noligHtml = renderToString(
+  React.createElement(
+    complexReg.comp,
+    { owner: { callId: 't1-y', toolName: 'predict_complex', block: { resultPreview: JSON.stringify({ ...complexReport, hasLigand: false, ligandIptm: 0 }) } } },
+  ),
+)
+console.log(noligHtml.includes('ligand ipTM') ? 'FAIL' : 'ok ', 'no ligand chip when ligand-free')
+if (noligHtml.includes('ligand ipTM')) failed++
 // batch_predict card
 const batchReg = regs.find((r) => r.def.key === 'batch_predict')
 const batchReport = {

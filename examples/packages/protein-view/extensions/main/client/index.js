@@ -222,6 +222,17 @@ function ConfidenceSummary({ report }) {
         report.chains
           ? h('span', { className: 'pv-residue-count' }, ` · ${report.chains} 链${report.hasLigand ? ' + 配体' : ''}`)
           : null,
+        // Local open-source runs are tagged by the tool; surface the provenance
+        // (and runtime, which explains why the panel took minutes to appear).
+        report.engine === 'boltz2-local' &&
+          h(
+            'span',
+            {
+              className: 'pv-engine-badge',
+              title: '本机 boltz-community 开源权重（MPS 加速）；配 API key 可改走云端 API',
+            },
+            `本机引擎${report.runtimeSec != null ? ` · ${report.runtimeSec >= 90 ? `${Math.round(report.runtimeSec / 60)} 分` : `${report.runtimeSec} 秒`}` : ''}`,
+          ),
       ),
       !isComplex &&
         h(
@@ -261,7 +272,8 @@ function complexMetricChips(report) {
   const items = [
     report.ptm != null && ['pTM', report.ptm],
     report.iptm != null && ['ipTM', report.iptm],
-    report.ligandIptm != null && ['ligand ipTM', report.ligandIptm],
+    // Ligand-free runs report ligand_iptm as 0.0 — that chip would be noise.
+    report.hasLigand && report.ligandIptm != null && ['ligand ipTM', report.ligandIptm],
     report.proteinIptm != null && ['protein ipTM', report.proteinIptm],
     report.bindingConfidence != null && ['结合置信度', report.bindingConfidence],
   ].filter(Boolean)

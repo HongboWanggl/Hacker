@@ -54,6 +54,16 @@
 .pv-summary-main { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .pv-verdict { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .pv-residue-count { font-weight: 400; color: var(--pv-muted); }
+.pv-engine-badge {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--pv-muted);
+  border: 1px solid var(--pv-border, rgba(128, 128, 128, 0.35));
+  border-radius: 999px;
+  padding: 1px 8px;
+  margin-left: 2px;
+  white-space: nowrap;
+}
 .pv-verdict-dot { width: 8px; height: 8px; border-radius: 50%; }
 .pv-verdict-dot--high { background: #0053d6; }
 .pv-verdict-dot--ok { background: #3aa0dd; }

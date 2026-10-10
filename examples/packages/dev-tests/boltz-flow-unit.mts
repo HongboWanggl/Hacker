@@ -195,6 +195,13 @@ echo '{"affinity_probability_binary":0.91,"affinity_pred_value":-6.2}' > "$OUT/p
   ok('local mode verdict from affinity', r.verdict === 'predicted to bind with high confidence')
   ok('local mode residue count', r.residues === 4)
   ok('local mode flags ligand + chains', r.chains === 2 && r.hasLigand === true)
+  // Ligand-free local run: boltz still reports ligand_iptm 0.0 — it must not surface.
+  const res2 = await spec.execute(
+    { sequences: 'MKTAYIAKQRQISFVKSHFSRQ,EIAKQGQVTMVIKKSMLEK', name: 'local bare' },
+    tctx,
+  )
+  const r2 = res2.structured ?? {}
+  ok('ligand-free local run hides ligandIptm', !res2.isError && r2.hasLigand === false && r2.ligandIptm === undefined, JSON.stringify(r2).slice(0, 160))
   delete process.env.BOLTZ_LOCAL_BIN
 }
 
