@@ -1976,14 +1976,26 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
   const view = useRef({ yaw: -0.6, pitch: 0.35, zoom: 1, dragging: false, lastX: 0, lastY: 0, vx: 0, vy: 0, lastInteract: 0 })
   const frame = useRef(0)
   const wake = useRef(0)
+  // Maximized mode: the wrap goes fixed over the whole viewport (works inside
+  // the toolview iframe where the fullscreen API is unavailable).
+  const [maxed, setMaxed] = useState(false)
 
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
-    const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: 340 }))
+    const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: maxed ? window.innerHeight - 16 : 340 }))
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [maxed])
+
+  useEffect(() => {
+    if (!maxed) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') setMaxed(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [maxed])
 
   // Geometry memo: centered coordinates + bonds.
   const geo = useMemo(() => {
@@ -2318,7 +2330,7 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
 
   return h(
     'div',
-    { className: 'pv-3d-wrap', ref: wrapRef },
+    { className: `pv-3d-wrap${maxed ? ' pv-3d-wrap--max' : ''}`, ref: wrapRef },
     h('canvas', {
       ref: canvasRef,
       className: 'pv-3d',
@@ -2393,6 +2405,15 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       )
     })(),
     h('div', { className: 'pv-3d-hint' }, hintText ?? '拖拽旋转 · 滚轮缩放 · 双击复位'),
+    h(
+      'button',
+      {
+        className: 'pv-3d-maxbtn',
+        title: maxed ? '退出全屏（Esc）' : '全屏显示 3D 视图（Esc 退出）',
+        onClick: () => setMaxed((m) => !m),
+      },
+      maxed ? '⤡ 退出全屏' : '⤢ 全屏',
+    ),
   )
 }
 

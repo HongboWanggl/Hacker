@@ -95,5 +95,21 @@ if (curveBtn) {
   curveChecks.push(['curve composite carries pLDDT note', texts3.some((t) => String(t).includes('pLDDT 置信度'))])
 }
 for (const [name, ok] of curveChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
+
+// 3D maximize toggle: button pins the wrap fixed over the viewport; Esc exits.
+const maxChecks = []
+const wrap = container.querySelector('.pv-3d-wrap')
+const maxBtn = container.querySelector('.pv-3d-maxbtn')
+maxChecks.push(['maximize button rendered', !!maxBtn && (maxBtn.textContent ?? '').includes('全屏')])
+if (maxBtn && wrap) {
+  maxBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 300))
+  maxChecks.push(['wrap gains maximized class', wrap.className.includes('pv-3d-wrap--max')])
+  maxChecks.push(['button flips to exit label', (maxBtn.textContent ?? '').includes('退出全屏')])
+  win.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  await new Promise((r) => setTimeout(r, 300))
+  maxChecks.push(['Escape exits maximized mode', !wrap.className.includes('pv-3d-wrap--max')])
+}
+for (const [name, ok] of maxChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 process.exit(failed ? 1 : 0)
 console.log('LEGEND TESTS DONE')

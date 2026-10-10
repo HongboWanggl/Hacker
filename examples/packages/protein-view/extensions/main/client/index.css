@@ -259,6 +259,32 @@ button.pv-delta-bar--neg:hover { background: #ff9d70; }
 }
 .pv-3d:active { cursor: grabbing; }
 .pv-3d-wrap { position: relative; }
+/* Maximized 3D view: fixed overlay over the whole frame (Esc or the button
+   exits). Works inside the toolview iframe without the fullscreen API. */
+.pv-3d-wrap--max {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #0e1420;
+  padding: 8px;
+  box-sizing: border-box;
+}
+.pv-3d-maxbtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  background: rgb(14 20 32 / 72%);
+  color: #dfe5ee;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.pv-3d-maxbtn:hover { background: rgb(34 44 64 / 90%); }
 /* Floating cursor readout over the 3D view (same skin as the curve tooltip) */
 .pv-3d-tip {
   position: absolute;
