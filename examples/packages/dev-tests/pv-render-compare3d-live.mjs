@@ -57,6 +57,30 @@ const checks = [
 let failed = 0
 for (const [name, ok] of checks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 
+// strip mode toggle: switch to the Cα-distance lens — legend swaps, tiles
+// recolor to the teal end of the distance ramp, tooltips carry the distance.
+const modeBtns = [...container.querySelectorAll('.pv-stripmodes button')]
+const distBtn = modeBtns.find((b) => (b.textContent ?? '').includes('Cα 偏差'))
+checks.push(['strip mode toggle rendered (two chips)', modeBtns.length === 2 && modeBtns[0].textContent.includes('置信度差异')])
+checks.push(['Cα-distance chip present', !!distBtn])
+if (distBtn) {
+  // The fixture's ghost is the prediction rotated away, so distances land
+  // mid-ramp — assert recoloring as "backgrounds changed", not exact values.
+  const bgBefore = [...container.querySelectorAll('.pv-seq-tile')].map((t) => t.getAttribute('style') ?? '')
+  distBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 250))
+  const html2 = container.innerHTML
+  const bgAfter = [...container.querySelectorAll('.pv-seq-tile')].map((t) => t.getAttribute('style') ?? '')
+  const changed = bgBefore.filter((s, i) => s !== bgAfter[i]).length
+  checks.push(['distance legend swaps in', html2.includes('≥5 Å') && html2.includes('Cα 偏差')])
+  checks.push(['tiles recolor to distance ramp', changed >= 5])
+  checks.push(['tile tooltip carries Cα distance', /Cα \d+\.\d+ Å/.test(html2)])
+  // back to the default lens so later assertions see the original strip
+  modeBtns[0].dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 250))
+}
+for (const [name, ok] of checks.slice(-((modeBtns.length === 2 && distBtn) ? 5 : 2))) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
+
 // chip → strip sync: clicking the largest-delta chip outlines that residue's tile
 const chip = [...container.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Δ'))
 if (chip) {

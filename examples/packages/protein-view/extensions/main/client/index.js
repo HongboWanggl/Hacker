@@ -98,6 +98,15 @@ function deltaColor(d) {
   const to = [255, 125, 69]
   return `rgb(${from.map((v, i) => Math.round(v + (to[i] - v) * a)).join(',')})`
 }
+// Structural-deviation scale for the compare strip's distance mode: teal at
+// ≤0.5 Å (essentially identical) → amber ~2 Å → red at ≥5 Å. The 0.55 exponent
+// bends the ramp early so sub-Å noise stays calm while real deviations pop.
+function distColor(d) {
+  const a = Math.min(Math.max(d, 0) / 5, 1) ** 0.55
+  const from = [64, 180, 160]
+  const to = [235, 80, 60]
+  return `rgb(${from.map((v, i) => Math.round(v + (to[i] - v) * a)).join(',')})`
+}
 const isMultiChain = (residues) => Array.isArray(residues) && residues.length > 1 && residues.some((r) => r.chain && r.chain !== residues[0].chain)
 
 function ChainLegend({ residues }) {
@@ -350,6 +359,22 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
   // residue number → reference pLDDT, for the divergence strip coloring
   const gmap = useMemo(() => new Map((ghostResidues ?? []).map((g) => [g.i, g.b])), [ghostResidues])
 
+  // Strip mode: confidence divergence (|ΔpLDDT|) or structural deviation
+  // (Cα distance after superposition, matched chain+residue number).
+  const [stripMode, setStripMode] = useState('plddt')
+  const distMap = useMemo(() => {
+    if (!ghostResidues?.length || !pred?.residues?.length) return null
+    const gm = new Map(ghostResidues.map((g) => [`${g.chain ?? 'A'}:${g.i}`, g]))
+    const m = new Map()
+    for (const r of pred.residues) {
+      const g = gm.get(`${r.chain ?? 'A'}:${r.i}`)
+      if (!g) continue
+      const d = Math.hypot(r.x - g.x, r.y - g.y, r.z - g.z)
+      if (Number.isFinite(d)) m.set(r.i, d)
+    }
+    return m
+  }, [ghostResidues, pred])
+
   if (!pred) {
     return h(
       'div',
@@ -367,6 +392,8 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
     const sel = selIdx != null && selIdx >= 0 && hover == null
     hoverLine = `${sel ? '已选 ' : ''}${resLabel(pred.residues, r)} · ${pw ? pw[0] : '预测'} pLDDT ${r.b.toFixed(1)}`
     if (g) hoverLine += ` · ${pw ? pw[1] : '参考'} ${g.b.toFixed(1)} · Δ ${(r.b - g.b).toFixed(1)}`
+    const dist = distMap?.get(r.i)
+    if (dist != null) hoverLine += ` · Cα 偏差 ${dist.toFixed(2)} Å`
   }
   return h(
     'div',
@@ -404,36 +431,83 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
       h('div', { className: 'pv-hoverline' }, hoverLine),
       ),
     ),
-    // Divergence strip: pred residues colored by |ΔpLDDT| vs the reference —
-    // hot spots read as a horizontal heat map aligned with the sequence.
+    // Divergence strip with two lenses over the same alignment: confidence
+    // divergence (|ΔpLDDT|) or structural deviation (Cα distance after
+    // superposition) — hot spots read as a horizontal heat map aligned with
+    // the sequence. The toggle keeps vertical space at one strip.
     ghostResidues
-      ? h(SequenceStrip, {
-          residues: pred.residues,
-          hover,
-          onHover: setHover,
-          selected: selIdx != null && selIdx >= 0 ? selIdx : undefined,
-          onSelect: (idx) => {
-            const r = pred.residues[idx]
-            if (r) onPickRes?.(r.i)
-          },
-          colorOf: (r) => (gmap.has(r.i) ? deltaColor(r.b - gmap.get(r.i)) : '#b6b6b6'),
-          titleOf: (r) => {
-            const g = gmap.get(r.i)
-            const d = g != null ? ` · ${pw ? pw[1] : '参考'} ${g.toFixed(1)} · Δ ${(r.b - g).toFixed(1)}` : ' · 参考无此残基'
-            return `${resLabel(pred.residues, r)} · ${pw ? pw[0] : '预测'} ${r.b.toFixed(1)}${d}`
-          },
-        })
+      ? h(
+          'div',
+          { className: 'pv-stripwrap' },
+          h(
+            'div',
+            { className: 'pv-stripmodes' },
+            h(
+              'button',
+              {
+                className: `pv-chip${stripMode === 'plddt' ? ' pv-chip--active' : ''}`,
+                onClick: () => setStripMode('plddt'),
+                title: '按置信度差异（|ΔpLDDT|）着色',
+              },
+              '置信度差异',
+            ),
+            distMap && distMap.size
+              ? h(
+                  'button',
+                  {
+                    className: `pv-chip${stripMode === 'dist' ? ' pv-chip--active' : ''}`,
+                    onClick: () => setStripMode('dist'),
+                    title: '按叠合后 Cα 偏差（Å）着色——结构差异热点',
+                  },
+                  'Cα 偏差',
+                )
+              : null,
+          ),
+          h(SequenceStrip, {
+            residues: pred.residues,
+            hover,
+            onHover: setHover,
+            selected: selIdx != null && selIdx >= 0 ? selIdx : undefined,
+            onSelect: (idx) => {
+              const r = pred.residues[idx]
+              if (r) onPickRes?.(r.i)
+            },
+            colorOf:
+              stripMode === 'dist'
+                ? (r) => (distMap.has(r.i) ? distColor(distMap.get(r.i)) : '#b6b6b6')
+                : (r) => (gmap.has(r.i) ? deltaColor(r.b - gmap.get(r.i)) : '#b6b6b6'),
+            titleOf: (r) => {
+              const g = gmap.get(r.i)
+              const dist = distMap?.get(r.i)
+              const ds = dist != null ? ` · Cα ${dist.toFixed(2)} Å` : ''
+              const dd =
+                g != null ? ` · ${pw ? pw[1] : '参考'} ${g.toFixed(1)} · Δ ${(r.b - g).toFixed(1)}` : ' · 参考无此残基'
+              return `${resLabel(pred.residues, r)} · ${pw ? pw[0] : '预测'} ${r.b.toFixed(1)}${stripMode === 'dist' ? ds : dd + ds}`
+            },
+          }),
+          stripMode === 'dist'
+            ? h(
+                'div',
+                { className: 'pv-divlegend' },
+                h('span', null, 'Cα 偏差'),
+                h('span', {
+                  className: 'pv-distlegend-bar',
+                  style: { background: 'linear-gradient(90deg, rgb(64,180,160), rgb(240,170,70) 45%, rgb(235,80,60))' },
+                }),
+                h('span', null, '0.5 · 2 · ≥5 Å'),
+              )
+            : h(
+                'div',
+                { className: 'pv-divlegend' },
+                h('span', null, '|ΔpLDDT|'),
+                h('span', {
+                  className: 'pv-divlegend-bar',
+                  style: { background: 'linear-gradient(90deg, rgb(101,203,243), rgb(255,125,69))' },
+                }),
+                h('span', null, '0 · 15 · ≥30'),
+              ),
+        )
       : null,
-    h(
-      'div',
-      { className: 'pv-divlegend' },
-      h('span', null, '|ΔpLDDT|'),
-      h('span', {
-        className: 'pv-divlegend-bar',
-        style: { background: 'linear-gradient(90deg, rgb(101,203,243), rgb(255,125,69))' },
-      }),
-      h('span', null, '0 · 15 · ≥30'),
-    ),
   )
 }
 
