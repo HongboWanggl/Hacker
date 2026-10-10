@@ -583,6 +583,17 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
         ligand: ligandInfo,
         showLigand,
         hintText: `拖拽旋转 · 滚轮缩放 · 双击复位 · ${stripMode === 'dist' ? '参考链按 Cα 偏差着色，灰=无匹配' : `灰色为 ${pw ? pw[1] : 'AlphaFold 参考模型'}`}`,
+        onExport3D: (e) =>
+          exportComparePng(
+            e,
+            `${(predPath ?? 'compare').split('/').pop().replace(/\.pdb$/i, '')}.${stripMode === 'dist' ? 'cadist' : 'plddt'}.png`,
+            pred.residues,
+            stripMode,
+            distMap,
+            gmap,
+            ligandInfo,
+            showLigand,
+          ),
       }),
       isMultiChain(pred.residues) ? h(ChainLegend, { residues: pred.residues }) : null,
       !isMultiChain(pred.residues) ? h(PlddtLegend) : null,
@@ -915,6 +926,7 @@ function BatchRowDetail({ job, services }) {
           },
           colorMode: isMultiChain(residues) ? 'chain' : 'plddt',
           autoSpin: false,
+          onExport3D: (e) => export3DPng(e, `${job.accession}.3d.png`, residues, isMultiChain(residues) ? 'chain' : 'plddt'),
         }),
         isMultiChain(residues) ? h(ChainLegend, { residues }) : null,
         !isMultiChain(residues) ? h(PlddtLegend) : null,
@@ -1965,7 +1977,7 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
 const EL_COLORS = { C: [138, 147, 158], N: [88, 132, 220], O: [214, 98, 98], S: [219, 187, 70], P: [226, 148, 70], F: [140, 200, 170], CL: [140, 200, 150], BR: [160, 110, 80] }
 const ligandColor = (el) => EL_COLORS[el] ?? [154, 165, 181]
 
-function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, autoSpin, interfaceErr, ligand, showLigand = true, ghost, ghostColorOf, hintText, hiddenChains }) {
+function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, autoSpin, interfaceErr, ligand, showLigand = true, ghost, ghostColorOf, hintText, hiddenChains, onExport3D }) {
   // Chain visibility toggle: hidden residues keep their indices (curve/strip
   // cross-linking stays aligned) but are skipped in drawing and hit-testing.
   const isHidden = useCallback((k) => !!(hiddenChains?.size && hiddenChains.has(residues?.[k]?.chain)), [hiddenChains, residues])
@@ -2423,13 +2435,28 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
         )
       : null,
     h(
-      'button',
-      {
-        className: 'pv-3d-maxbtn',
-        title: maxed ? '退出全屏（Esc）' : '全屏显示 3D 视图（Esc 退出）',
-        onClick: () => setMaxed((m) => !m),
-      },
-      maxed ? '⤡ 退出全屏' : '⤢ 全屏',
+      'div',
+      { className: 'pv-3d-maxactions' },
+      maxed && onExport3D
+        ? h(
+            'button',
+            {
+              className: 'pv-3d-maxbtn',
+              title: '导出当前 3D 视图 PNG（含图例合成）',
+              onClick: (e) => onExport3D(e),
+            },
+            '导出 PNG',
+          )
+        : null,
+      h(
+        'button',
+        {
+          className: 'pv-3d-maxbtn',
+          title: maxed ? '退出全屏（Esc）' : '全屏显示 3D 视图（Esc 退出）',
+          onClick: () => setMaxed((m) => !m),
+        },
+        maxed ? '⤡ 退出全屏' : '⤢ 全屏',
+      ),
     ),
   )
 }
@@ -3135,6 +3162,7 @@ function ProteinToolView({ owner, services }) {
               ligand: ligandInfo,
               showLigand,
               hiddenChains,
+              onExport3D: (e) => export3DPng(e, `${pdbName}.3d.png`, residues, colorMode, ligandInfo, showLigand),
             }),
             colorMode === 'chain' ? h(ChainLegend, { residues, hidden: hiddenChains, onToggle: toggleChain }) : null,
             colorMode === 'interface'

@@ -110,6 +110,16 @@ if (maxBtn && wrap) {
   // colorMode was left on rainbow by the earlier test — the overlay must
   // mirror the active lens (N→C gradient bar), not the default bands.
   maxChecks.push(['maximized legend overlay mirrors active coloring', !!maxLegend && (maxLegend.querySelectorAll('.pv-pae-legendbar') ?? []).length >= 1])
+  // export from the overlay: clicking 导出 PNG must still composite the figure
+  const maxExport = [...container.querySelectorAll('.pv-3d-maxbtn')].find((b) => (b.textContent ?? '').trim() === '导出 PNG')
+  maxChecks.push(['maximized export button rendered', !!maxExport])
+  if (maxExport) {
+    const before4 = calls.length
+    maxExport.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 200))
+    const texts4 = calls.slice(before4).filter((c) => c[0] === 'fillText').map((c) => c[1])
+    maxChecks.push(['maximized export composites figure', texts4.some((t) => String(t).includes('残基序号 N→C'))])
+  }
   win.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
   await new Promise((r) => setTimeout(r, 300))
   maxChecks.push(['Escape exits maximized mode', !wrap.className.includes('pv-3d-wrap--max')])
