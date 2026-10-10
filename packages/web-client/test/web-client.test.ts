@@ -150,6 +150,40 @@ describe('clientModule fiber 绑定', () => {
     await fiber.dispose()
   })
 
+  it('宿主重挂载折叠共享子槽位后，重声明时自动补挂插件注册项', async () => {
+    const { ctx, registry } = await makeRegistry()
+    // Host-owned parent entry that declares a shared child slot, like the transcript does
+    // for `tool.call.toolview`. Disposing it collapses the child and wipes module entries.
+    const children = { 'host-child': { kind: 'keyed', scope: 'root' } } as const
+    const mountHost = () =>
+      registry.register(
+        { name: 'workbench.panel', id: 'host-parent', owner: 'host', children },
+        () => null,
+      )
+    const removeHost = mountHost()
+    const mod = {
+      apply(cctx: ClientContext) {
+        cctx.slots.register({ name: 'host-child', key: 'bash', id: 'tv-1' }, () => null)
+      },
+    }
+    const fiber = ctx.plugin(clientModule(mod), { packageId: 'pkg-replay', revision: 'r1' })
+    await fiber
+    expect(registry.entries('host-child')).toHaveLength(1)
+    // Host remount: teardown collapses the child slot, wiping the module's entry…
+    removeHost()
+    expect(registry.spec('host-child')).toBeUndefined()
+    expect(registry.entries('host-child')).toHaveLength(0)
+    // …and the remount re-declares it; the module's registration must come back.
+    const removeHost2 = mountHost()
+    expect(registry.spec('host-child')).toBeDefined()
+    expect(registry.entries('host-child')).toHaveLength(1)
+    expect(registry.entries('host-child')[0]?.owner).toBe('pkg-replay')
+    // Module teardown must not resurrect anything.
+    await fiber.dispose()
+    expect(registry.entries('host-child')).toHaveLength(0)
+    removeHost2()
+  })
+
   it('向插件注入以宿主 SDK 为原型、但带模块私有服务门面的 ctx.agnes', async () => {
     const client = { sessions: { get: () => undefined } } as never
     const { ctx } = await makeRegistry(client)

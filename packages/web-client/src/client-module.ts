@@ -156,6 +156,61 @@ function createFiberBoundRegistry(
   configCatalogVersion: string | undefined,
 ): SlotRegistry {
   const bound = Object.create(registry) as SlotRegistry
+  // Host-owned parent entries (e.g. the transcript) can remount on session switches and
+  // collapse their shared child slots, wiping every entry in them — including ones this
+  // module registered. Track live registrations per slot and re-assert them when the slot
+  // is re-declared; replaying is keyed like the kernel's cells (key first, then id) so it
+  // stays idempotent. Disposing the fiber (module disabled/unloaded) clears the tracking,
+  // so nothing resurrects after teardown.
+  const tracked = new Map<
+    string,
+    { name: string; registration: Record<string, unknown>; component: unknown; off: () => void }
+  >()
+  const watched = new Map<string, () => void>()
+  const replayTracked = (name: string): void => {
+    if (!registry.spec(name)) return
+    for (const [trackKey, record] of [...tracked]) {
+      if (record.name !== name) continue
+      const cellKey = (entry: { name?: string; options?: { key?: string; id?: string } }) =>
+        `${entry.name ?? name}\u0000${entry.options?.key ?? ''}\u0000${entry.options?.id ?? ''}`
+      const exists = registry
+        .entries(name)
+        .some((entry) => cellKey(entry as never) === trackKey)
+      if (exists) continue
+      record.off()
+      const off = registry.register(record.registration as never, record.component)
+      record.off = off
+      fiberCtx.effect(() => off)
+    }
+  }
+  const watch = (name: string): void => {
+    if (watched.has(name)) return
+    try {
+      const stop = registry.subscribeDeclaration(name, () => replayTracked(name))
+      watched.set(name, stop)
+      fiberCtx.effect(() => () => {
+        watched.delete(name)
+        stop()
+      })
+    } catch {
+      // A registry without declaration subscriptions simply never replays.
+    }
+  }
+  const trackOff = (
+    name: string,
+    registration: Record<string, unknown>,
+    component: unknown,
+    off: () => void,
+  ): (() => void) => {
+    const trackKey = `${name}\u0000${registration.key ?? ''}\u0000${registration.id ?? ''}`
+    const record = { name, registration, component, off }
+    tracked.set(trackKey, record)
+    watch(name)
+    return () => {
+      tracked.delete(trackKey)
+      off()
+    }
+  }
   bound.register = ((
     nameOrOptions: SlotName | Record<string, unknown>,
     component: unknown,
@@ -180,7 +235,7 @@ function createFiberBoundRegistry(
       throw new Error(`client module ${owner} registered undeclared slot ${String(requestedName)}`)
     const off = registry.register(registration as never, component)
     fiberCtx.effect(() => off)
-    return off
+    return trackOff(String(requestedName), registration, component, off)
   }) as SlotRegistry['register']
   bound.inject = ((name: string, factory: () => unknown) => {
     const off = registry.inject(name, factory)
