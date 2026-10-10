@@ -1237,30 +1237,36 @@ function exportCanvasPng(e, canvasClass, name) {
   } catch {}
 }
 
-// 3D PNG export composites the chain legend for multi-chain complexes, with
-// the legend strip extending the 3D backdrop gradient so the figure is seamless.
-function export3DPng(e, name, residues, colorMode) {
+// 3D PNG export composites the chain legend for multi-chain complexes and the
+// ligand element key when a pose is shown, with the legend strip extending the
+// 3D backdrop gradient so the figure is seamless.
+function export3DPng(e, name, residues, colorMode, ligandInfo = null, showLigand = false) {
   const col = e.currentTarget.closest('.pv-3d-col')
   const canvas = col?.querySelector('canvas.pv-3d')
   if (!canvas || typeof canvas.toDataURL !== 'function') return
   try {
-    if (colorMode !== 'chain' || !isMultiChain(residues)) {
+    const withLigand = !!(ligandInfo && showLigand)
+    const multi = colorMode === 'chain' && isMultiChain(residues)
+    if (!multi && !withLigand) {
       downloadCanvas(canvas, name)
       return
     }
     const s = canvas.width / (canvas.clientWidth || canvas.width) || 1
     const m = new Map()
-    for (const r of residues) {
-      if (!m.has(r.chain)) m.set(r.chain, { chain: r.chain, n: 0, sum: 0 })
-      const en = m.get(r.chain)
-      en.n++
-      en.sum += r.b
+    if (multi) {
+      for (const r of residues) {
+        if (!m.has(r.chain)) m.set(r.chain, { chain: r.chain, n: 0, sum: 0 })
+        const en = m.get(r.chain)
+        en.n++
+        en.sum += r.b
+      }
     }
     const stats = [...m.values()]
     const c = document.createElement('canvas')
     const rowH = 18 * s
+    const rows = stats.length + (withLigand ? 1 : 0)
     c.width = canvas.width
-    c.height = Math.round(canvas.height + 8 * s + stats.length * rowH)
+    c.height = Math.round(canvas.height + 8 * s + rows * rowH)
     const g = c.getContext('2d')
     g.drawImage(canvas, 0, 0)
     // legend band continues the backdrop gradient (#0e1420 → #141c2b)
@@ -1271,13 +1277,30 @@ function export3DPng(e, name, residues, colorMode) {
     g.fillRect(0, canvas.height, c.width, c.height - canvas.height)
     g.font = `${11 * s}px ui-sans-serif, system-ui`
     g.textBaseline = 'middle'
+    let row = 0
     stats.forEach((st, k) => {
-      const y = canvas.height + 8 * s + k * rowH + rowH / 2
+      const y = canvas.height + 8 * s + row * rowH + rowH / 2
+      row++
       g.fillStyle = CHAIN_COLORS[k % CHAIN_COLORS.length]
       g.fillRect(6 * s, y - 5 * s, 10 * s, 10 * s)
       g.fillStyle = 'rgba(255,255,255,0.9)'
       g.fillText(`链 ${st.chain} · ${st.n} aa · 均值 pLDDT ${(st.sum / st.n).toFixed(1)}`, 22 * s, y)
     })
+    if (withLigand) {
+      const y = canvas.height + 8 * s + row * rowH + rowH / 2
+      let x = 6 * s
+      for (const el of ['C', 'N', 'O', 'S', 'P']) {
+        const rgb = ligandColor(el)
+        g.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`
+        g.beginPath()
+        g.arc(x + 5 * s, y, 5 * s, 0, Math.PI * 2)
+        g.fill()
+        g.fillStyle = 'rgba(255,255,255,0.9)'
+        g.fillText(el, x + 13 * s, y)
+        x += 34 * s
+      }
+      g.fillText('配体按元素着色 · 口袋虚线 = 5 Å 内接触', x + 8 * s, y)
+    }
     downloadCanvas(c, name)
   } catch {}
 }
@@ -2853,7 +2876,7 @@ function ProteinToolView({ owner, services }) {
                   : null,
                 h(
                   'button',
-                  { className: 'pv-export', onClick: (e) => export3DPng(e, `${pdbName}.3d.png`, residues, colorMode) },
+                  { className: 'pv-export', onClick: (e) => export3DPng(e, `${pdbName}.3d.png`, residues, colorMode, ligandInfo, showLigand) },
                   '导出 PNG',
                 ),
                 h(
