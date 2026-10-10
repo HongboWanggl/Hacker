@@ -290,7 +290,15 @@ export const predictStructure = {
           body: seq,
           timeoutMs: 300000,
         })
-        if (!res.ok) return fail(`ESMFold request failed: HTTP ${res.status}`)
+        if (!res.ok) {
+          // The free endpoint rejects long chains outright (413): point the way
+          // to the fallback instead of leaving a bare status code.
+          const hint =
+            res.status === 413 || res.status === 422
+              ? ` — chain too long for the free endpoint. For chains of 400+ residues use predict_complex (Boltz-2 folds single chains and runs locally without a key).`
+              : ''
+          return fail(`ESMFold request failed: HTTP ${res.status}${hint}`)
+        }
         const pdb = await res.text()
         if (!pdb.startsWith('HEADER') && !pdb.startsWith('ATOM')) return fail(`ESMFold returned an unexpected response: ${pdb.slice(0, 200)}`)
         const safeName = `${label}_${seq.length}aa.pdb`

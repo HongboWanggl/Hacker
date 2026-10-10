@@ -112,6 +112,22 @@ const jsonRes = (obj: any, status = 200) => ({ ok: status >= 200 && status < 300
   const tctx = makeTctx([], () => jsonRes({}, 500))
   const res = await spec.execute({ sequences: 'MKTAYIAKQRQISFVKSHFSRQ' }, tctx)
   ok('single chain refused', res.isError === true && String(res.content[0].text).includes('predict_structure'))
+  // …but a 400+ residue single chain is the long-chain fallback (ESMFold 413s there).
+  const long = 'MKTAYIAKQRQISFVKSHFSRQ'.repeat(20) // 440 residues
+  const tctxLong = makeTctx([], (path) => {
+    if (path === '/compute/v1/predictions/structure-and-binding') return jsonRes({ id: 'pred_long', status: 'pending' })
+    if (path.includes('pred_long')) {
+      return jsonRes({ status: 'succeeded', metrics: { ptm: 0.91, iptm: 0.0, protein_iptm: 0.0 }, outputs: { structures: [{ url: 'https://files.example/long.pdb' }] } })
+    }
+    return { ok: true, status: 200, text: async () => PDB }
+  })
+  const resLong = await spec.execute({ sequences: long }, tctxLong)
+  ok(
+    '400+ residue single chain accepted (API path)',
+    !resLong.isError && resLong.structured?.chains === 1 && resLong.structured?.iptm === undefined && resLong.structured?.proteinIptm === undefined,
+    JSON.stringify(resLong.structured ?? resLong.content[0].text).slice(0, 200),
+  )
+  ok('single-chain API verdict from pTM', resLong.structured?.verdict === 'high-confidence single-chain fold', String(resLong.structured?.verdict))
 }
 
 // --- 6. deadline exceeded while job still running → resumable prediction id.
@@ -211,6 +227,15 @@ echo '{"affinity_probability_binary":0.91,"affinity_pred_value":-6.2}' > "$OUT/p
   const r3 = res3.structured ?? {}
   ok('single-protein local run hides proteinIptm', !res3.isError && r3.chains === 1 && r3.hasLigand === true && r3.proteinIptm === undefined, JSON.stringify(r3).slice(0, 160))
   ok('single-protein local run keeps ligandIptm', r3.ligandIptm === 80, JSON.stringify(r3).slice(0, 160))
+  // Pure single chain (no ligand): accepted at 400+ residues locally; the
+  // report collapses to pTM-level confidence.
+  const res4 = await spec.execute(
+    { sequences: 'MKTAYIAKQRQISFVKSHFSRQ'.repeat(20), name: 'local long single' },
+    tctx,
+  )
+  const r4 = res4.structured ?? {}
+  ok('400+ single-chain local run accepted', !res4.isError && r4.chains === 1 && r4.hasLigand === false && r4.iptm === undefined, JSON.stringify(r4).slice(0, 160))
+  ok('single-chain local verdict from pTM', r4.verdict === 'high-confidence single-chain fold', String(r4.verdict))
   delete process.env.BOLTZ_LOCAL_BIN
 }
 

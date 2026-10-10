@@ -216,6 +216,13 @@ function verdictFrom(metrics) {
   return 'low-confidence model; treat fold and contacts with caution'
 }
 
+// Single-chain fallback runs have no interface to score: judge by pTM alone.
+function foldVerdict(ptm) {
+  if (ptm >= 0.8) return 'high-confidence single-chain fold'
+  if (ptm >= 0.6) return 'fold plausible; inspect low-confidence regions'
+  return 'low-confidence fold; treat with caution'
+}
+
 // Poll until terminal state. Boltz jobs can take minutes for complexes; cap at
 // 9 minutes and surface a resumable prediction id if we time out.
 async function waitForPrediction(tctx, id, deadlineMs = 9 * 60_000) {
@@ -238,7 +245,7 @@ export const predictComplex = {
     agnes.registerTool({
       name: 'predict_complex',
       description:
-        'Predict a protein complex or protein-ligand structure with Boltz-2 (co-folding). Handles multi-chain proteins, RNA/DNA, and small-molecule ligands; reports pTM/ipTM interface confidence and binding confidence. Uses the Boltz API when a key is configured (costs credits); otherwise runs the open-source weights locally via the boltz-community CLI (slow: minutes per target, first run downloads ~10 GB) — prefer predict_structure (ESMFold, free) for single-chain jobs. Saves the best structure as a PDB with pLDDT in the B-factor column.',
+        'Predict a protein complex or protein-ligand structure with Boltz-2 (co-folding). Handles multi-chain proteins, RNA/DNA, and small-molecule ligands; reports pTM/ipTM interface confidence and binding confidence. Uses the Boltz API when a key is configured (costs credits); otherwise runs the open-source weights locally via the boltz-community CLI (slow: minutes per target, first run downloads ~10 GB) — prefer predict_structure (ESMFold, free) for single-chain jobs under 400 residues; single chains of 400+ residues are accepted here as the long-chain fallback (ESMFold rejects those). Saves the best structure as a PDB with pLDDT in the B-factor column.',
       parameters: {
         [Kind]: 'Object',
         type: 'object',
@@ -269,8 +276,18 @@ export const predictComplex = {
         }
         const smiles = ligand_smiles.trim()
         if (smiles.length > SMILES_MAX) return fail(`SMILES too long (${smiles.length} chars).`)
-        if (proteins.length + (smiles ? 1 : 0) < 2 && !smiles) {
-          return fail('This tool is for complexes: pass at least two chains or one chain + ligand_smiles. For a single chain use predict_structure (free).')
+        // Single chain + no ligand is accepted only as the long-chain fallback:
+        // the free ESMFold endpoint 413s past ~400 residues, and Boltz-2 folds
+        // those single chains fine (locally or via the API).
+        const singleChain = proteins.length === 1 && !smiles
+        if (proteins.length + (smiles ? 1 : 0) < 2) {
+          if (!(singleChain && proteins[0].length >= 400)) {
+            return fail(
+              'This tool is for complexes: pass at least two chains or one chain + ligand_smiles. ' +
+                'For a single chain under 400 residues use predict_structure (free, fast); ' +
+                'single chains of 400+ residues are accepted here as the long-chain fallback.',
+            )
+          }
         }
         const key = resolveApiKey()
         const label = name.replace(/[^A-Za-z0-9_.-]/g, '_')
@@ -290,7 +307,7 @@ export const predictComplex = {
           const pct = (x) => (Number.isFinite(x) ? Math.round(x * 1000) / 10 : undefined)
           const metrics = {
             ...(pct(out.conf?.ptm) !== undefined ? { ptm: pct(out.conf.ptm) } : {}),
-            ...(pct(out.conf?.iptm) !== undefined ? { iptm: pct(out.conf.iptm) } : {}),
+            ...(pct(out.conf?.iptm) !== undefined && !singleChain ? { iptm: pct(out.conf.iptm) } : {}),
             // A ligand-free run still reports ligand_iptm: 0.0 — surfacing it
             // would render a meaningless "ligand ipTM 0" chip. Same for
             // protein_iptm on single-protein runs (no protein interface exists).
@@ -301,9 +318,13 @@ export const predictComplex = {
               : {}),
           }
           const affProb = out.aff?.affinity_probability_binary ?? out.aff?.affinity_probability
-          const verdict = affProb != null
-            ? verdictFrom({ binding_confidence: affProb })
-            : verdictFrom({ iptm: out.conf?.iptm ?? out.conf?.ptm ?? 0 })
+          // A single chain has no interface and no binder: judge the fold itself
+          // by pTM instead of the ipTM-family scores (which come back as 0.0).
+          const verdict = singleChain
+            ? foldVerdict(out.conf?.ptm ?? 0)
+            : affProb != null
+              ? verdictFrom({ binding_confidence: affProb })
+              : verdictFrom({ iptm: out.conf?.iptm ?? out.conf?.ptm ?? 0 })
           const report = {
             engine: 'boltz2-local',
             savedTo: path,
@@ -360,7 +381,12 @@ export const predictComplex = {
         // Download the best-ranking structure and store it workspace-side so the
         // existing confidence viewer can render it.
         const rawMetrics = done.metrics ?? done.outputs?.metrics
-        const metrics = summarizeMetrics(rawMetrics)
+        const metricsAll = summarizeMetrics(rawMetrics)
+        // Single-chain fallback: ipTM-family scores come back as 0.0 — collapse
+        // the report to structure-level confidence, judged by pTM.
+        const metrics = singleChain && metricsAll
+          ? { ptm: metricsAll.ptm, structureConfidence: metricsAll.structureConfidence, complexPde: metricsAll.complexPde }
+          : metricsAll
         const files = done.outputs?.structures ?? done.outputs?.files ?? done.files
         let pdbUrl = files?.[0]?.url ?? files?.[0]
         if (!pdbUrl) {
@@ -382,7 +408,11 @@ export const predictComplex = {
           hasLigand: Boolean(smiles),
           residues: nResidues,
           ...(metrics ?? {}),
-          ...(verdictFrom(rawMetrics) ? { verdict: verdictFrom(rawMetrics) } : {}),
+          ...(singleChain
+            ? { verdict: foldVerdict(rawMetrics?.ptm ?? 0) }
+            : verdictFrom(rawMetrics)
+              ? { verdict: verdictFrom(rawMetrics) }
+              : {}),
         }
         return result(report, JSON.stringify(report))
       },

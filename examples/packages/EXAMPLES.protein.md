@@ -63,6 +63,10 @@ MKTAYIAKQRQISFVKSHFSRQ，EIAJKQGQVTMVIKKSMLEK，
 配体 SMILES 是 CC(=O)OC1=CC=CC=C1C(=O)O。给出结合置信度。
 ```
 
+**长链回退**：ESMFold 免费端点对 ≥400 残基的链直接报 HTTP 413（如苯丙氨酸羟化酶
+P00439，452 残基）。此时把同一条序列传给 `predict_complex`——Boltz-2 本地引擎可以折
+单链长蛋白（约 4-6 分钟），报告只含 pTM 结构置信（无接口指标属正常）。
+
 未配置密钥时，工具会返回配置指引（密钥放
 `$AGH_HOME/secrets/boltz/default`，权限 600，或环境变量 `BOLTZ_API_KEY`）。
 
