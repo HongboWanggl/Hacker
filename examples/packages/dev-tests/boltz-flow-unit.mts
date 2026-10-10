@@ -176,7 +176,7 @@ cat > "$OUT/predictions/input/model_0.pdb" <<'PDB'
 ${PDB}
 PDB
 echo '{"ptm":0.9,"iptm":0.85,"ligand_iptm":0.8}' > "$OUT/predictions/input/confidence_model_0.json"
-echo '{"affinity_probability":0.91,"affinity_pred_value":-6.2}' > "$OUT/predictions/input/affinity_model_0.json"
+echo '{"affinity_probability_binary":0.91,"affinity_pred_value":-6.2}' > "$OUT/predictions/input/affinity_input.json"
 `,
     { mode: 0o755 },
   )

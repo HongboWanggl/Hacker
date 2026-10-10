@@ -93,13 +93,17 @@ async function runLocalBoltz({ proteins, smiles, label, wait }) {
     yaml.push(`  - protein:\n      id: ${String.fromCharCode(65 + i)}\n      sequence: ${seq}`)
   }
   if (smiles) {
-    yaml.push(`  - ligand:\n      id: ${String.fromCharCode(65 + proteins.length)}\n      smiles: ${smiles}`)
+    // The affinity pass only runs when the ligand is declared as the binder via
+    // a top-level properties block; `affinity: true` on the ligand is ignored.
+    const ligandId = String.fromCharCode(65 + proteins.length)
+    yaml.push(`  - ligand:\n      id: ${ligandId}\n      smiles: ${smiles}`)
+    yaml.push('properties:\n  - affinity:\n      binder: ' + ligandId)
   }
   await writeFile(join(work, 'input.yaml'), `${yaml.join('\n')}\n`, 'utf8')
   // Local mode is synchronous — no job id exists, so `wait` is advisory only.
   let stdout = ''
   try {
-    ;({ stdout } = await exec(bin, ['predict', join(work, 'input.yaml'), '--accelerator', 'mps', '--use_msa_server', '--out_dir', join(work, 'out')], {
+    ;({ stdout } = await exec(bin, ['predict', join(work, 'input.yaml'), '--accelerator', 'mps', '--use_msa_server', '--output_format', 'pdb', '--out_dir', join(work, 'out')], {
       timeout: 20 * 60_000,
       maxBuffer: 64 * 1024 * 1024,
     }))
@@ -109,7 +113,8 @@ async function runLocalBoltz({ proteins, smiles, label, wait }) {
     return { error: `Local Boltz-2 failed: ${msg.slice(0, 400)}` }
   }
   // Locate the best model: the deepest model_0.pdb under the out dir plus the
-  // confidence/affinity JSONs next to it (layout varies slightly across versions).
+  // confidence/affinity JSONs next to it (boltz names them
+  // `{input}_model_0.pdb` / `confidence_{input}_model_0.json`).
   const outRoot = join(work, 'out')
   const stack = [outRoot]
   let modelPdb = null
@@ -124,20 +129,22 @@ async function runLocalBoltz({ proteins, smiles, label, wait }) {
     for (const e of entries) {
       const p = join(dir, e.name)
       if (e.isDirectory()) stack.push(p)
-      else if (e.name === 'model_0.pdb') modelPdb = p
+      else if (e.name.endsWith('model_0.pdb')) modelPdb = p
     }
   }
   if (!modelPdb) return { error: `Local Boltz-2 finished but no model_0.pdb found under ${outRoot}` }
-  const beside = (suffix) => {
+  const beside = (prefix, suffix = '_model_0.json') => {
     try {
       const dir = modelPdb.slice(0, modelPdb.lastIndexOf('/'))
-      return JSON.parse(readFileSync(join(dir, suffix), 'utf8'))
+      const hit = readdirSync(dir).find((f) => f.startsWith(`${prefix}_`) && f.endsWith(suffix))
+      return hit ? JSON.parse(readFileSync(join(dir, hit), 'utf8')) : undefined
     } catch {
       return undefined
     }
   }
-  const conf = beside('confidence_model_0.json') ?? {}
-  const aff = beside('affinity_model_0.json') ?? {}
+  const conf = beside('confidence') ?? {}
+  // boltz names this `affinity_{input}.json` — no model suffix.
+  const aff = beside('affinity', '.json') ?? {}
   return { modelPdb, conf, aff, stdout: stdout.slice(-400) }
 }
 
@@ -285,10 +292,13 @@ export const predictComplex = {
             ...(pct(out.conf?.iptm) !== undefined ? { iptm: pct(out.conf.iptm) } : {}),
             ...(pct(out.conf?.ligand_iptm) !== undefined ? { ligandIptm: pct(out.conf.ligand_iptm) } : {}),
             ...(pct(out.conf?.protein_iptm) !== undefined ? { proteinIptm: pct(out.conf.protein_iptm) } : {}),
-            ...(pct(out.aff?.affinity_probability) !== undefined ? { bindingConfidence: pct(out.aff.affinity_probability) } : {}),
+            ...(pct(out.aff?.affinity_probability_binary ?? out.aff?.affinity_probability) !== undefined
+              ? { bindingConfidence: pct(out.aff.affinity_probability_binary ?? out.aff.affinity_probability) }
+              : {}),
           }
-          const verdict = out.aff?.affinity_probability != null
-            ? verdictFrom({ binding_confidence: out.aff.affinity_probability })
+          const affProb = out.aff?.affinity_probability_binary ?? out.aff?.affinity_probability
+          const verdict = affProb != null
+            ? verdictFrom({ binding_confidence: affProb })
             : verdictFrom({ iptm: out.conf?.iptm ?? out.conf?.ptm ?? 0 })
           const report = {
             engine: 'boltz2-local',
