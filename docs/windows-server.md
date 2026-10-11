@@ -2,8 +2,21 @@
 
 English | [简体中文](windows-server.zh-CN.md)
 
-Goal: run the AGH daemon + Web UI on a Windows machine (GPU, 16 GB RAM) and let
-people on the LAN or remote access `http://<windows-ip>:4177` in a browser.
+Goal: make this Windows machine the project's **production server** — the single
+place where all code and services run. The AGH daemon, Web UI, data directory,
+secret files and the local Boltz-2 engine (later) all live here, and people open
+`http://<windows-ip>:4177` in a browser.
+
+The Mac is a **development machine only**: edit code there, push to GitHub, and
+the server pulls + rebuilds + restarts (see "Daily deployment flow" below). After
+cutover, the Mac does not need to keep the daemon running.
+
+Architecture at a glance:
+
+| Role | Machine | Runs |
+|---|---|---|
+| Production server | Windows PC | daemon + Web UI (0.0.0.0:4177), data dir, secrets, local Boltz-2 (later), self-hosted CI runner |
+| Development | Mac | Claude Code, editor, tests; pushes to `origin main` |
 
 ## What carries over unchanged vs. what needs extra setup
 
@@ -12,7 +25,7 @@ people on the LAN or remote access `http://<windows-ip>:4177` in a browser.
 | Web UI / daemon / tool dispatch | ✅ Pure Node.js, cross-platform |
 | UniProt search, ESMFold prediction, AlphaFold compare | ✅ All remote APIs; any online machine works |
 | Boltz-2 cloud (with API key) | ✅ Remote API, works |
-| Boltz-2 **local engine** | ⚠️ Needs a separate Python + CUDA torch install + ~10 GB of weights; on a 16 GB machine it is best to **not migrate it yet** — keep heavy complex jobs on the Mac (or use the cloud API with a key) |
+| Boltz-2 **local engine** | ⚠️ Needs a separate Python + CUDA torch install + ~10 GB of weights on the server; during migration keep heavy complex jobs on the Mac, then move them here (or use the cloud API with a key) |
 | Ark model routing | ✅ Migrate the config file + key |
 
 ## Step 1: Install the base environment (PowerShell as admin)
@@ -140,7 +153,54 @@ driven by Claude Code on the target machine:
 
 Find the LAN IP: `ipconfig` (look for the IPv4 address).
 
+## Daily deployment flow (after the Mac pushes)
+
+The server is the only runtime. Every time development on the Mac produces a
+new commit on `origin main`, bring the server up to date:
+
+```powershell
+cd C:\agnes-harness
+git pull origin main
+pnpm install                       # only needed when dependencies changed
+pnpm --filter @agnes/cli build     # rebuild packages/cli/dist
+# restart: stop the running daemon (Task Scheduler end / kill the node process),
+# then start it again exactly as in Step 5
+```
+
+Stop-and-restart checklist:
+
+1. Kill the old daemon process (and the web process if it was started
+   separately); the Web UI shows "waiting for backend" until it is back.
+2. Start the daemon again with the Step 5 command (same env vars, same flags).
+3. Reload `http://localhost:4177` and run one smoke request before telling
+   anyone the new version is live.
+
+Optional convenience — save as `C:\agnes-harness\deploy.ps1`:
+
+```powershell
+git pull origin main
+if ($LASTEXITCODE -ne 0) { exit 1 }
+pnpm install
+pnpm --filter @agnes/cli build
+Get-Process node -ErrorAction SilentlyContinue | Where-Object {
+  $_.MainWindowTitle -eq '' } | Stop-Process -Force   # adjust to your process layout
+schtasks /Run /TN "AGH daemon"
+Write-Host "Deployed. Verify http://localhost:4177"
+```
+
+> The blanket `Stop-Process` above is intentionally naive; if other Node apps
+> run on the server, kill only the AGH daemon PID instead.
+
+## CI on the server (self-hosted runner)
+
+The repository's free GitHub Actions minutes are used up, so remote CI no longer
+runs. After the server is stable, register it as a **self-hosted runner**
+(Repository → Settings → Actions → Runners → New self-hosted runner) so every
+push to `main` is built and tested on the server. This also gives the Mac-side
+developer a real CI signal again.
+
 ## ⚠️ Security notes (important)
+
 
 1. **The Web UI has no login auth**: anyone who can open the page can run
    tools, burn API quota, and read workspace files.

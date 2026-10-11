@@ -1,8 +1,19 @@
 # 把 Windows 电脑变成蛋白质 Agent 服务器
 
 [English](windows-server.md) | 简体中文
-目标：在一台 Windows 机器（有 GPU、16 GB 内存）上跑起 AGH daemon + Web UI，
-让局域网/远程的人通过浏览器访问 `http://<windows-ip>:4177`。
+目标：把这台 Windows 机器配置成本项目的**正式服务器**——所有代码和服务统一在它上面跑：
+AGH daemon、Web UI、数据目录、密钥文件、（后续）本地 Boltz-2 引擎都部署在这里，
+使用者在浏览器打开 `http://<windows-ip>:4177`。
+
+Mac 是**开发机**：只负责改代码、push 到 GitHub；服务器侧 pull + 构建 + 重启即可上线
+（见下文「日常部署流程」）。切换完成后，Mac 不再需要常驻跑 daemon。
+
+角色划分：
+
+| 角色 | 机器 | 职责 |
+|---|---|---|
+| 生产服务器 | Windows 电脑 | daemon + Web UI（0.0.0.0:4177）、数据目录、密钥、本地 Boltz-2（后续）、self-hosted CI runner |
+| 开发 | Mac | Claude Code、编辑器、测试；push 到 `origin main` |
 
 ## 前置认知：哪些能力迁移后不变，哪些要另配
 
@@ -11,7 +22,7 @@
 | Web UI / daemon / 工具调度 | ✅ 纯 Node.js，跨平台 |
 | UniProt 搜索、ESMFold 预测、AlphaFold 对比 | ✅ 都是远程 API，任何能上网的机器都可用 |
 | Boltz-2 云端（配 API key） | ✅ 远程 API，可用 |
-| Boltz-2 **本地引擎** | ⚠️ 需单独装 Python + CUDA 版 torch + ~10 GB 权重；16 GB 内存的机器建议**先不迁**，重型复合物任务留在 Mac 上跑（或配 key 走云端） |
+| Boltz-2 **本地引擎** | ⚠️ 需在服务器上单独装 Python + CUDA 版 torch + ~10 GB 权重；迁移期重型复合物任务先留在 Mac 上跑，稳定后迁过来（或配 key 走云端） |
 | Ark 模型路由 | ✅ 配置文件 + key 迁移即可 |
 
 ## 第 1 步：装基础环境（PowerShell 管理员）
@@ -124,6 +135,48 @@ powercfg /change hibernate-timeout-ac 0
    向日葵建议平时退出登录，用时再上，减少暴露面。
 
 查本机局域网 IP：`ipconfig`（找 IPv4 地址）。
+
+## 日常部署流程（Mac push 之后）
+
+服务器是唯一运行环境。Mac 上每次开发出新的 `origin main` 提交后，在服务器上更新：
+
+```powershell
+cd C:\agnes-harness
+git pull origin main
+pnpm install                       # 依赖有变动时才需要
+pnpm --filter @agnes/cli build     # 重新构建 packages/cli/dist
+# 重启：先停掉正在跑的 daemon（任务计划程序结束 / kill node 进程），
+# 再按第 5 步原样启动
+```
+
+停启检查清单：
+
+1. 停掉旧 daemon 进程（若 Web 是独立进程也要停）；恢复前页面会显示"等待后端恢复"。
+2. 按第 5 步命令重新启动 daemon（环境变量与参数不变）。
+3. 刷新 `http://localhost:4177`，跑一条冒烟请求确认正常，再通知他人新版本已上线。
+
+可选便利——存为 `C:\agnes-harness\deploy.ps1`：
+
+```powershell
+git pull origin main
+if ($LASTEXITCODE -ne 0) { exit 1 }
+pnpm install
+pnpm --filter @agnes/cli build
+Get-Process node -ErrorAction SilentlyContinue | Where-Object {
+  $_.MainWindowTitle -eq '' } | Stop-Process -Force   # 按实际进程布局调整
+schtasks /Run /TN "AGH daemon"
+Write-Host "Deployed. Verify http://localhost:4177"
+```
+
+> 上面的 `Stop-Process` 是刻意从简的写法；如果服务器上还跑着其他 Node 程序，
+> 请改为只杀 AGH daemon 的 PID。
+
+## 在服务器上跑 CI（self-hosted runner）
+
+仓库的 GitHub Actions 免费分钟数已用完，云端 CI 不再执行。服务器稳定运行后，
+把它注册为仓库的 **self-hosted runner**（仓库 Settings → Actions → Runners →
+New self-hosted runner），此后每次 push 到 `main` 都会在服务器上构建测试，
+Mac 侧开发也重新有了真实的 CI 反馈。
 
 ## ⚠️ 安全须知（重要）
 
