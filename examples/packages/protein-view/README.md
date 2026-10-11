@@ -6,6 +6,16 @@ PAE error heatmap, compare overlay, batch table, and search results — each
 figure carries its own legend and exports (PNG / CSV / clipboard) so it reads
 standalone in papers and slides.
 
+## Screenshots
+
+| 单蛋白预测 + 置信度 | 预测 vs AlphaFold DB 对比 |
+|---|---|
+| ![单蛋白预测面板](screenshots/main-panel.png) | ![对比面板](screenshots/compare-panel.png) |
+
+复合物面板（Boltz-2 本地引擎）与 PAE 误差热图：
+
+![复合物 + PAE](screenshots/complex-pae.png)
+
 ## Layout
 
 ```
