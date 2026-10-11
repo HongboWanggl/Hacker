@@ -1015,6 +1015,15 @@ button.pv-chain-chip:hover {
   position: relative;
   z-index: 1;
 }
+/* Drag-select range: a soft ring rather than the strong selection outline —
+   the range is a lens (curve band + 3D), not a picked residue. */
+.pv-seq-tile--range {
+  outline: 2px solid #3b6fe0;
+  outline-offset: -2px;
+}
+.dark .pv-seq-tile--range {
+  outline-color: #9db8ff;
+}
 
 /* Divergence strip legend (compare card) */
 .pv-stripwrap {

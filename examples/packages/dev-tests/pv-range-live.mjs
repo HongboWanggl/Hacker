@@ -83,6 +83,24 @@ await page.waitForTimeout(600)
 const line = await page.evaluate(() => document.querySelector('.pv-hoverline')?.textContent ?? '')
 check(line.length > 0, `single-residue jump still highlights (${line.slice(0, 40)})`)
 
+// Mouse drag across strip tiles commits a segment focus (real mouse events —
+// React derives enter/leave from mouseover, so this exercises the real path).
+await page.evaluate(() => document.querySelector('.pv-seqstrip')?.scrollIntoView({ block: 'center' }))
+await page.waitForTimeout(600)
+const tileBox = async (i) => {
+  const b = await page.locator('.pv-seq-tile').nth(i).boundingBox()
+  return { x: b.x + b.width / 2, y: b.y + b.height / 2 }
+}
+const p1 = await tileBox(10)
+const p2 = await tileBox(20)
+await page.mouse.move(p1.x, p1.y)
+await page.mouse.down()
+await page.mouse.move(p2.x, p2.y, { steps: 6 })
+await page.mouse.up()
+await page.waitForTimeout(800)
+const dragLabel = await page.evaluate(() => document.querySelector('.pv-fmt')?.textContent ?? '')
+check(dragLabel.includes('聚焦区段 11–21'), `mouse drag commits 聚焦区段 11–21 (got "${dragLabel}")`)
+
 await browser.close()
 console.log(failed ? 'RANGE LIVE FAIL' : 'RANGE LIVE OK')
 process.exit(failed ? 1 : 0)

@@ -110,10 +110,27 @@ const CHAIN_COLORS = ['#4e79e6', '#f28e2b', '#2ca02c', '#e15759', '#9467bd', '#1
 // Esc leaves. The cursor lives in a ref (synchronous, race-free for fast
 // repeats) and reuses the hover highlight, so mouse and keyboard share one
 // visual language and the 3D/curve linkage follows for free.
-function SequenceStrip({ residues, hover, onHover, selected, onSelect, colorOf, titleOf }) {
+function SequenceStrip({ residues, hover, onHover, selected, onSelect, colorOf, titleOf, onRangeSelect }) {
   const stripRef = useRef(null)
   const kbRef = useRef(null)
+  // Mouse drag-select: mousedown anchors a range, hovering extends it (the
+  // per-tile --range class reads dragRef on every hover-driven re-render),
+  // mouseup commits to onRangeSelect — the same segment focus the jump box's
+  // "36-42" input and the low-confidence chips drive. A same-tile press is a
+  // plain click (cross-tile drags never fire the tile's onClick — the click
+  // lands on the strip), so click-to-select stays untouched.
+  const dragRef = useRef(null)
+  const [drag, setDrag] = useState(null)
   if (!Array.isArray(residues) || !residues.length) return null
+  const endDrag = (commit) => {
+    const d = dragRef.current
+    dragRef.current = null
+    setDrag(null)
+    if (commit && d && d.cur !== d.anchor && onRangeSelect) {
+      const [s, t] = d.anchor < d.cur ? [d.anchor, d.cur] : [d.cur, d.anchor]
+      onRangeSelect(s, t)
+    }
+  }
   // Dense mode for long chains: smaller tiles keep the strip to a sane height.
   const dense = residues.length > 800
   const move = (next) => {
@@ -125,10 +142,14 @@ function SequenceStrip({ residues, hover, onHover, selected, onSelect, colorOf, 
     'div',
     {
       ref: stripRef,
-      className: `pv-seqstrip${dense ? ' pv-seqstrip--dense' : ''}`,
+      className: 'pv-seqstrip' + (dense ? ' pv-seqstrip--dense' : ''),
       role: 'listbox',
-      'aria-label': '残基序列条（方向键移动，回车选中）',
+      'aria-label': '残基序列条（方向键移动，回车选中；拖选聚焦区段）',
       tabIndex: 0,
+      onMouseUp: () => endDrag(true),
+      onMouseLeave: () => {
+        if (dragRef.current) endDrag(false)
+      },
       onFocus: () => {
         if (kbRef.current == null) kbRef.current = hover ?? selected ?? 0
         onHover?.(kbRef.current)
@@ -169,14 +190,28 @@ function SequenceStrip({ residues, hover, onHover, selected, onSelect, colorOf, 
           className:
             'pv-seq-tile' +
             (idx === hover ? ' pv-seq-tile--hover' : '') +
-            (idx === selected ? ' pv-seq-tile--sel' : ''),
+            (idx === selected ? ' pv-seq-tile--sel' : '') +
+            (drag && idx >= Math.min(drag.anchor, drag.cur) && idx <= Math.max(drag.anchor, drag.cur)
+              ? ' pv-seq-tile--range'
+              : ''),
           style: {
             background: bg,
             color: tileTextColor(bg),
             marginLeft: idx > 0 && r.chain && residues[idx - 1].chain !== r.chain ? 5 : undefined,
           },
           title: label,
-          onMouseEnter: () => onHover?.(idx),
+          onMouseDown: (e) => {
+            if (e.button !== 0) return
+            dragRef.current = { anchor: idx, cur: idx }
+            setDrag({ anchor: idx, cur: idx })
+          },
+          onMouseEnter: () => {
+            onHover?.(idx)
+            if (dragRef.current) {
+              dragRef.current.cur = idx
+              setDrag({ ...dragRef.current })
+            }
+          },
           onMouseLeave: () => onHover?.(null),
           onClick: () => onSelect?.(idx),
         },
@@ -4409,6 +4444,18 @@ function ProteinToolView({ owner, services }) {
               onHover: setHover,
               selected,
               onSelect: (idx) => setSelected((prev) => (prev === idx ? null : idx)),
+              // Drag-select commits a segment focus (jump box "36-42" machinery):
+              // multi-chain drags must stay within one chain to stay unambiguous.
+              onRangeSelect: (s, t) => {
+                const a = residues[s]
+                const b = residues[t]
+                if (!a || !b) return
+                const multi = isMultiChain(residues)
+                if (multi && a.chain !== b.chain) return
+                const lo = Math.min(a.i, b.i)
+                const hi = Math.max(a.i, b.i)
+                setHighlightSeg(multi && a.chain ? `${a.chain}:${lo}-${hi}` : `${lo}-${hi}`)
+              },
             }),
           ),
         )
