@@ -45,6 +45,7 @@ run pv-tiletext.mjs
 run pv-download-pdb.mjs
 run pv-batch-live.mjs
 run pv-kbd-strip.mjs             # sequence strip keyboard nav (listbox)
+run pv-kbd-search.mjs             # search table keyboard roving (rows)
 
 if [ "${1:-}" = "--live" ]; then
   echo "=== live E2E (needs daemon + web on 4177) ==="
@@ -59,6 +60,7 @@ if [ "${1:-}" = "--live" ]; then
   live pv-search-live.mjs       # uniprot_search hit-table card
   live pv-dark-live.mjs         # dark-theme surfaces flip + restore
   live pv-kbd-live.mjs          # sequence strip keyboard nav (real keys)
+  live pv-kbd-search-live.mjs   # search table keyboard roving (real keys)
   live pv-complex-guide.mjs     # predict_complex no-key guidance
   live af-e2e-live2.mjs         # compare_alphafold live run
   live pv-mobile-e2e.mjs        # fresh-session full loop at 400px phone width

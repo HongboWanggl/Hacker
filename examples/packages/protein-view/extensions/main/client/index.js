@@ -1541,7 +1541,30 @@ function SearchCard({ report }) {
                 className: `pv-search-row${hit.accession && sel.has(hit.accession) ? ' pv-search-row--sel' : ''}`,
                 key: hit.accession ?? k,
                 title: `点击复制 ${hit.accession ?? ''}`,
+                'aria-pressed': hit.accession ? sel.has(hit.accession) : undefined,
                 onClick: () => copy(hit.accession),
+                // Rows are native buttons (Tab/Enter already work); add the
+                // table-level roving keys — ↑/↓ move focus, Home/End jump,
+                // Space ticks the batch checkbox instead of copying.
+                onKeyDown: (e) => {
+                  const table = e.currentTarget.closest('.pv-search-table')
+                  if (!table) return
+                  if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+                    e.preventDefault()
+                    const r = [...table.querySelectorAll('.pv-search-row')]
+                    const i = r.indexOf(e.currentTarget)
+                    const next =
+                      e.key === 'Home'
+                        ? r[0]
+                        : e.key === 'End'
+                          ? r[r.length - 1]
+                          : r[e.key === 'ArrowDown' ? Math.min(r.length - 1, i + 1) : Math.max(0, i - 1)]
+                    next?.focus()
+                  } else if (e.key === ' ') {
+                    e.preventDefault()
+                    if (hit.accession) toggleSel(hit.accession)
+                  }
+                },
               },
               h(
                 'span',
@@ -1615,7 +1638,7 @@ function SearchCard({ report }) {
     h(
       'div',
       { className: 'pv-search-hint' },
-      '点击行复制 accession，点击表头排序，勾选后一键生成批量预测指令；回复「预测 <accession>」继续，或用 batch_predict 一次预测多个。',
+      '点击行复制 accession，点击表头排序，勾选后一键生成批量预测指令；键盘：Tab 进表后 ↑↓ 移动、空格勾选、回车复制。回复「预测 <accession>」继续，或用 batch_predict 一次预测多个。',
     ),
   )
 }
