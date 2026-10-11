@@ -45,5 +45,16 @@ tiles.forEach((t, i) => {
   if (!okC) failed++
 })
 if (tiles.length !== 4) failed++
+// Canvas accessibility: role=img + aria-label on the shared 3D / curve canvases
+const canv = [
+  ['.pv-3d', '蛋白质 3D 结构视图'],
+  ['.pv-curve', '逐残基 pLDDT 置信度曲线'],
+]
+for (const [sel, labelPrefix] of canv) {
+  const el = container.querySelector(sel)
+  const okA = el && el.getAttribute('role') === 'img' && (el.getAttribute('aria-label') ?? '').includes(labelPrefix)
+  console.log(okA ? 'ok ' : 'FAIL', `${sel} role=img + aria-label`)
+  if (!okA) failed++
+}
 console.log(failed ? 'TILE TEXT FAIL' : 'TILE TEXT OK')
 process.exit(failed ? 1 : 0)

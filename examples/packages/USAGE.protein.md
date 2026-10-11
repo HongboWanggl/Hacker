@@ -227,5 +227,6 @@ structures/p53_R248W_393aa.pdb（R248W 热点突变体），label 分别设为
 | 复合物等很久 | 本地引擎每目标 4–6 分钟属正常；`wait=false` 先拿 predictionId，之后再取 |
 | 未配 Boltz key 的提示 | 工具返回配置指引；key 放 `$AGH_HOME/secrets/boltz/default`（600）或 `BOLTZ_API_KEY` |
 | 面板里的图看着小 | 用各视图的「⤢ 全屏」投满整窗 |
+| 很长的蛋白（600+ aa）面板会卡吗 | 不会。序列条超过 800 残基自动切密集模式（tile 变小），PAE 热图超过 800 残基按块均值降采样并在标题标注「每格 N 残基」，导出 PNG/CSV 不受影响 |
 | 想批量预测多个 | 搜索表勾选多行生成指令，或直接写 batch_predict + 多个 accession |
 | 手机浏览器打开会不会乱 | 不会。面板按自身宽度自适应，窄屏自动变单列，340px（小手机）起即完整可用、无横向滚动 |

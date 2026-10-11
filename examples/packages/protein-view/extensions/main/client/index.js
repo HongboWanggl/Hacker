@@ -2306,6 +2306,8 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
       h('canvas', {
         ref: canvasRef,
         className: 'pv-curve',
+        role: 'img',
+        'aria-label': '逐残基 pLDDT 置信度曲线',
         style: { width: '100%', height: size.h },
         onMouseMove: (ev) => {
           const idx = pick(ev)
@@ -2710,6 +2712,8 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
     h('canvas', {
       ref: canvasRef,
       className: 'pv-3d',
+      role: 'img',
+      'aria-label': '蛋白质 3D 结构视图（可拖拽旋转、滚轮缩放）',
       style: { width: '100%', height: size.h },
       onPointerDown: (ev) => {
         ev.currentTarget.setPointerCapture(ev.pointerId)
@@ -3215,6 +3219,8 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
         h('canvas', {
           ref: canvasRef,
           className: 'pv-pae-canvas',
+          role: 'img',
+          'aria-label': 'PAE 误差热图（紫=低误差，黄=高误差）',
           width: px,
           height: px,
           style: { width: `${px}px`, height: `${px}px` },
@@ -3234,6 +3240,8 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
         h('canvas', {
           ref: stripRef,
           className: 'pv-pae-strip',
+          role: 'img',
+          'aria-label': '逐残基平均 PAE 误差条',
           width: 28,
           height: px,
           style: { width: '28px', height: `${px}px` },
