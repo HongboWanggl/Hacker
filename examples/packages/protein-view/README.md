@@ -25,6 +25,11 @@ standalone in papers and slides.
 
 ![区段聚焦：曲线色带 + 3D 段外淡化](../docs/screenshots/segment-focus.png)
 
+对比卡的分歧序列条同样支持拖选聚焦：拖过的区段让预测 3D 段外残基淡化
+（参考 ghost 保留作上下文），分歧区段的折叠差异一眼可读：
+
+![对比卡拖选区段聚焦](../docs/screenshots/compare-seg-focus.png)
+
 序列条支持键盘导航（Tab 聚焦，←/→ 移动光标、回车选中、Home/End 跳转、Esc 退出），
 光标复用悬停高亮——鼠标与键盘共享同一套 3D/曲线联动；对比卡的分歧序列条复用同一组件，
 键盘行为一致；搜索表与批处理表同样可键盘操作（↑↓/Home/End 行间移动，空格勾选/展开，

@@ -755,6 +755,12 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
   // Strip mode: confidence divergence (|ΔpLDDT|) or structural deviation
   // (Cα distance after superposition, matched chain+residue number).
   const [stripMode, setStripMode] = useState('plddt')
+  // Segment focus on the divergence strip: dragging a range fades the
+  // prediction's out-of-segment residues in the 3D overlay (the reference
+  // ghost stays as context) — the compare card's slice of the same machinery
+  // the main panel drives from its chips / jump box.
+  const [seg, setSeg] = useState(null)
+  const segRange = useMemo(() => (seg ? parseSeg(seg) : null), [seg])
   const distMap = useMemo(() => {
     if (!ghostResidues?.length || !pred?.residues?.length) return null
     const gm = new Map(ghostResidues.map((g) => [`${g.chain ?? 'A'}:${g.i}`, g]))
@@ -883,6 +889,7 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
           residues: pred.residues,
           colorMode: isMultiChain(pred.residues) ? 'chain' : 'plddt',
           autoSpin: !prefersReducedMotion(),
+          seg: segRange,
           ghost: ghostResidues,
           // In the distance lens the ghost recolors by post-superposition Cα
           // deviation — structural hot spots become visible spatially, not just
@@ -937,6 +944,18 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
           : null,
         ligandInfo && showLigand ? h(LigandLegend) : null,
         h('div', { className: 'pv-hoverline' }, hoverLine),
+        segRange
+          ? h(
+              'button',
+              {
+                type: 'button',
+                className: 'pv-fmt pv-fmt--clear',
+                title: '点击取消区段聚焦',
+                onClick: () => setSeg(null),
+              },
+              `聚焦区段 ${segRange.chain ? `${segRange.chain}:` : ''}${segRange.a}–${segRange.b}`,
+            )
+          : null,
       ),
     ),
     // Divergence strip with two lenses over the same alignment: confidence
@@ -995,6 +1014,16 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
                   ? ` · ${pw ? pw[1] : '参考'} ${g.toFixed(1)} · Δ ${(r.b - g).toFixed(1)}`
                   : ' · 参考无此残基'
               return `${resLabel(pred.residues, r)} · ${pw ? pw[0] : '预测'} ${r.b.toFixed(1)}${stripMode === 'dist' ? ds : dd + ds}`
+            },
+            onRangeSelect: (s, t) => {
+              const a = pred.residues[s]
+              const b = pred.residues[t]
+              if (!a || !b) return
+              const multi = isMultiChain(pred.residues)
+              if (multi && a.chain !== b.chain) return
+              const lo = Math.min(a.i, b.i)
+              const hi = Math.max(a.i, b.i)
+              setSeg(multi && a.chain ? `${a.chain}:${lo}-${hi}` : `${lo}-${hi}`)
             },
           }),
           stripMode === 'dist'

@@ -51,6 +51,7 @@ run pv-motion.mjs                 # auto-rotate respects prefers-reduced-motion
 run pv-kbd-compare.mjs            # compare divergence strip inherits keyboard nav
 run pv-drag-range.mjs             # strip mouse drag-select commits segment focus
 run pv-seg-3d.mjs                 # segment focus fades out-of-segment 3D bonds (main + drill-down)
+run pv-compare-seg.mjs            # compare card drag-select fades out-of-segment 3D bonds
 
 if [ "${1:-}" = "--live" ]; then
   echo "=== live E2E (needs daemon + web on 4177) ==="
@@ -60,6 +61,7 @@ if [ "${1:-}" = "--live" ]; then
   live pv-drill-live.mjs        # batch_predict + row drill-down
   live pv-pairwise-live.mjs     # compare_structures cross-check
   live pv-hover-e2e3.mjs        # compare overlay hover readout
+  live pv-compare-live.mjs      # compare drag-select segment focus
   live pv-click-live.mjs        # 3D click-to-select + toggle-off
   live pv-export-live.mjs       # PNG export downloads
   live pv-search-live.mjs       # uniprot_search hit-table card
