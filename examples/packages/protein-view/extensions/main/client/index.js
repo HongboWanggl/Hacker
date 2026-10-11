@@ -15,6 +15,28 @@ const C_CONFIDENT = '#65CBF3'
 const C_LOW = '#FFDB13'
 const C_VERY_LOW = '#FF7D45'
 const bandColor = (p) => (p > 90 ? C_VERY_HIGH : p >= 70 ? C_CONFIDENT : p >= 50 ? C_LOW : C_VERY_LOW)
+// Tile letters must stay readable on every strip background: the pLDDT bands
+// span dark blue (#0053d6) to yellow (#ffdb13) and the diverging Δ scale is
+// pale near zero, so a fixed white vanishes on the light half. Pick dark or
+// light text by weighted sRGB luminance.
+function tileTextColor(bg) {
+  const m = /^#([0-9a-f]{6})$/i.exec(bg) ?? /^#([0-9a-f]{3})$/i.exec(bg)
+  let r, g, b
+  if (m) {
+    const v = m[1].length === 3 ? m[1].split('').map((c) => c + c).join('') : m[1]
+    r = parseInt(v.slice(0, 2), 16)
+    g = parseInt(v.slice(2, 4), 16)
+    b = parseInt(v.slice(4, 6), 16)
+  } else {
+    const rgb = /rgba?\(([^)]+)\)/.exec(bg)
+    if (!rgb) return 'rgb(255 255 255 / 88%)'
+    ;[r, g, b] = rgb[1].split(',').slice(0, 3).map((x) => parseFloat(x))
+  }
+  if ([r, g, b].some((x) => !Number.isFinite(x))) return 'rgb(255 255 255 / 88%)'
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.56
+    ? 'rgb(20 20 20 / 85%)'
+    : 'rgb(255 255 255 / 88%)'
+}
 const BANDS = [
   { label: '很高 (>90)', color: C_VERY_HIGH },
   { label: '高 (70–90)', color: C_CONFIDENT },
@@ -69,15 +91,17 @@ function SequenceStrip({ residues, hover, onHover, selected, onSelect, colorOf, 
   return h(
     'div',
     { className: 'pv-seqstrip' + (dense ? ' pv-seqstrip--dense' : ''), role: 'listbox', 'aria-label': '残基序列条' },
-    residues.map((r, idx) =>
-      h(
+    residues.map((r, idx) => {
+      const bg = colorOf ? colorOf(r, idx) : bandColor(r.b)
+      return h(
         'div',
         {
           key: idx,
           className:
             'pv-seq-tile' + (idx === hover ? ' pv-seq-tile--hover' : '') + (idx === selected ? ' pv-seq-tile--sel' : ''),
           style: {
-            background: colorOf ? colorOf(r, idx) : bandColor(r.b),
+            background: bg,
+            color: tileTextColor(bg),
             marginLeft: idx > 0 && r.chain && residues[idx - 1].chain !== r.chain ? 5 : undefined,
           },
           title: titleOf ? titleOf(r, idx) : `${resLabel(residues, r)} · pLDDT ${r.b.toFixed(1)}`,
@@ -86,8 +110,8 @@ function SequenceStrip({ residues, hover, onHover, selected, onSelect, colorOf, 
           onClick: () => onSelect?.(idx),
         },
         (r.aa ?? '')[0] ?? '',
-      ),
-    ),
+      )
+    }),
   )
 }
 

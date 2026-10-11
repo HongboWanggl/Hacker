@@ -41,6 +41,7 @@ run pv-pae-live.mjs
 run pv-contact-live.mjs
 run pv-jump-live.mjs
 run pv-legend-live.mjs
+run pv-tiletext.mjs
 run pv-batch-live.mjs
 
 if [ "${1:-}" = "--live" ]; then
