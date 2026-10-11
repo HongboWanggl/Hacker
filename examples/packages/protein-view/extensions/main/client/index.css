@@ -1311,3 +1311,12 @@ button.pv-chain-chip:hover {
 .dark .pv-search-row:focus-visible {
   outline-color: #9db8ff;
 }
+
+.pv-batch-row:focus-visible {
+  outline: 2px solid #3b6fe0;
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+.dark .pv-batch-row:focus-visible {
+  outline-color: #9db8ff;
+}

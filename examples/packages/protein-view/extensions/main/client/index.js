@@ -1774,8 +1774,33 @@ function BatchCard({ report, services }) {
                 {
                   key: j.accession,
                   className: `pv-batch-row pv-batch-row--ok${openAcc === j.accession ? ' pv-batch-row--open' : ''}`,
+                  role: 'button',
+                  tabIndex: 0,
+                  'aria-expanded': openAcc === j.accession,
                   onClick: () => setOpenAcc((prev) => (prev === j.accession ? null : j.accession)),
                   title: '点击展开 3D 结构与置信度曲线',
+                  // Rows are plain divs, so the keyboard needs everything
+                  // explicitly: Enter/Space toggle the drill-down (same as
+                  // click), ↑/↓/Home/End rove focus across expandable rows.
+                  onKeyDown: (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setOpenAcc((prev) => (prev === j.accession ? null : j.accession))
+                    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+                      e.preventDefault()
+                      const r = [
+                        ...e.currentTarget.closest('.pv-batch').querySelectorAll('.pv-batch-row--ok'),
+                      ]
+                      const i = r.indexOf(e.currentTarget)
+                      const next =
+                        e.key === 'Home'
+                          ? r[0]
+                          : e.key === 'End'
+                            ? r[r.length - 1]
+                            : r[e.key === 'ArrowDown' ? Math.min(r.length - 1, i + 1) : Math.max(0, i - 1)]
+                      next?.focus()
+                    }
+                  },
                 },
                 h('span', { className: 'pv-verdict-dot pv-verdict-dot--high' }),
                 h('span', { className: 'pv-batch-acc' }, j.accession),

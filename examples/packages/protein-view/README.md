@@ -21,8 +21,8 @@ standalone in papers and slides.
 ![Cα 偏差透镜](screenshots/compare-dist-lens.png)
 
 序列条支持键盘导航（Tab 聚焦，←/→ 移动光标、回车选中、Home/End 跳转、Esc 退出），
-光标复用悬停高亮——鼠标与键盘共享同一套 3D/曲线联动；搜索表同样可键盘操作
-（↑↓/Home/End 行间移动，空格勾选，回车复制 accession）；鼠标与键盘均可全流程操作面板。
+光标复用悬停高亮——鼠标与键盘共享同一套 3D/曲线联动；搜索表与批处理表同样可键盘操作
+（↑↓/Home/End 行间移动，空格勾选/展开，回车复制或下钻）；鼠标与键盘均可全流程操作面板。
 
 深色模式（跟随宿主 system/light/dark 设置；canvas 图表保留白底「论文图卡」风格，导出 PNG 跨主题逐字节一致）：
 
