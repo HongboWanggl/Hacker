@@ -100,11 +100,18 @@ if (distBtn) {
   checks.push(['distance legend swaps in', html2.includes('≥5 Å') && html2.includes('Cα 偏差')])
   checks.push(['tiles recolor to distance ramp', changed >= 5])
   checks.push(['tile tooltip carries Cα distance', /Cα \d+\.\d+ Å/.test(html2)])
+  // dist-mode export composite must carry the teal→red gradient key too
+  const before2 = g2dCalls.length
+  const expBtn2 = [...container.querySelectorAll('button.pv-export')].find((b) => (b.textContent ?? '').trim() === '导出 PNG')
+  expBtn2?.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 250))
+  const texts2 = g2dCalls.slice(before2).filter((c) => c[0] === 'fillText').map((c) => c[1])
+  checks.push(['dist composite carries distance key', texts2.some((t) => String(t).includes('0.5 · 2 · ≥5 Å'))])
   // back to the default lens so later assertions see the original strip
   modeBtns[0].dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
   await new Promise((r) => setTimeout(r, 250))
 }
-for (const [name, ok] of checks.slice(-((modeBtns.length === 2 && distBtn) ? 5 : 2))) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
+for (const [name, ok] of checks.slice(-((modeBtns.length === 2 && distBtn) ? 6 : 2))) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 
 // chip → strip sync: clicking the largest-delta chip outlines that residue's tile
 const chip = [...container.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('Δ'))
