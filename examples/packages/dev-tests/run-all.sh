@@ -56,6 +56,7 @@ if [ "${1:-}" = "--live" ]; then
   live pv-search-live.mjs       # uniprot_search hit-table card
   live pv-complex-guide.mjs     # predict_complex no-key guidance
   live af-e2e-live2.mjs         # compare_alphafold live run
+  live pv-mobile-e2e.mjs        # fresh-session full loop at 400px phone width
 fi
 
 echo "ALL SUITES PASSED"
