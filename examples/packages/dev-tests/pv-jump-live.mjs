@@ -176,6 +176,28 @@ async function run(services, report) {
     'ArrowLeft clamps at first residue',
     (container.querySelector('.pv-hoverline')?.textContent ?? '').includes('A1'),
   )
+  // Range input: "12-18" focuses the segment (same machinery the low-confidence
+  // chips drive) — the 聚焦区段 label appears; re-entering clears it; an
+  // out-of-range range is refused.
+  await jump('12-18')
+  ok(
+    'range 12-18 shows 聚焦区段 label',
+    (container.querySelector('.pv-fmt')?.textContent ?? '').includes('聚焦区段 12–18'),
+  )
+  await jump('12-18')
+  ok('same range again clears the focus', !container.querySelector('.pv-fmt'))
+  await jump('99-120')
+  ok('out-of-range range is refused', !container.querySelector('.pv-fmt'))
+  await jump('12-18')
+  ok(
+    'range re-arms after clear',
+    (container.querySelector('.pv-fmt')?.textContent ?? '').includes('聚焦区段 12–18'),
+  )
+  await jump('5')
+  ok(
+    'single-residue jump still works with range active',
+    (container.querySelector('.pv-hoverline')?.textContent ?? '').includes('A5'),
+  )
   container.remove()
 }
 
@@ -215,7 +237,7 @@ async function run(services, report) {
     savedTo: 'structures/cplx_20aa.pdb',
   }
   const { container, jump } = await run(services, report)
-  ok('multi-chain placeholder hints chain syntax', container.innerHTML.includes('B:17…'))
+  ok('multi-chain placeholder hints chain syntax', container.innerHTML.includes('B:17 或 B:1-5…'))
   ok('chain legend auto-shown', (container.innerHTML.match(/pv-chain-chip/g) ?? []).length === 2)
   ok('sequence strip renders 20 tiles', container.querySelectorAll('.pv-seq-tile').length === 20)
   const tileB1 = container.querySelectorAll('.pv-seq-tile')[10]
@@ -224,6 +246,17 @@ async function run(services, report) {
   ok('chain-prefixed jump targets chain B', line.includes('B:G5') && line.includes('35.0'))
   const line2 = await jump('5')
   ok('bare number still matches first chain', line2.includes('A:A5') && line2.includes('65.0'))
+  // Chain-prefixed range on a complex; chain letter is normalized (b:3-6 → B);
+  // a bare range is ambiguous on multi-chain panels and must be refused.
+  await jump('B:3-6')
+  ok(
+    'chain-prefixed range focuses B:3–6',
+    (container.querySelector('.pv-fmt')?.textContent ?? '').includes('聚焦区段 B:3–6'),
+  )
+  await jump('b:3-6')
+  ok('lowercase range toggles off (normalized to uppercase)', !container.querySelector('.pv-fmt'))
+  await jump('3-6')
+  ok('bare range refused on multi-chain panels', !container.querySelector('.pv-fmt'))
   container.remove()
 }
 

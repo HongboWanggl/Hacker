@@ -4211,14 +4211,34 @@ function ProteinToolView({ owner, services }) {
                 ),
                 h('input', {
                   className: 'pv-jump',
-                  placeholder: isMultiChain(residues) ? '残基号或 B:17…' : '残基号 / K101…',
+                  placeholder: isMultiChain(residues) ? '残基号、B:17 或 B:1-5…' : '残基号 / K101 / 36-42…',
                   title: isMultiChain(residues)
-                    ? '输入残基号或 链:残基号（如 B:17）回车，3D 与曲线同步高亮'
-                    : '输入残基号、氨基酸+编号（如 K101）回车，3D 与曲线同步高亮',
+                    ? '输入残基号、链:残基号（如 B:17）或链:区段（如 B:1-5）回车，3D 与曲线同步高亮'
+                    : '输入残基号、氨基酸+编号（如 K101）或区段（如 36-42）回车，3D 与曲线同步高亮',
                   onKeyDown: (e) => {
                     if (e.key !== 'Enter') return
                     if (!residues) return
                     const raw = e.currentTarget.value.trim()
+                    // "36-42" / "B:1-5" — a residue RANGE drives the same segment
+                    // focus the low-confidence chips use (curve band + 3D). The
+                    // chain is normalized uppercase (the canvas compares exactly);
+                    // multi-chain panels need the prefix or the range is ambiguous.
+                    // Re-entering the same range clears it, like re-clicking a chip.
+                    const seg = parseSeg(raw)
+                    if (seg && !(isMultiChain(residues) && !seg.chain)) {
+                      const norm = seg.chain ? `${seg.chain.toUpperCase()}:${seg.a}-${seg.b}` : raw
+                      const inSeg = residues.some(
+                        (r) =>
+                          (!seg.chain || r.chain?.toUpperCase() === seg.chain.toUpperCase()) &&
+                          r.i >= seg.a &&
+                          r.i <= seg.b,
+                      )
+                      if (inSeg) {
+                        setHighlightSeg((prev) => (prev === norm ? null : norm))
+                        e.currentTarget.value = ''
+                        return
+                      }
+                    }
                     const cm = /^([A-Za-z][A-Za-z0-9]{0,2}):(\d+)$/.exec(raw)
                     // single-chain panels also accept aa+number ("K101") — ambiguous
                     // with chain letters on complexes, so only offered there

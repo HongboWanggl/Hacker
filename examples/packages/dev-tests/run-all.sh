@@ -66,6 +66,7 @@ if [ "${1:-}" = "--live" ]; then
   live pv-kbd-search-live.mjs   # search table keyboard roving (real keys)
   live pv-kbd-batch-live.mjs    # batch table keyboard toggle (real keys)
   live pv-motion-live.mjs       # auto-rotate follows emulated reduced-motion
+  live pv-range-live.mjs        # jump box residue-range segment focus
   live pv-complex-guide.mjs     # predict_complex no-key guidance
   live af-e2e-live2.mjs         # compare_alphafold live run
   live pv-mobile-e2e.mjs        # fresh-session full loop at 400px phone width
