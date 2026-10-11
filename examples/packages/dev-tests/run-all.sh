@@ -73,6 +73,8 @@ if [ "${1:-}" = "--live" ]; then
   live pv-range-live.mjs        # jump box residue-range segment focus
   live pv-drill-live.mjs        # batch drill-down parity: color dropdown + jump box
   live pv-complex-guide.mjs     # predict_complex no-key guidance
+  live pv-pae-kbd-live.mjs      # PAE heatmap keyboard nav (historical session)
+  live pv-pae-kbd-live2.mjs     # fresh predict_complex + PAE keyboard E2E
   live af-e2e-live2.mjs         # compare_alphafold live run
   live pv-mobile-e2e.mjs        # fresh-session full loop at 400px phone width
 fi

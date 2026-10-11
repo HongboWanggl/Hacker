@@ -1120,6 +1120,13 @@ button.pv-chain-chip:hover {
   image-rendering: pixelated;
   flex-shrink: 0;
 }
+.pv-pae-canvas:focus-visible {
+  outline: 2px solid #3b6fe0;
+  outline-offset: 2px;
+}
+.dark .pv-pae-canvas:focus-visible {
+  outline-color: #9db8ff;
+}
 .pv-pae-side {
   display: flex;
   flex-direction: column;

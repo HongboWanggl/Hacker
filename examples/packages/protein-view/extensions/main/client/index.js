@@ -3647,6 +3647,13 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
   const [pae, setPae] = useState(null) // { n, bytes, scale }
   const [error, setError] = useState(null)
   const [hoverCell, setHoverCell] = useState(null) // { i, j } pooled-matrix indices
+  // Keyboard cursor: the heatmap canvas is focusable and arrows move the readout
+  // cell — the keyboard path feeds the SAME signals as the mouse (readout +
+  // cross-view hover linkage), so both channels stay one mechanism.
+  const [kbCell, setKbCell] = useState(null)
+  // Unified readout cell: mouse hover wins while present, else the keyboard
+  // cursor — one draw path (cell outline) and one readout for both channels.
+  const cursorCell = hoverCell ?? kbCell
   const [stripRow, setStripRow] = useState(null) // row hovered in the side profile
   const [focusPair, setFocusPair] = useState(null) // 'A|B' — chip-clicked chain pair
   const canvasRef = useRef(null)
@@ -3886,7 +3893,14 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
         )
       }
     }
-  }, [pae, n, px, cell, chainSizes, hover, scale, focusPair, chainRanges])
+    // Active readout cell (mouse hover or keyboard cursor): a crisp outline so
+    // the pair the readout below describes is unambiguous at a glance.
+    if (cursorCell) {
+      ctx2d.strokeStyle = 'rgba(255,255,255,0.95)'
+      ctx2d.lineWidth = 1.5
+      ctx2d.strokeRect(cursorCell.i * cell + 0.5, cursorCell.j * cell + 0.5, cell - 1, cell - 1)
+    }
+  }, [pae, n, px, cell, chainSizes, hover, scale, focusPair, chainRanges, cursorCell])
 
   // Side profile: one bar per (pooled) row = that residue's mean PAE against
   // all partners. Same hover linkage as the heatmap — the hovered row lights up.
@@ -3949,8 +3963,8 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
     const lb = residues?.[b] ? resLabel(residues, residues[b]) : `${b + 1}`
     return `${la}–${lb}`
   }
-  const readout = hoverCell
-    ? `${cellLabel(hoverCell.i)} → ${cellLabel(hoverCell.j)} · ${((pae.bytes[hoverCell.i * n + hoverCell.j] / 255) * 32).toFixed(2)} Å`
+  const readout = cursorCell
+    ? `${cellLabel(cursorCell.i)} → ${cellLabel(cursorCell.j)} · ${((pae.bytes[cursorCell.i * n + cursorCell.j] / 255) * 32).toFixed(2)} Å`
     : stripRow != null && rowMeans
       ? `${cellLabel(stripRow)} · 平均 ${((rowMeans[stripRow] / 255) * 32).toFixed(2)} Å`
       : ''
@@ -4033,11 +4047,47 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
         h('canvas', {
           ref: canvasRef,
           className: 'pv-pae-canvas',
-          role: 'img',
-          'aria-label': 'PAE 误差热图（紫=低误差，黄=高误差）',
+          role: 'application',
+          tabIndex: 0,
+          'aria-label':
+            'PAE 误差热图（紫=低误差，黄=高误差）；Tab 聚焦后用方向键移动读出格，Home/End 跳行首行尾，Esc 退出',
           width: px,
           height: px,
           style: { width: `${px}px`, height: `${px}px` },
+          onFocus: () => {
+            if (kbCell) return
+            const init = hoverCell ?? { i: 0, j: 0 }
+            setKbCell(init)
+            const r = init.i * scale
+            if (residues?.[r] && onHover) onHover(r)
+          },
+          onBlur: () => setKbCell(null),
+          onKeyDown: (e) => {
+            const cur = kbCell ?? hoverCell ?? { i: 0, j: 0 }
+            let ni = cur.i
+            let nj = cur.j
+            let handled = true
+            if (e.key === 'ArrowLeft') ni = Math.max(0, cur.i - 1)
+            else if (e.key === 'ArrowRight') ni = Math.min(n - 1, cur.i + 1)
+            else if (e.key === 'ArrowUp') nj = Math.max(0, cur.j - 1)
+            else if (e.key === 'ArrowDown') nj = Math.min(n - 1, cur.j + 1)
+            else if (e.key === 'Home') ni = 0
+            else if (e.key === 'End') ni = n - 1
+            else if (e.key === 'Escape') {
+              e.currentTarget.blur()
+              return
+            } else handled = false
+            if (!handled) return
+            e.preventDefault()
+            // Keep ←/→ from also stepping the panel's residue selection — the
+            // heatmap cursor owns the keys while it has focus (same contract
+            // as the sequence strip).
+            e.stopPropagation()
+            if (ni === cur.i && nj === cur.j) return
+            setKbCell({ i: ni, j: nj })
+            const r = ni * scale
+            if (residues?.[r] && onHover) onHover(r)
+          },
           onMouseMove: (e) => {
             const rect = e.currentTarget.getBoundingClientRect()
             const i = Math.floor((e.clientX - rect.left) / (rect.width / n))
@@ -4103,8 +4153,8 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
           'div',
           { className: 'pv-pae-caption' },
           scale > 1
-            ? `矩阵按 ${scale} 残基/格均值降采样显示；紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界。右侧条形为各残基平均误差（不含自身）——长条提示界面或无序区。悬停读出并联动 3D。`
-            : '紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界，块外亮区提示接口或折叠不确定性。右侧条形为各残基平均误差（不含自身）——长条提示界面残基或无序区。悬停读出残基对误差并联动 3D。',
+            ? `矩阵按 ${scale} 残基/格均值降采样显示；紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界。右侧条形为各残基平均误差（不含自身）——长条提示界面或无序区。悬停或 Tab 聚焦后用方向键读出并联动 3D。`
+            : '紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界，块外亮区提示接口或折叠不确定性。右侧条形为各残基平均误差（不含自身）——长条提示界面残基或无序区。悬停（或 Tab 聚焦后方向键）读出残基对误差并联动 3D。',
         ),
       ),
     ),

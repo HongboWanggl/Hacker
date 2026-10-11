@@ -390,13 +390,35 @@ export const predictComplex = {
           // Persist the PAE matrix for the panel's error heatmap. Best-effort:
           // its absence only hides the heatmap, never the model itself.
           if (out.paeNpz) {
+            const bytes = await readFile(out.paeNpz)
             try {
               const paePath = `structures/${label}_pae.npz`
-              await tctx.fs.write(paePath, await readFile(out.paeNpz))
+              await tctx.fs.write(paePath, bytes)
               report.paePath = paePath
-            } catch {
-              // npz copy failure is cosmetic; keep the report.
+            } catch (error) {
+              // The fs seam checkpoints any file it OVERWRITES and refuses binary
+              // content there (NUL bytes → E_CHECKPOINT_UNRESTORABLE), so a stale
+              // npz from an earlier run blocks the canonical name. A fresh path has
+              // no previous bytes to capture, so retry once time-suffixed. The tool
+              // fs exposes no delete, so the stale file stays — cosmetic only.
+              console.error(
+                '[predict_complex] npz overwrite blocked, retrying unique name:',
+                String(error?.message ?? error).slice(0, 160),
+              )
+              try {
+                const paePath = `structures/${label}_${Date.now()}_pae.npz`
+                await tctx.fs.write(paePath, bytes)
+                report.paePath = paePath
+              } catch (retryError) {
+                // Still cosmetic — keep the report, keep the log line.
+                console.error(
+                  '[predict_complex] pae npz copy failed:',
+                  String(retryError?.message ?? retryError).slice(0, 200),
+                )
+              }
             }
+          } else {
+            console.error('[predict_complex] no pae_*.npz found next to the model; heatmap hidden')
           }
           return result(report, JSON.stringify(report))
         }

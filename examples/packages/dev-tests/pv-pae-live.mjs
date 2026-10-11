@@ -164,6 +164,63 @@ await new Promise((r) => setTimeout(r, 200))
 const readout = container.querySelector('.pv-pae-side .pv-hoverline')?.textContent ?? ''
 check(`hover readout cell(1,2) (got "${readout}")`, readout === 'A:A2 → B:A1 · 15.06 Å')
 
+// --- keyboard navigation: the heatmap canvas is focusable, arrows move the
+// readout cell (same signals as the mouse: readout + cross-view linkage) ---
+// happy-dom never fires mouseleave (known probe trap) — clear the sticky
+// hoverCell first so the keyboard cursor owns the readout.
+canvas.dispatchEvent(new win.MouseEvent('mouseout', { bubbles: true, relatedTarget: win.document.body }))
+await new Promise((r) => setTimeout(r, 150))
+const kbdChecks = []
+kbdChecks.push([
+  'canvas is focusable with keyboard hints in its label',
+  canvas.tabIndex === 0 && (canvas.getAttribute('aria-label') ?? '').includes('方向键'),
+])
+// Focus starts the cursor at {0,0} (no hover cell anymore).
+canvas.focus()
+await new Promise((r) => setTimeout(r, 200))
+const kbReadout0 = container.querySelector('.pv-pae-side .pv-hoverline')?.textContent ?? ''
+kbdChecks.push([`focus starts cursor at origin (got "${kbReadout0}")`, kbReadout0 === 'A:A1 → A:A1 · 0.00 Å'])
+const key = (k) =>
+  canvas.dispatchEvent(new win.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }))
+const kbReadout = async () => {
+  await new Promise((r) => setTimeout(r, 150))
+  return container.querySelector('.pv-pae-side .pv-hoverline')?.textContent ?? ''
+}
+key('ArrowRight')
+kbdChecks.push([
+  `ArrowRight steps column (got "${await kbReadout()}")`,
+  (await kbReadout()) === 'A:A2 → A:A1 · 11.29 Å',
+])
+key('ArrowDown')
+kbdChecks.push([
+  `ArrowDown steps row (got "${await kbReadout()}")`,
+  (await kbReadout()) === 'A:A2 → A:A2 · 0.00 Å',
+])
+key('Home')
+kbdChecks.push([
+  `Home jumps to first column (got "${await kbReadout()}")`,
+  (await kbReadout()) === 'A:A1 → A:A2 · 11.29 Å',
+])
+key('End')
+kbdChecks.push([
+  `End jumps to last column (got "${await kbReadout()}")`,
+  (await kbReadout()) === 'B:A2 → A:A2 · 25.10 Å',
+])
+key('ArrowLeft')
+kbdChecks.push([
+  `ArrowLeft steps back (got "${await kbReadout()}")`,
+  (await kbReadout()) === 'B:A1 → A:A2 · 15.06 Å',
+])
+key('Escape')
+kbdChecks.push([
+  `Escape blurs and the cursor clears (got "${await kbReadout()}")`,
+  (await kbReadout()) === 'A:A2 · 平均 17.15 Å',
+])
+for (const [name, ok] of kbdChecks) {
+  console.log(ok ? 'ok ' : 'FAIL', name)
+  if (!ok) failed++
+}
+
 // --- pooled matrix (scale > 1): labels become residue ranges ----------------
 const pooled = Uint8Array.from([0, 255, 64, 128])
 const container2 = win.document.createElement('div')
