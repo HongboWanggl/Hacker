@@ -24,7 +24,7 @@ const op = async (kind: string, params: Record<string, unknown>) => {
     ...params,
   })
   for (let i = 0; i < 300; i++) {
-    const result = (await pkg['operation.get']({
+    const result = (await pkg.operation.get({
       profile: common.profile,
       operationId: receipt.operationId,
     })) as PkgOpResult

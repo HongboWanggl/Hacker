@@ -20,7 +20,7 @@ const pkg = client.packages as unknown as PkgAdmin
 const op = async (kind: string, params: Record<string, unknown>) => {
   const receipt = await pkg[kind]({ ...common, commandId: `cmd-${randomUUID()}`, ...params })
   for (let i = 0; i < 300; i++) {
-    const result = (await pkg['operation.get']({
+    const result = (await pkg.operation.get({
       profile: common.profile,
       operationId: receipt.operationId,
     })) as PkgOpResult
