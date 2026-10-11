@@ -45,6 +45,8 @@ collapse child records (see the comment in `apply`). Panels parse the tool's
 - `protein.structure` — parsed PDB: residues, ligand atoms/bonds
 - `protein.pae` — PAE matrix npz (base64 bytes)
 - `protein.report` — auxiliary report data
+- `protein.file` — raw PDB relay for the「下载 PDB」button (read-only,
+  extension-allowlisted, ≤700 KB so the result fits the 1 MiB budget)
 
 Adding a toolview for a new tool = add the key to `KEYS` and branch on
 `owner.toolName` inside `ProteinToolView`.

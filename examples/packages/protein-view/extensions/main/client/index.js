@@ -657,6 +657,7 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
             },
             '导出 CSV',
           ),
+          h(DownloadPdbButton, { services, path: predPath }),
         ),
       h(Structure3D, {
         residues: pred.residues,
@@ -1074,6 +1075,7 @@ function BatchRowDetail({ job, services }) {
             { className: 'pv-export', onClick: (e) => export3DPng(e, `${job.accession}.3d.png`, residues, isMultiChain(residues) ? 'chain' : 'plddt') },
             '导出 PNG',
           ),
+          h(DownloadPdbButton, { services, path: job.savedTo }),
           h(
             'button',
             {
@@ -1553,6 +1555,51 @@ function downloadCanvas(canvas, name) {
   a.href = canvas.toDataURL('image/png')
   a.download = name
   a.click()
+}
+
+// Raw PDB download: relayed through the protein.file query service so a
+// browser-only user (remote daemon) can take the actual structure file out of
+// the workspace — the CA coordinates the structure service returns are not
+// enough to reconstruct it. Throws so the button can show failure feedback.
+async function downloadPdbFile(services, path) {
+  if (!services || !path) throw new Error('no file path')
+  const r = await services.call('protein.file', { path })
+  if (!r || !r.b64) throw new Error('empty download')
+  const bin = atob(r.b64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'chemical/pdb' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = r.name ?? 'structure.pdb'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 5000)
+}
+
+// Toolbar button with transient feedback; renders null until both the service
+// surface and a structure path are known.
+function DownloadPdbButton({ services, path, className = 'pv-export' }) {
+  const [state, setState] = useState(null)
+  if (!path || !services) return null
+  return h(
+    'button',
+    {
+      className,
+      title: '下载工作区里的 PDB 结构文件',
+      onClick: async () => {
+        try {
+          await downloadPdbFile(services, path)
+          setState('ok')
+        } catch {
+          setState('fail')
+        }
+        setTimeout(() => setState(null), 1600)
+      },
+    },
+    state == null ? '下载 PDB' : state === 'ok' ? '已下载 ✓' : '下载失败',
+  )
 }
 
 function exportCanvasPng(e, canvasClass, name) {
@@ -2343,7 +2390,7 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
 const EL_COLORS = { C: [138, 147, 158], N: [88, 132, 220], O: [214, 98, 98], S: [219, 187, 70], P: [226, 148, 70], F: [140, 200, 170], CL: [140, 200, 150], BR: [160, 110, 80] }
 const ligandColor = (el) => EL_COLORS[el] ?? [154, 165, 181]
 
-function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, autoSpin, interfaceErr, ligand, showLigand = true, ghost, ghostColorOf, hintText, hiddenChains, onExport3D }) {
+function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, autoSpin, interfaceErr, ligand, showLigand = true, ghost, ghostColorOf, hintText, hiddenChains, onExport3D, downloadPdbEl }) {
   // Chain visibility toggle: hidden residues keep their indices (curve/strip
   // cross-linking stays aligned) but are skipped in drawing and hit-testing.
   const isHidden = useCallback((k) => !!(hiddenChains?.size && hiddenChains.has(residues?.[k]?.chain)), [hiddenChains, residues])
@@ -2805,6 +2852,7 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
     h(
       'div',
       { className: 'pv-3d-maxactions' },
+      maxed && downloadPdbEl,
       maxed && onExport3D
         ? h(
             'button',
@@ -3520,6 +3568,7 @@ function ProteinToolView({ owner, services }) {
                   { className: 'pv-export', onClick: (e) => export3DPng(e, `${pdbName}.3d.png`, residues, colorMode, ligandInfo, showLigand, interfaceErr) },
                   '导出 PNG',
                 ),
+                h(DownloadPdbButton, { services, path: pdbPath }),
                 h(
                   'button',
                   {
@@ -3607,6 +3656,7 @@ function ProteinToolView({ owner, services }) {
               showLigand,
               hiddenChains,
               onExport3D: (e) => export3DPng(e, `${pdbName}.3d.png`, residues, colorMode, ligandInfo, showLigand, interfaceErr),
+              downloadPdbEl: h(DownloadPdbButton, { services, path: pdbPath, className: 'pv-3d-maxbtn' }),
             }),
             colorMode === 'chain' ? h(ChainLegend, { residues, hidden: hiddenChains, onToggle: toggleChain }) : null,
             colorMode === 'interface'

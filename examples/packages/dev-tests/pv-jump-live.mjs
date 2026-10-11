@@ -50,7 +50,7 @@ async function run(services, report) {
   const { container, jump } = await run(services, report)
   const html = container.innerHTML
   ok('jump box mounted', html.includes('pv-jump'))
-  ok('export buttons mounted', container.querySelectorAll('.pv-export').length === 7) // 导出 PNG + 复制图像 + 复制序列 + curve 复制图像 + curve 导出 PNG + curve 导出 CSV + 复制结论
+  ok('export buttons mounted', container.querySelectorAll('.pv-export').length === 8) // 导出 PNG + 下载 PDB + 复制图像 + 复制序列 + curve 复制图像 + curve 导出 PNG + curve 导出 CSV + 复制结论
   // 复制序列: stub the clipboard, click, assert the FASTA payload (single chain → one record, 60-col lines).
   const clipTexts1 = []
   try { Object.defineProperty(win.navigator, 'clipboard', { value: { writeText: (t) => clipTexts1.push(t) }, configurable: true }) } catch {}

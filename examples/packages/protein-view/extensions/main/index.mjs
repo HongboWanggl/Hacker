@@ -253,6 +253,55 @@ export const runtime = {
         return scale > 1 ? { n, data: out.toString('base64'), scale } : { n, data: out.toString('base64') }
       },
     })
+    // Raw-file download relay: panels get a「下载 PDB」button so a browser-only
+    // user (remote daemon deployment) can take the actual structure file out of
+    // the workspace — CA-coordinate data the structure service returns is not
+    // enough to reconstruct it. Read-only, extension-allowlisted, size-capped.
+    ctx.services.register({
+      name: 'protein.file',
+      kind: 'query',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Workspace-relative path of a predicted PDB file' },
+        },
+        required: ['path'],
+        additionalProperties: false,
+      },
+      outputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          b64: { type: 'string' },
+          bytes: { type: 'number' },
+        },
+        required: ['name', 'b64'],
+        additionalProperties: false,
+      },
+      timeoutMs: 5000,
+      // 1 MiB protocol cap; a base64 PDB up to ~700 KB raw fits. Larger
+      // structures are rejected with a clear message rather than truncated.
+      maxResultBytes: 1048576,
+      async handler({ path }, svc) {
+        let rel = typeof path === 'string' ? path : ''
+        if (ABSOLUTE_SAFE.test(rel)) {
+          const cwd = svc.cwd.endsWith('/') ? svc.cwd : `${svc.cwd}/`
+          if (rel.startsWith(cwd)) rel = rel.slice(cwd.length)
+        }
+        if (!SAFE_PATH.test(rel)) {
+          throw new Error(`invalid PDB path: ${JSON.stringify(String(path).slice(0, 80))}`)
+        }
+        const bytes = Buffer.from(await svc.fs.read(rel))
+        if (bytes.length > 700000) {
+          throw new Error(`PDB too large to download via panel (${bytes.length} bytes); copy it from the workspace instead`)
+        }
+        return {
+          name: rel.split('/').pop() ?? 'structure.pdb',
+          b64: bytes.toString('base64'),
+          bytes: bytes.length,
+        }
+      },
+    })
   },
 }
 

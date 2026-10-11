@@ -11,7 +11,8 @@
     "services": [
       "protein.structure",
       "protein.report",
-      "protein.pae"
+      "protein.pae",
+      "protein.file"
     ],
     "projections": [],
     "publicConfig": {
