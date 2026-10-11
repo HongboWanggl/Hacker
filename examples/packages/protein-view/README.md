@@ -83,4 +83,9 @@ widths.
   color-scale legend (see `build3DComposite` / `buildCurveComposite` /
   `buildPaeComposite` / `buildCompareComposite`); export and clipboard copy
   share one code path per panel.
+- The compare panel's ΔpLDDT scale is direction-aware: blue = the first model
+  (prediction / `pairwise.labels[0]`) more confident, orange = the second model
+  (reference) more confident, saturation = |ΔpLDDT| (0 → ≥30). `deltaColor`,
+  the in-panel strip legend, the ΔpLDDT sparkline legend, and the exported
+  composite legend all share these semantics — keep them in sync.
 - New services must be added to `services` in `agnes.client.json` (allowlist).

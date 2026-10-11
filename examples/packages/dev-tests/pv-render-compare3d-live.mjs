@@ -179,7 +179,7 @@ if (pngBtn) {
   const arcs = g2dCalls.slice(before).filter((c) => c[0] === 'arc').length
   expChecks.push(['composite carries ligand element key', texts.some((t) => String(t).includes('配体按元素着色'))])
   expChecks.push([`composite draws 5 element dots (got ${arcs})`, arcs >= 5])
-  expChecks.push(['composite carries strip label', texts.some((t) => String(t).includes('|ΔpLDDT|'))])
+  expChecks.push(['composite carries strip label', texts.some((t) => String(t).includes('ΔpLDDT 置信度差异'))])
 }
 for (const [name, ok] of expChecks) { console.log(ok ? 'ok ' : 'FAIL', name); if (!ok) failed++ }
 

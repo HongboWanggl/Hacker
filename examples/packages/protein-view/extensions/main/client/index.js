@@ -91,13 +91,20 @@ function SequenceStrip({ residues, hover, onHover, selected, onSelect, colorOf, 
   )
 }
 
-// Divergence scale for the compare strip: calm blue at Δ≈0 → orange-red at |Δ|≥30.
+// Direction-aware diverging scale for the compare strip: sign picks the hue
+// (blue = first model more confident, orange = second model more confident —
+// same semantics as the ΔpLDDT sparkline legend) while |Δ| drives saturation
+// 0 → ≥30. Near-zero reads pale so agreement stays calm.
 function deltaColor(d) {
   const a = Math.min(Math.abs(d) / 30, 1)
-  const from = [101, 203, 243]
-  const to = [255, 125, 69]
+  const from = d >= 0 ? [214, 235, 250] : [255, 228, 210]
+  const to = d >= 0 ? [33, 150, 216] : [255, 125, 69]
   return `rgb(${from.map((v, i) => Math.round(v + (to[i] - v) * a)).join(',')})`
 }
+// Saturated endpoints of the two deltaColor ramps, for legends.
+const DELTA_POS = '#2196d8'
+const DELTA_NEG = '#ff7d45'
+const DELTA_MID = 'rgb(244,236,231)'
 // Structural-deviation scale for the compare strip's distance mode: teal at
 // ≤0.5 Å (essentially identical) → amber ~2 Å → red at ≥5 Å. The 0.55 exponent
 // bends the ramp early so sub-Å noise stays calm while real deviations pop.
@@ -418,7 +425,7 @@ function complexMetricChips(report) {
 // ---------------------------------------------------------------------------
 // ΔpLDDT profile sparkline: signed per-bin deltas around a midline.
 // Positive bins (ESMFold more confident) blue, negative bins orange.
-function DeltaSparkline({ series, note, onPick }) {
+function DeltaSparkline({ series, note, onPick, labelA = 'ESMFold', labelB = 'AlphaFold' }) {
   if (!Array.isArray(series) || series.length < 2) return null
   const maxAbs = Math.max(...series.map((d) => Math.abs(d.delta)), 1)
   const n = series.length
@@ -445,8 +452,8 @@ function DeltaSparkline({ series, note, onPick }) {
     h(
       'div',
       { className: 'pv-legend' },
-      h('span', { className: 'pv-legend-item' }, h('span', { className: 'pv-legend-swatch', style: { background: C_CONFIDENT } }), 'ESMFold 更自信'),
-      h('span', { className: 'pv-legend-item' }, h('span', { className: 'pv-legend-swatch', style: { background: '#ff7d45' } }), 'AlphaFold 更自信'),
+      h('span', { className: 'pv-legend-item' }, h('span', { className: 'pv-legend-swatch', style: { background: '#38a3e8' } }), `${labelA} 更自信`),
+      h('span', { className: 'pv-legend-item' }, h('span', { className: 'pv-legend-swatch', style: { background: DELTA_NEG } }), `${labelB} 更自信`),
       note ? h('span', { className: 'pv-legend-item' }, note) : null,
     ),
   )
@@ -459,6 +466,8 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
   const predPath = report.prediction?.path
   const ghostPath = report.alphafold?.savedTo
   const pw = report.pairwise?.labels
+  // short names for the exported composite's divergence-strip legend
+  const labels = { a: pw ? pw[0] : '预测', b: pw ? pw[1] : '参考' }
   const [pred, setPred] = useState(null)
   const [ghost, setGhost] = useState(null)
   const [hover, setHover] = useState(null)
@@ -580,7 +589,7 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
               onClick: async (e) => {
                 try {
                   const canvas = e.currentTarget.closest('.pv-3d-col')?.querySelector('canvas.pv-3d')
-                  const ok = await copyCompareComposite(canvas, pred.residues, stripMode, distMap, gmap, ligandInfo, showLigand)
+                  const ok = await copyCompareComposite(canvas, pred.residues, stripMode, distMap, gmap, ligandInfo, showLigand, labels)
                   setCmpCopied(ok)
                 } catch {
                   setCmpCopied(false)
@@ -604,6 +613,7 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
                   gmap,
                   ligandInfo,
                   showLigand,
+                  labels,
                 ),
             },
             '导出 PNG',
@@ -660,6 +670,7 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
             gmap,
             ligandInfo,
             showLigand,
+            labels,
           ),
       }),
       isMultiChain(pred.residues) ? h(ChainLegend, { residues: pred.residues }) : null,
@@ -696,7 +707,7 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
               {
                 className: `pv-chip${stripMode === 'plddt' ? ' pv-chip--active' : ''}`,
                 onClick: () => setStripMode('plddt'),
-                title: '按置信度差异（|ΔpLDDT|）着色',
+                title: '按 ΔpLDDT 着色：蓝=前者更自信，橙=后者更自信，色浓=分歧大',
               },
               '置信度差异',
             ),
@@ -748,12 +759,13 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
             : h(
                 'div',
                 { className: 'pv-divlegend' },
-                h('span', null, '|ΔpLDDT|'),
+                h('span', null, `${pw ? pw[1] : '参考'} 更自信 ←`),
                 h('span', {
                   className: 'pv-divlegend-bar',
-                  style: { background: 'linear-gradient(90deg, rgb(101,203,243), rgb(255,125,69))' },
+                  title: '色浓 = |ΔpLDDT| 大（0 → ≥30）',
+                  style: { background: `linear-gradient(90deg, ${DELTA_NEG}, ${DELTA_MID} 50%, ${DELTA_POS})` },
                 }),
-                h('span', null, '0 · 15 · ≥30'),
+                h('span', null, `→ ${pw ? pw[0] : '预测'} 更自信`),
               ),
         )
       : null,
@@ -876,7 +888,7 @@ function CompareCard({ report, services }) {
       selectedRes: selRes,
       onPickRes: (i) => setSelRes((prev) => (prev === i ? null : i)),
     }),
-    h(DeltaSparkline, { series: c.deltaSeries, note: c.deltaSeriesNote, onPick: (i) => setSelRes((prev) => (prev === i ? null : i)) }),
+    h(DeltaSparkline, { series: c.deltaSeries, note: c.deltaSeriesNote, onPick: (i) => setSelRes((prev) => (prev === i ? null : i)), labelA, labelB }),
     Array.isArray(c.largestDeltas) && c.largestDeltas.length
       ? h(
           'div',
@@ -1913,7 +1925,7 @@ function exportCompareCsv(e, name, residues, distMap, gmap) {
 // Compare 3D export: the 3D overlay + the divergence strip (current lens)
 // composed on the same dark backdrop, so one figure carries superposition and
 // heat map. The builder is shared with the clipboard copy.
-function buildCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo = null, showLigand = false) {
+function buildCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo = null, showLigand = false, labels = null) {
   if (!canvas || typeof canvas.toDataURL !== 'function' || !residues?.length) return null
   {
     const s = canvas.width / (canvas.clientWidth || canvas.width) || 1
@@ -1923,9 +1935,10 @@ function buildCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo
     const labelH = Math.round(20 * s)
     const top = 8 * s
     const ligH = ligandInfo && showLigand ? labelH : 0
+    const legendH = Math.round(22 * s)
     const c = document.createElement('canvas')
     c.width = canvas.width
-    c.height = Math.round(canvas.height + top + ligH + labelH + rows * pitch)
+    c.height = Math.round(canvas.height + top + ligH + labelH + rows * pitch + legendH)
     const g = c.getContext('2d')
     g.drawImage(canvas, 0, 0)
     // band continues the 3D backdrop gradient (#0e1420 → #141c2b)
@@ -1956,7 +1969,7 @@ function buildCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo
     g.fillText(
       mode === 'dist'
         ? 'Cα 偏差（叠合后） · teal ≤0.5 Å → 红 ≥5 Å'
-        : '|ΔpLDDT| 置信度差异 · 0 → ≥30',
+        : 'ΔpLDDT 置信度差异 · 色浓 = 分歧大（0 → ≥30）',
       6 * s,
       canvas.height + top + ligH + labelH / 2,
     )
@@ -1972,23 +1985,49 @@ function buildCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo
             : '#b6b6b6'
       g.fillRect((idx % perRow) * pitch + 6 * s, canvas.height + top + ligH + labelH + Math.floor(idx / perRow) * pitch, pitch - 1, pitch - 1)
     })
+    // legend row keeps the exported figure self-explanatory without the panel
+    const ly = canvas.height + top + ligH + labelH + rows * pitch + legendH / 2
+    g.font = `${11 * s}px ui-sans-serif, system-ui`
+    if (mode === 'dist') {
+      g.fillStyle = '#b6b6b6'
+      g.fillRect(6 * s, ly - 5 * s, 10 * s, 10 * s)
+      g.fillStyle = 'rgba(255,255,255,0.85)'
+      g.fillText('参考无对应残基', 20 * s, ly)
+    } else {
+      const la = labels?.a ?? '预测'
+      const lb = labels?.b ?? '参考'
+      g.fillStyle = DELTA_POS
+      g.fillRect(6 * s, ly - 5 * s, 10 * s, 10 * s)
+      g.fillStyle = 'rgba(255,255,255,0.85)'
+      g.fillText(`${la} 更自信`, 20 * s, ly)
+      const x2 = 20 * s + g.measureText(`${la} 更自信`).width + 14 * s
+      g.fillStyle = DELTA_NEG
+      g.fillRect(x2, ly - 5 * s, 10 * s, 10 * s)
+      g.fillStyle = 'rgba(255,255,255,0.85)'
+      g.fillText(`${lb} 更自信`, x2 + 14 * s, ly)
+      const x3 = x2 + 14 * s + g.measureText(`${lb} 更自信`).width + 14 * s
+      g.fillStyle = '#b6b6b6'
+      g.fillRect(x3, ly - 5 * s, 10 * s, 10 * s)
+      g.fillStyle = 'rgba(255,255,255,0.85)'
+      g.fillText('参考无对应残基', x3 + 14 * s, ly)
+    }
     return c
   }
 }
 
-function exportComparePng(e, name, residues, mode, distMap, gmap, ligandInfo = null, showLigand = false) {
+function exportComparePng(e, name, residues, mode, distMap, gmap, ligandInfo = null, showLigand = false, labels = null) {
   const col = e.currentTarget.closest('.pv-3d-col')
   const canvas = col?.querySelector('canvas.pv-3d')
   if (!canvas || typeof canvas.toDataURL !== 'function' || !residues?.length) return
   try {
-    const c = buildCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo, showLigand)
+    const c = buildCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo, showLigand, labels)
     if (!c) return
     downloadCanvas(c, name)
   } catch {}
 }
 
-async function copyCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo, showLigand) {
-  return copyCanvasPng(canvas, (cv) => buildCompareComposite(cv, residues, mode, distMap, gmap, ligandInfo, showLigand))
+async function copyCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo, showLigand, labels = null) {
+  return copyCanvasPng(canvas, (cv) => buildCompareComposite(cv, residues, mode, distMap, gmap, ligandInfo, showLigand, labels))
 }
 
 // Batch table → CSV download (per-accession rows, failures included).

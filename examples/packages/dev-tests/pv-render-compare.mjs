@@ -47,7 +47,7 @@ const checks = [
   ['no 3D mount for compare', !html.includes('pv-3d-col')],
   ['verdict line', html.includes('significant deviation')],
   ['sparkline bars', html.includes('pv-delta-bars') && (html.match(/pv-delta-bar /g) ?? []).length === 4],
-  ['sparkline legend', html.includes('ESMFold 更自信') && html.includes('AlphaFold 更自信')],
+  ['sparkline legend', html.includes('预测 (ESMFold) 更自信') && html.includes('AlphaFold DB 更自信')],
   ['compare3d loading state in SSR', html.includes('加载结构…')],
 ]
 let failed = 0
