@@ -6,13 +6,12 @@
 // weights locally when the boltz-community CLI is installed (Apple MPS or
 // CUDA), and only fails with setup instructions when neither path exists.
 
-import { readFileSync, readdirSync } from 'node:fs'
 import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
+import { accessSync, constants as fsConstants, readdirSync, readFileSync } from 'node:fs'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { accessSync, constants as fsConstants } from 'node:fs'
+import { promisify } from 'node:util'
 
 const Kind = Symbol.for('TypeBox.Kind')
 
@@ -32,7 +31,10 @@ const writeMeta = {
 }
 
 const text = (s) => ({ content: [{ type: 'text', text: s }] })
-const result = (structured, s) => ({ content: [{ type: 'text', text: JSON.stringify(structured) }], structured })
+const result = (structured, _s) => ({
+  content: [{ type: 'text', text: JSON.stringify(structured) }],
+  structured,
+})
 const fail = (s) => ({ ...text(s), isError: true })
 
 const str = (desc, extra = {}) => ({ [Kind]: 'String', type: 'string', description: desc, ...extra })
@@ -42,7 +44,7 @@ const bool = (desc) => ({ [Kind]: 'Boolean', type: 'boolean', description: desc 
 // never logged, echoed, or written into results.
 function resolveApiKey() {
   const fromEnv = process.env.BOLTZ_API_KEY
-  if (fromEnv && fromEnv.trim()) return fromEnv.trim()
+  if (fromEnv?.trim()) return fromEnv.trim()
   const home = process.env.AGH_HOME
   if (home) {
     for (const dir of ['secrets', 'data/secrets']) {
@@ -60,14 +62,17 @@ function resolveApiKey() {
 const SETUP_HINT =
   'Boltz-2 needs an API key. Either set BOLTZ_API_KEY in the daemon environment, or create the secret file: ' +
   'mkdir -p "$AGH_HOME/secrets/boltz" && printf %s "YOUR_KEY" > "$AGH_HOME/secrets/boltz/default" && chmod 600 "$AGH_HOME/secrets/boltz/default" ' +
- '(get a key at https://boltz.bio). Alternatively install the open-source weights locally: ' +
- 'uv venv --python 3.12 ~/boltz2/venv && uv pip install --python ~/boltz2/venv/bin/python boltz-community ' +
- '(Apple Silicon uses MPS; first run downloads ~10 GB of weights).'
+  '(get a key at https://boltz.bio). Alternatively install the open-source weights locally: ' +
+  'uv venv --python 3.12 ~/boltz2/venv && uv pip install --python ~/boltz2/venv/bin/python boltz-community ' +
+  '(Apple Silicon uses MPS; first run downloads ~10 GB of weights).'
 
 // Local open-source fallback: the boltz-community fork (Apple MPS / CUDA).
 // Detect the CLI; BOLTZ_LOCAL_BIN overrides the default venv path.
 function resolveLocalBoltz() {
-  const candidates = [process.env.BOLTZ_LOCAL_BIN, join(process.env.HOME ?? '', 'boltz2', 'venv', 'bin', 'boltz')].filter(Boolean)
+  const candidates = [
+    process.env.BOLTZ_LOCAL_BIN,
+    join(process.env.HOME ?? '', 'boltz2', 'venv', 'bin', 'boltz'),
+  ].filter(Boolean)
   for (const p of candidates) {
     try {
       accessSync(p, fsConstants.X_OK)
@@ -82,7 +87,7 @@ function resolveLocalBoltz() {
 // Run a prediction locally and shape the result like the API path so the panel
 // renders identically. Local runs take minutes (MPS fp32, roughly 1-2x slower
 // than a T4); the first ever run also downloads ~10 GB of weights.
-async function runLocalBoltz({ proteins, smiles, label, wait }) {
+async function runLocalBoltz({ proteins, smiles }) {
   const bin = resolveLocalBoltz()
   if (!bin) return { missing: true }
   const exec = promisify(execFile)
@@ -97,19 +102,36 @@ async function runLocalBoltz({ proteins, smiles, label, wait }) {
     // a top-level properties block; `affinity: true` on the ligand is ignored.
     const ligandId = String.fromCharCode(65 + proteins.length)
     yaml.push(`  - ligand:\n      id: ${ligandId}\n      smiles: ${smiles}`)
-    yaml.push('properties:\n  - affinity:\n      binder: ' + ligandId)
+    yaml.push(`properties:\n  - affinity:\n      binder: ${ligandId}`)
   }
   await writeFile(join(work, 'input.yaml'), `${yaml.join('\n')}\n`, 'utf8')
   // Local mode is synchronous — no job id exists, so `wait` is advisory only.
   let stdout = ''
   try {
-    ;({ stdout } = await exec(bin, ['predict', join(work, 'input.yaml'), '--accelerator', 'mps', '--use_msa_server', '--output_format', 'pdb', '--out_dir', join(work, 'out')], {
-      timeout: 20 * 60_000,
-      maxBuffer: 64 * 1024 * 1024,
-    }))
+    ;({ stdout } = await exec(
+      bin,
+      [
+        'predict',
+        join(work, 'input.yaml'),
+        '--accelerator',
+        'mps',
+        '--use_msa_server',
+        '--output_format',
+        'pdb',
+        '--out_dir',
+        join(work, 'out'),
+      ],
+      {
+        timeout: 20 * 60_000,
+        maxBuffer: 64 * 1024 * 1024,
+      },
+    ))
   } catch (error) {
     const msg = String(error?.message ?? error)
-    if (killed(error)) return { error: `Local Boltz-2 timed out after 20 min (${msg.slice(0, 120)}). Try smaller targets or the API.` }
+    if (killed(error))
+      return {
+        error: `Local Boltz-2 timed out after 20 min (${msg.slice(0, 120)}). Try smaller targets or the API.`,
+      }
     // The tail of the message carries the actual exception; the head is the exec line + progress bars.
     return { error: `Local Boltz-2 failed: ${msg.slice(-400)}` }
   }
@@ -153,7 +175,11 @@ async function runLocalBoltz({ proteins, smiles, label, wait }) {
 }
 
 function killed(error) {
-  return error?.killed === true || String(error?.message ?? '').includes('TIMEDOUT') === true || String(error?.message ?? '').includes('ETIMEDOUT') === true
+  return (
+    error?.killed === true ||
+    String(error?.message ?? '').includes('TIMEDOUT') === true ||
+    String(error?.message ?? '').includes('ETIMEDOUT') === true
+  )
 }
 
 async function boltzFetch(tctx, path, init) {
@@ -231,7 +257,9 @@ function foldVerdict(ptm) {
 async function waitForPrediction(tctx, id, deadlineMs = 9 * 60_000) {
   const started = Date.now()
   while (Date.now() - started < deadlineMs) {
-    const { res, authError } = await boltzFetch(tctx, `/compute/v1/predictions/structure-and-binding/${id}`, { method: 'GET' })
+    const { res, authError } = await boltzFetch(tctx, `/compute/v1/predictions/structure-and-binding/${id}`, {
+      method: 'GET',
+    })
     if (authError) return { authError }
     if (!res.ok) return { error: `status check failed: HTTP ${res.status}` }
     const body = await res.json()
@@ -253,26 +281,41 @@ export const predictComplex = {
         [Kind]: 'Object',
         type: 'object',
         properties: {
-          sequences: str('Protein amino-acid sequences (single-letter code). One entry per chain, comma-separated for multiple chains', {
-            default: '',
-          }),
-          ligand_smiles: str('Optional ligand as a SMILES string, e.g. "CC(=O)OC1=CC=CC=C1C(=O)O" for aspirin', { default: '' }),
+          sequences: str(
+            'Protein amino-acid sequences (single-letter code). One entry per chain, comma-separated for multiple chains',
+            {
+              default: '',
+            },
+          ),
+          ligand_smiles: str(
+            'Optional ligand as a SMILES string, e.g. "CC(=O)OC1=CC=CC=C1C(=O)O" for aspirin',
+            { default: '' },
+          ),
           name: str('Short label used for output filenames, e.g. lysozyme_benzene (default: complex)'),
-          wait: bool('Wait for the job to finish and download the structure (default true). Set false to submit and return the prediction id'),
-          prediction_id: str('Resume an already-submitted job (from a previous wait=false run or a timeout) instead of submitting a new one. Pass the same sequences for the report', {
-            default: '',
-          }),
+          wait: bool(
+            'Wait for the job to finish and download the structure (default true). Set false to submit and return the prediction id',
+          ),
+          prediction_id: str(
+            'Resume an already-submitted job (from a previous wait=false run or a timeout) instead of submitting a new one. Pass the same sequences for the report',
+            {
+              default: '',
+            },
+          ),
         },
         required: ['sequences'],
         additionalProperties: false,
       },
       meta: writeMeta,
-      async execute({ sequences, ligand_smiles = '', name = 'complex', wait = true, prediction_id = '' }, tctx) {
+      async execute(
+        { sequences, ligand_smiles = '', name = 'complex', wait = true, prediction_id = '' },
+        tctx,
+      ) {
         const proteins = String(sequences)
           .split(',')
           .map((s) => s.replace(/\s+/g, '').toUpperCase())
           .filter(Boolean)
-        if (proteins.length === 0) return fail('No protein sequences given. Pass one sequence per chain, comma-separated.')
+        if (proteins.length === 0)
+          return fail('No protein sequences given. Pass one sequence per chain, comma-separated.')
         for (const seq of proteins) {
           if (seq.length < 5) return fail('Chain sequence too short (<5 residues).')
           if (!AA_RE.test(seq)) return fail('Sequences must be single-letter amino-acid code.')
@@ -314,10 +357,16 @@ export const predictComplex = {
             // A ligand-free run still reports ligand_iptm: 0.0 — surfacing it
             // would render a meaningless "ligand ipTM 0" chip. Same for
             // protein_iptm on single-protein runs (no protein interface exists).
-            ...(smiles && pct(out.conf?.ligand_iptm) !== undefined ? { ligandIptm: pct(out.conf.ligand_iptm) } : {}),
-            ...(proteins.length >= 2 && pct(out.conf?.protein_iptm) !== undefined ? { proteinIptm: pct(out.conf.protein_iptm) } : {}),
+            ...(smiles && pct(out.conf?.ligand_iptm) !== undefined
+              ? { ligandIptm: pct(out.conf.ligand_iptm) }
+              : {}),
+            ...(proteins.length >= 2 && pct(out.conf?.protein_iptm) !== undefined
+              ? { proteinIptm: pct(out.conf.protein_iptm) }
+              : {}),
             ...(pct(out.aff?.affinity_probability_binary ?? out.aff?.affinity_probability) !== undefined
-              ? { bindingConfidence: pct(out.aff.affinity_probability_binary ?? out.aff.affinity_probability) }
+              ? {
+                  bindingConfidence: pct(out.aff.affinity_probability_binary ?? out.aff.affinity_probability),
+                }
               : {}),
           }
           const affProb = out.aff?.affinity_probability_binary ?? out.aff?.affinity_probability
@@ -358,24 +407,37 @@ export const predictComplex = {
           const entities = buildEntities({ proteins, ligand_smiles: smiles || undefined })
           let started
           try {
-            const { res, authError } = await boltzFetch(tctx, '/compute/v1/predictions/structure-and-binding', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ model: 'boltz-2.1', input: { entities } }),
-            })
+            const { res, authError } = await boltzFetch(
+              tctx,
+              '/compute/v1/predictions/structure-and-binding',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: 'boltz-2.1', input: { entities } }),
+              },
+            )
             if (authError) return fail(SETUP_HINT)
             const body = await res.json().catch(() => undefined)
             if (!res.ok) {
-              return fail(`Boltz request failed: HTTP ${res.status} ${body?.error?.message ?? body?.message ?? ''}`.trim())
+              return fail(
+                `Boltz request failed: HTTP ${res.status} ${body?.error?.message ?? body?.message ?? ''}`.trim(),
+              )
             }
             started = body
           } catch (error) {
             return fail(`Boltz request error: ${String(error).slice(0, 200)}`)
           }
           id = started.id
-          if (!wait) return result({ predictionId: id, status: started.status ?? 'pending' }, JSON.stringify({ predictionId: id, status: started.status ?? 'pending' }))
+          if (!wait)
+            return result(
+              { predictionId: id, status: started.status ?? 'pending' },
+              JSON.stringify({ predictionId: id, status: started.status ?? 'pending' }),
+            )
         } else if (!wait) {
-          return result({ predictionId: id, status: 'resumed' }, JSON.stringify({ predictionId: id, status: 'resumed' }))
+          return result(
+            { predictionId: id, status: 'resumed' },
+            JSON.stringify({ predictionId: id, status: 'resumed' }),
+          )
         }
 
         const done = await waitForPrediction(tctx, id)
@@ -398,11 +460,16 @@ export const predictComplex = {
         const metricsAll = summarizeMetrics(rawMetrics)
         // Single-chain fallback: ipTM-family scores come back as 0.0 — collapse
         // the report to structure-level confidence, judged by pTM.
-        const metrics = singleChain && metricsAll
-          ? { ptm: metricsAll.ptm, structureConfidence: metricsAll.structureConfidence, complexPde: metricsAll.complexPde }
-          : metricsAll
+        const metrics =
+          singleChain && metricsAll
+            ? {
+                ptm: metricsAll.ptm,
+                structureConfidence: metricsAll.structureConfidence,
+                complexPde: metricsAll.complexPde,
+              }
+            : metricsAll
         const files = done.outputs?.structures ?? done.outputs?.files ?? done.files
-        let pdbUrl = files?.[0]?.url ?? files?.[0]
+        const pdbUrl = files?.[0]?.url ?? files?.[0]
         if (!pdbUrl) {
           return result(
             { predictionId: id, status: done.status, metrics },

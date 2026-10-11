@@ -6,9 +6,30 @@
 import { inflateRawSync } from 'node:zlib'
 
 const AA3_TO_1 = {
-  ALA: 'A', ARG: 'R', ASN: 'N', ASP: 'D', CYS: 'C', GLN: 'Q', GLU: 'E', GLY: 'G',
-  HIS: 'H', ILE: 'I', LEU: 'L', LYS: 'K', MET: 'M', PHE: 'F', PRO: 'P', SER: 'S',
-  THR: 'T', TRP: 'W', TYR: 'Y', VAL: 'V', ASX: 'B', GLX: 'Z', SEC: 'U', PYL: 'O',
+  ALA: 'A',
+  ARG: 'R',
+  ASN: 'N',
+  ASP: 'D',
+  CYS: 'C',
+  GLN: 'Q',
+  GLU: 'E',
+  GLY: 'G',
+  HIS: 'H',
+  ILE: 'I',
+  LEU: 'L',
+  LYS: 'K',
+  MET: 'M',
+  PHE: 'F',
+  PRO: 'P',
+  SER: 'S',
+  THR: 'T',
+  TRP: 'W',
+  TYR: 'Y',
+  VAL: 'V',
+  ASX: 'B',
+  GLX: 'Z',
+  SEC: 'U',
+  PYL: 'O',
   UNK: 'X',
 }
 
@@ -72,7 +93,24 @@ export const runtime = {
         // huge HETATM block would bloat the 1 MiB result for no visual gain.
         const ligandAtoms = []
         const WATERS = new Set(['HOH', 'SOL', 'WAT', 'H2O', 'TIP3', 'TIP', 'DOD'])
-        const TWO_LETTER = new Set(['CL', 'BR', 'NA', 'MG', 'CA', 'FE', 'ZN', 'MN', 'CU', 'NI', 'CO', 'SE', 'LI', 'K', 'AL', 'SI'])
+        const TWO_LETTER = new Set([
+          'CL',
+          'BR',
+          'NA',
+          'MG',
+          'CA',
+          'FE',
+          'ZN',
+          'MN',
+          'CU',
+          'NI',
+          'CO',
+          'SE',
+          'LI',
+          'K',
+          'AL',
+          'SI',
+        ])
         const elementOf = (name, col) => {
           const el = col.trim().toUpperCase()
           if (/^[A-Z]{1,2}$/.test(el)) return TWO_LETTER.has(el) ? el[0] + el.slice(1).toLowerCase() : el[0]
@@ -140,7 +178,11 @@ export const runtime = {
           const bonds = []
           for (let a = 0; a < ligandAtoms.length; a++) {
             for (let b = a + 1; b < ligandAtoms.length; b++) {
-              const d = Math.hypot(ligandAtoms[a].x - ligandAtoms[b].x, ligandAtoms[a].y - ligandAtoms[b].y, ligandAtoms[a].z - ligandAtoms[b].z)
+              const d = Math.hypot(
+                ligandAtoms[a].x - ligandAtoms[b].x,
+                ligandAtoms[a].y - ligandAtoms[b].y,
+                ligandAtoms[a].z - ligandAtoms[b].z,
+              )
               if (d < 2.0) bonds.push([a, b])
             }
           }
@@ -230,7 +272,8 @@ export const runtime = {
         const parsed = parseNpy(npy)
         let { shape, fortran, float } = parsed
         let n = shape[0]
-        if (!Number.isInteger(n) || n < 2 || n !== shape[1]) throw new Error(`pae matrix is not square (shape ${shape.join('x')})`)
+        if (!Number.isInteger(n) || n < 2 || n !== shape[1])
+          throw new Error(`pae matrix is not square (shape ${shape.join('x')})`)
         // The 1 MiB result budget fits 800×800 bytes; longer chains are
         // mean-pooled blockwise so the heatmap stays available (display only —
         // scale tells the panel each cell covers `scale` residues).
@@ -247,7 +290,10 @@ export const runtime = {
           for (let j = 0; j < n; j++) {
             // fortran_order stores column-major: [i][j] lives at i + j*n.
             const v = float[fortran ? i + j * n : i * n + j]
-            out[i * n + j] = Math.max(0, Math.min(255, Math.round((Number.isFinite(v) ? v : 32) / 32 * 255)))
+            out[i * n + j] = Math.max(
+              0,
+              Math.min(255, Math.round(((Number.isFinite(v) ? v : 32) / 32) * 255)),
+            )
           }
         }
         return scale > 1 ? { n, data: out.toString('base64'), scale } : { n, data: out.toString('base64') }
@@ -293,7 +339,9 @@ export const runtime = {
         }
         const bytes = Buffer.from(await svc.fs.read(rel))
         if (bytes.length > 700000) {
-          throw new Error(`PDB too large to download via panel (${bytes.length} bytes); copy it from the workspace instead`)
+          throw new Error(
+            `PDB too large to download via panel (${bytes.length} bytes); copy it from the workspace instead`,
+          )
         }
         return {
           name: rel.split('/').pop() ?? 'structure.pdb',
@@ -395,7 +443,10 @@ function parseNpy(bytes) {
   const start = (verMajor >= 2 ? 12 : 10) + hdrLen
   const count = shape.reduce((a, b) => a * b, 1)
   // Buffer may be a pooled view: slice the underlying bytes it actually covers.
-  const ab = bytes.buffer.slice(bytes.byteOffset + start, bytes.byteOffset + start + count * (descr === '<f8' ? 8 : 4))
+  const ab = bytes.buffer.slice(
+    bytes.byteOffset + start,
+    bytes.byteOffset + start + count * (descr === '<f8' ? 8 : 4),
+  )
   switch (descr) {
     case '<f4':
       return { shape, fortran, float: new Float32Array(ab) }

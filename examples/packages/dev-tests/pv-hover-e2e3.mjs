@@ -1,5 +1,7 @@
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
-const exe = '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
+
+const exe =
+  '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } })
 const errors = []
@@ -17,7 +19,9 @@ const clicked = await page.evaluate(() => {
 console.log(clicked)
 await page.waitForTimeout(5000)
 await page.evaluate(() => {
-  document.querySelectorAll('details.turn-process:not([open])').forEach((d) => d.querySelector('summary')?.click())
+  document.querySelectorAll('details.turn-process:not([open])').forEach((d) => {
+    d.querySelector('summary')?.click()
+  })
 })
 await page.waitForTimeout(5000)
 await page.evaluate(() => document.querySelector('.pv-3d')?.scrollIntoView({ block: 'center' }))

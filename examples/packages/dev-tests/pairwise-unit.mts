@@ -1,9 +1,31 @@
 // Unit test compare_structures: math cross-check vs kabsch synthetic, error paths.
-import { compareStructures } from '/Users/wanghanbao/agnes-harness/examples/packages/protein-predictor/pairwise.mjs'
-import { kabsch } from '/Users/wanghanbao/agnes-harness/examples/packages/protein-predictor/alphafold.mjs'
 
-const captured: any[] = []
-compareStructures.apply({ extension: () => ({ registerTool: (t: any) => captured.push(t) }) })
+import { kabsch } from '/Users/wanghanbao/agnes-harness/examples/packages/protein-predictor/alphafold.mjs'
+import { compareStructures } from '/Users/wanghanbao/agnes-harness/examples/packages/protein-predictor/pairwise.mjs'
+
+// Structural types for the mocked tool surface (tsx strips these; they exist
+// so `biome check` passes without any-casts on dev-test stubs).
+type Compared = {
+  caRmsd: number
+  overlappingResidues: number
+  meanAbsPlddtDelta: number
+  superposition?: { q?: unknown }
+  deltaSeries: { length: number }
+  reportPath?: string
+  verdict: string
+}
+type Structured = { compared: Compared; pairwise: { labels: string[] } }
+type ToolResult = {
+  isError?: boolean
+  structured?: Structured
+  content?: Array<{ text?: string | { message?: string } }>
+}
+type ToolSpec = {
+  name: string
+  execute: (args: Record<string, unknown>, tctx: unknown) => Promise<ToolResult>
+}
+const captured: ToolSpec[] = []
+compareStructures.apply({ extension: () => ({ registerTool: (t: ToolSpec) => captured.push(t) }) })
 const spec = captured.find((t) => t.name === 'compare_structures')
 if (!spec) throw new Error('tool not registered')
 
@@ -23,7 +45,9 @@ const R = [
 const t = [4.5, -2.25, 9.125]
 const base: number[][] = []
 for (let i = 0; i < 60; i++) base.push([Math.sin(i * 0.3) * 5, i * 0.55, Math.cos(i * 0.3) * 5])
-const moved = base.map((p) => R.map((r) => r[0] * p[0] + r[1] * p[1] + r[2] * p[2] + t.reduce((s, v) => s + v, 0) / 3))
+const moved = base.map((p) =>
+  R.map((r) => r[0] * p[0] + r[1] * p[1] + r[2] * p[2] + t.reduce((s, v) => s + v, 0) / 3),
+)
 const plddtA = base.map((_, i) => 60 + (i % 40))
 const plddtB = base.map((_, i) => 80 - (i % 30))
 
@@ -35,11 +59,11 @@ const tctx = {
   fs: {
     read: async (p: string) => {
       const v = files.get(p)
-      if (v === undefined) throw new Error('not found: ' + p)
+      if (v === undefined) throw new Error(`not found: ${p}`)
       return new TextEncoder().encode(v)
     },
-    write: async (p: string, data: any) => {
-      files.set(p, typeof data === 'string' ? data : Buffer.from(data).toString('utf8'))
+    write: async (p: string, data: unknown) => {
+      files.set(p, typeof data === 'string' ? data : Buffer.from(data as Uint8Array).toString('utf8'))
     },
   },
 }
@@ -49,7 +73,13 @@ const k = kabsch(base, moved)
 console.log('kabsch rigid RMSD (expect ~0):', k.rmsd)
 
 const res = await spec.execute(
-  { structure_a: 'structures/a.pdb', structure_b: 'structures/b.pdb', label_a: 'WT', label_b: 'rigid-copy', save_report: true },
+  {
+    structure_a: 'structures/a.pdb',
+    structure_b: 'structures/b.pdb',
+    label_a: 'WT',
+    label_b: 'rigid-copy',
+    save_report: true,
+  },
   tctx,
 )
 const r = res.structured
@@ -69,7 +99,14 @@ const miss = await spec.execute({ structure_a: 'structures/a.pdb', structure_b: 
 ok('missing file → isError', miss.isError === true)
 const short = await spec.execute(
   { structure_a: 'structures/a.pdb', structure_b: 'structures/short.pdb' },
-  { fs: { read: async (p: string) => new TextEncoder().encode(p.endsWith('short.pdb') ? pdb(base.slice(0, 5), plddtA.slice(0, 5)) : files.get(p)) } },
+  {
+    fs: {
+      read: async (p: string) =>
+        new TextEncoder().encode(
+          p.endsWith('short.pdb') ? pdb(base.slice(0, 5), plddtA.slice(0, 5)) : files.get(p),
+        ),
+    },
+  },
 )
 // 5-residue fixture hits the size guard before the overlap guard; the overlap
 // refusal itself is covered by pairwise-overlap.mts.

@@ -13,7 +13,10 @@ const AF_VERSIONS = ['v6', 'v5', 'v4', 'v3', 'v2']
 const Kind = Symbol.for('TypeBox.Kind')
 
 const text = (s) => ({ content: [{ type: 'text', text: s }] })
-const result = (structured, s) => ({ content: [{ type: 'text', text: JSON.stringify(structured) }], structured })
+const result = (structured, _s) => ({
+  content: [{ type: 'text', text: JSON.stringify(structured) }],
+  structured,
+})
 const fail = (s) => ({ ...text(s), isError: true })
 
 const str = (desc, extra = {}) => ({ [Kind]: 'String', type: 'string', description: desc, ...extra })
@@ -126,7 +129,9 @@ export function kabsch(P, Q) {
   // translation (pc − R·qc) must be accounted for here too.
   let sum = 0
   for (let i = 0; i < n; i++) {
-    const qx = Q[i][0] - qc[0], qy = Q[i][1] - qc[1], qz = Q[i][2] - qc[2]
+    const qx = Q[i][0] - qc[0],
+      qy = Q[i][1] - qc[1],
+      qz = Q[i][2] - qc[2]
     const dx = P[i][0] - pc[0] - (R[0][0] * qx + R[0][1] * qy + R[0][2] * qz)
     const dy = P[i][1] - pc[1] - (R[1][0] * qx + R[1][1] * qy + R[1][2] * qz)
     const dz = P[i][2] - pc[2] - (R[2][0] * qx + R[2][1] * qy + R[2][2] * qz)
@@ -161,7 +166,9 @@ export const compareAlphafold = {
         properties: {
           accession: str('UniProt accession of the reference model, e.g. P04637'),
           prediction_path: str('Workspace-relative path of the predicted PDB, e.g. structures/p53_1.pdb'),
-          save_report: bool('Also save the comparison as reports/<accession>.vs-alphafold.json (default false)'),
+          save_report: bool(
+            'Also save the comparison as reports/<accession>.vs-alphafold.json (default false)',
+          ),
         },
         required: ['accession', 'prediction_path'],
         additionalProperties: false,
@@ -222,7 +229,9 @@ export const compareAlphafold = {
           // fs.read returns Bytes (Uint8Array), same contract analyze_confidence uses.
           predPdb = Buffer.from(await tctx.fs.read(prediction_path)).toString('utf8')
         } catch {
-          return fail(`Cannot read ${prediction_path}. Run predict_structure first and pass its savedTo path.`)
+          return fail(
+            `Cannot read ${prediction_path}. Run predict_structure first and pass its savedTo path.`,
+          )
         }
         const predMap = parseCA(predPdb)
         normalizePlddt(predMap)
@@ -242,36 +251,55 @@ export const compareAlphafold = {
           )
         }
 
-        const deltas = common.map((r) => ({ residue: r, delta: Math.round((predMap.get(r).plddt100 - afMap.get(r).plddt100) * 10) / 10 }))
-        const meanAbsDelta = Math.round((deltas.reduce((s, d) => s + Math.abs(d.delta), 0) / deltas.length) * 10) / 10
+        const deltas = common.map((r) => ({
+          residue: r,
+          delta: Math.round((predMap.get(r).plddt100 - afMap.get(r).plddt100) * 10) / 10,
+        }))
+        const meanAbsDelta =
+          Math.round((deltas.reduce((s, d) => s + Math.abs(d.delta), 0) / deltas.length) * 10) / 10
         const worst = [...deltas].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 5)
         // Downsample to ≤80 equal-size bins (signed mean per bin) so the browser
         // card can draw a compact ΔpLDDT profile without hauling every residue.
         const BIN_MAX = 80
         const binSize = Math.ceil(deltas.length / BIN_MAX)
-        const deltaSeries = deltas.reduce((bins, d, i) => {
-          const b = Math.floor(i / binSize)
-          if (!bins[b]) bins[b] = { residue: d.residue, sum: 0, n: 0 }
-          bins[b].sum += d.delta
-          bins[b].n++
-          return bins
-        }, []).map((b) => ({ residue: b.residue, delta: Math.round((b.sum / b.n) * 10) / 10 }))
+        const deltaSeries = deltas
+          .reduce((bins, d, i) => {
+            const b = Math.floor(i / binSize)
+            if (!bins[b]) bins[b] = { residue: d.residue, sum: 0, n: 0 }
+            bins[b].sum += d.delta
+            bins[b].n++
+            return bins
+          }, [])
+          .map((b) => ({ residue: b.residue, delta: Math.round((b.sum / b.n) * 10) / 10 }))
 
         const sup = kabsch(
-          common.map((r) => { const p = predMap.get(r); return [p.x, p.y, p.z] }),
-          common.map((r) => { const p = afMap.get(r); return [p.x, p.y, p.z] }),
+          common.map((r) => {
+            const p = predMap.get(r)
+            return [p.x, p.y, p.z]
+          }),
+          common.map((r) => {
+            const p = afMap.get(r)
+            return [p.x, p.y, p.z]
+          }),
         )
         const rmsd = sup?.rmsd
         // Core RMSD: superposition restricted to residues both models call
         // confidently (pLDDT >= 70). Whole-chain RMSD is inflated by disordered
         // tails where every model disagrees by design.
         const core = common.filter((r) => predMap.get(r).plddt100 >= 70 && afMap.get(r).plddt100 >= 70)
-        const coreRmsd = core.length >= 10
-          ? kabsch(
-              core.map((r) => { const p = predMap.get(r); return [p.x, p.y, p.z] }),
-              core.map((r) => { const p = afMap.get(r); return [p.x, p.y, p.z] }),
-            )?.rmsd
-          : undefined
+        const coreRmsd =
+          core.length >= 10
+            ? kabsch(
+                core.map((r) => {
+                  const p = predMap.get(r)
+                  return [p.x, p.y, p.z]
+                }),
+                core.map((r) => {
+                  const p = afMap.get(r)
+                  return [p.x, p.y, p.z]
+                }),
+              )?.rmsd
+            : undefined
 
         const report = {
           accession: acc,
@@ -288,12 +316,17 @@ export const compareAlphafold = {
             meanAbsPlddtDelta: meanAbsDelta,
             largestDeltas: worst,
             deltaSeries,
-            deltaSeriesNote: 'ΔpLDDT profile (prediction − reference), ≤80 bins; positive = ESMFold more confident',
+            deltaSeriesNote:
+              'ΔpLDDT profile (prediction − reference), ≤80 bins; positive = ESMFold more confident',
             caRmsd: rmsd,
             // Transform for the panel's 3D overlay: AF CA p → R·(p − qc) + pc.
             ...(sup ? { superposition: { q: sup.q, pc: sup.pc, qc: sup.qc } } : {}),
             ...(coreRmsd !== undefined
-              ? { caRmsdCore: coreRmsd, coreResidues: core.length, coreNote: 'RMSD over residues where both models have pLDDT ≥ 70' }
+              ? {
+                  caRmsdCore: coreRmsd,
+                  coreResidues: core.length,
+                  coreNote: 'RMSD over residues where both models have pLDDT ≥ 70',
+                }
               : {}),
             ...(rmsd !== undefined ? { verdict: rmsdVerdict(coreRmsd ?? rmsd) } : {}),
           },

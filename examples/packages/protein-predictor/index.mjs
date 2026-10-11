@@ -2,10 +2,10 @@
 // Pipeline: UniProt sequence -> ESMFold prediction -> pLDDT confidence analysis.
 // Boltz-2 (boltz.mjs) adds paid complex/ligand co-folding with interface confidences.
 
-import { predictComplex } from './boltz.mjs'
 import { compareAlphafold } from './alphafold.mjs'
-import { compareStructures } from './pairwise.mjs'
 import { batchPredictor } from './batch.mjs'
+import { predictComplex } from './boltz.mjs'
+import { compareStructures } from './pairwise.mjs'
 
 const Kind = Symbol.for('TypeBox.Kind')
 
@@ -41,7 +41,10 @@ const writeMeta = {
 }
 
 const text = (s) => ({ content: [{ type: 'text', text: s }] })
-const result = (structured, s) => ({ content: [{ type: 'text', text: JSON.stringify(structured) }], structured })
+const result = (structured, _s) => ({
+  content: [{ type: 'text', text: JSON.stringify(structured) }],
+  structured,
+})
 const fail = (s) => ({ ...text(s), isError: true })
 
 // One retry after a short backoff for transient upstream failures — the free
@@ -56,7 +59,7 @@ export async function fetchRetry(fetchFn, url, opts = {}) {
       return fetchFn(url, opts)
     }
     return res
-  } catch (error) {
+  } catch {
     await new Promise((r) => setTimeout(r, 1500))
     return fetchFn(url, opts)
   }
@@ -71,8 +74,18 @@ function parseFasta(fasta) {
   const db = parts[0]
   const accession = parts[1] ?? header.split(/\s+/)[0]
   const entryName = parts[2] ?? ''
-  const desc = parts.length >= 3 ? header.split('|').slice(2).join('|').replace(/^[^ ]+\s*/, '') : header
-  const sequence = lines.slice(1).map((l) => l.trim()).join('')
+  const desc =
+    parts.length >= 3
+      ? header
+          .split('|')
+          .slice(2)
+          .join('|')
+          .replace(/^[^ ]+\s*/, '')
+      : header
+  const sequence = lines
+    .slice(1)
+    .map((l) => l.trim())
+    .join('')
   const grab = (tag) => {
     const m = desc.match(new RegExp(`${tag}=([^;\\s]+)`))
     return m ? m[1] : undefined
@@ -124,10 +137,17 @@ export const uniprotSearch = {
         // Save the full report and put savedTo FIRST in the structured result: the
         // transcript clips resultPreview at 4096 chars, and with >20 hits the JSON tail
         // (where savedTo would land) is cut — the panel then cannot find the full copy.
-        const slug = query.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'query'
+        const slug =
+          query
+            .replace(/[^A-Za-z0-9._-]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .slice(0, 60) || 'query'
         const reportPath = `reports/search_${slug}.json`
         await tctx.fs.write(reportPath, JSON.stringify({ query, hits }, null, 2))
-        return result({ savedTo: reportPath, query, hits }, JSON.stringify({ savedTo: reportPath, query, hits }))
+        return result(
+          { savedTo: reportPath, query, hits },
+          JSON.stringify({ savedTo: reportPath, query, hits }),
+        )
       },
     })
   },
@@ -154,7 +174,9 @@ export const uniprotFetch = {
       async execute({ accession }, tctx) {
         const acc = accession.trim().toUpperCase()
         if (!/^[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9][A-Z][A-Z0-9]{2}[0-9]$/.test(acc)) {
-          return fail(`"${accession}" does not look like a UniProtKB accession (e.g. P04637). Use uniprot_search first if you only have a name.`)
+          return fail(
+            `"${accession}" does not look like a UniProtKB accession (e.g. P04637). Use uniprot_search first if you only have a name.`,
+          )
         }
         const res = await fetchRetry(tctx.net.fetch, `${UNIPROT}/${acc}.fasta`, { timeoutMs: 30000 })
         if (!res.ok) return fail(`UniProt fetch failed: HTTP ${res.status} for ${acc}`)
@@ -251,9 +273,11 @@ function confidenceReport(series) {
     },
     lowConfidenceSegments: segments.slice(0, 8),
     verdict:
-      mean >= 90 ? 'high confidence overall'
-      : mean >= 70 ? 'backbone mostly reliable; inspect low-confidence segments'
-      : 'low overall confidence; treat fold with caution',
+      mean >= 90
+        ? 'high confidence overall'
+        : mean >= 70
+          ? 'backbone mostly reliable; inspect low-confidence segments'
+          : 'low overall confidence; treat fold with caution',
   }
 }
 
@@ -281,8 +305,12 @@ export const predictStructure = {
       async execute({ sequence, name = 'prediction' }, tctx) {
         const seq = sequence.replace(/\s+/g, '').toUpperCase()
         if (seq.length < 10) return fail('Sequence too short (<10 residues).')
-        if (!AA_RE.test(seq)) return fail('Sequence contains invalid characters. Use single-letter amino-acid code.')
-        if (seq.length > 1000) return fail(`Sequence too long (${seq.length} residues); ESMFold endpoint handles short chains (<1000, ideally <400).`)
+        if (!AA_RE.test(seq))
+          return fail('Sequence contains invalid characters. Use single-letter amino-acid code.')
+        if (seq.length > 1000)
+          return fail(
+            `Sequence too long (${seq.length} residues); ESMFold endpoint handles short chains (<1000, ideally <400).`,
+          )
         const label = name.replace(/[^A-Za-z0-9_.-]/g, '_')
         const res = await fetchRetry(tctx.net.fetch, ESMFOLD_URL, {
           method: 'POST',
@@ -300,12 +328,16 @@ export const predictStructure = {
           return fail(`ESMFold request failed: HTTP ${res.status}${hint}`)
         }
         const pdb = await res.text()
-        if (!pdb.startsWith('HEADER') && !pdb.startsWith('ATOM')) return fail(`ESMFold returned an unexpected response: ${pdb.slice(0, 200)}`)
+        if (!pdb.startsWith('HEADER') && !pdb.startsWith('ATOM'))
+          return fail(`ESMFold returned an unexpected response: ${pdb.slice(0, 200)}`)
         const safeName = `${label}_${seq.length}aa.pdb`
         const path = `structures/${safeName}`
         await tctx.fs.write(path, pdb)
         const report = confidenceReport(extractPlddt(pdb))
-        return result({ savedTo: path, sequenceLength: seq.length, ...report }, JSON.stringify({ savedTo: path, sequenceLength: seq.length, ...report }))
+        return result(
+          { savedTo: path, sequenceLength: seq.length, ...report },
+          JSON.stringify({ savedTo: path, sequenceLength: seq.length, ...report }),
+        )
       },
     })
   },
@@ -326,7 +358,11 @@ export const analyzeConfidence = {
         type: 'object',
         properties: {
           pdb_path: str('Workspace path of the PDB file, e.g. structures/p53_wt_393aa.pdb'),
-          save_report: { [Kind]: 'Boolean', type: 'boolean', description: 'Write reports/<name>.confidence.json (default true)' },
+          save_report: {
+            [Kind]: 'Boolean',
+            type: 'boolean',
+            description: 'Write reports/<name>.confidence.json (default true)',
+          },
         },
         required: ['pdb_path'],
         additionalProperties: false,
@@ -345,7 +381,10 @@ export const analyzeConfidence = {
         const report = confidenceReport(series)
         let reportPath
         if (save_report) {
-          reportPath = `reports/${pdb_path.split('/').pop().replace(/\.pdb$/, '')}.confidence.json`
+          reportPath = `reports/${pdb_path
+            .split('/')
+            .pop()
+            .replace(/\.pdb$/, '')}.confidence.json`
           await tctx.fs.write(reportPath, JSON.stringify({ file: pdb_path, ...report }, null, 2))
         }
         return result({ ...report, reportPath }, JSON.stringify({ ...report, reportPath }))
@@ -359,7 +398,15 @@ export const analyzeConfidence = {
 export const proteinPredictor = {
   inject: ['extension'],
   apply(ctx) {
-    for (const tool of [uniprotSearch, uniprotFetch, predictStructure, analyzeConfidence, predictComplex, compareAlphafold, compareStructures]) {
+    for (const tool of [
+      uniprotSearch,
+      uniprotFetch,
+      predictStructure,
+      analyzeConfidence,
+      predictComplex,
+      compareAlphafold,
+      compareStructures,
+    ]) {
       tool.apply(ctx)
     }
     batchPredictor.apply(ctx)

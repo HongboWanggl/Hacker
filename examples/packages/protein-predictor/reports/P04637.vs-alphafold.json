@@ -357,22 +357,9 @@
     "deltaSeriesNote": "ΔpLDDT profile (prediction − reference), ≤80 bins; positive = ESMFold more confident",
     "caRmsd": 21.009,
     "superposition": {
-      "q": [
-        -0.325298,
-        0.405285,
-        0.854286,
-        -0.010969
-      ],
-      "pc": [
-        -0.561,
-        1.929,
-        6.638
-      ],
-      "qc": [
-        2.226,
-        0.941,
-        -6.644
-      ]
+      "q": [-0.325298, 0.405285, 0.854286, -0.010969],
+      "pc": [-0.561, 1.929, 6.638],
+      "qc": [2.226, 0.941, -6.644]
     },
     "caRmsdCore": 9.773,
     "coreResidues": 225,

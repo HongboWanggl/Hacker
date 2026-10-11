@@ -4,7 +4,9 @@
 // sideways (r26 af-e2e-live2, r33): a finished-but-off answer retries once in
 // a fresh session before the suite fails.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
-const exe = '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
+
+const exe =
+  '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 
 async function attempt(n) {
@@ -15,10 +17,15 @@ async function attempt(n) {
   await page.waitForTimeout(5000)
   await page.getByText('protein-predictor').first().click()
   await page.waitForTimeout(2000)
-  await page.getByRole('button', { name: /new session/i }).first().click()
+  await page
+    .getByRole('button', { name: /new session/i })
+    .first()
+    .click()
   await page.waitForTimeout(2000)
   const box = page.locator('textarea').first()
-  await box.fill('用 predict_complex 预测两条链 MKTAYIAKQRQISFVKSHFSRQ 和 EIAKQGQVTMVIKKSMLEK 的复合物，把工具返回的内容完整转述。')
+  await box.fill(
+    '用 predict_complex 预测两条链 MKTAYIAKQRQISFVKSHFSRQ 和 EIAKQGQVTMVIKKSMLEK 的复合物，把工具返回的内容完整转述。',
+  )
   await page.keyboard.press('Enter')
   console.log(`submitted (attempt ${n})`)
   let out = null

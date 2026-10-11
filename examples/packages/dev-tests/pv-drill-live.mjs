@@ -1,5 +1,7 @@
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
-const exe = '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
+
+const exe =
+  '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } })
 const errors = []
@@ -8,7 +10,10 @@ await page.goto('http://127.0.0.1:4177/', { waitUntil: 'domcontentloaded', timeo
 await page.waitForTimeout(5000)
 await page.getByText('protein-predictor').first().click()
 await page.waitForTimeout(2000)
-await page.getByRole('button', { name: /new session/i }).first().click()
+await page
+  .getByRole('button', { name: /new session/i })
+  .first()
+  .click()
 await page.waitForTimeout(2000)
 const box = page.locator('textarea').first()
 await box.fill('用 batch_predict 预测 P61626 和 P0A7B8 两个蛋白，中文一句话总结。')
@@ -34,12 +39,22 @@ if (stats.batchRows > 0) {
   let clicked = false
   for (let i = 0; i < 20 && !clicked; i++) {
     for (const d of await page.locator('details:not([open])').all())
-      await d.locator('summary').click().catch(() => {})
+      await d
+        .locator('summary')
+        .click()
+        .catch(() => {})
     const row = page.locator('.pv-batch-row--ok:visible').first()
-    if (await row.count() > 0) { await row.click(); clicked = true; break }
+    if ((await row.count()) > 0) {
+      await row.click()
+      clicked = true
+      break
+    }
     await page.waitForTimeout(5000)
   }
-  if (!clicked) { console.log('FAIL no visible batch row after expanding', JSON.stringify(stats)); process.exitCode = 1 }
+  if (!clicked) {
+    console.log('FAIL no visible batch row after expanding', JSON.stringify(stats))
+    process.exitCode = 1
+  }
   let detail = null
   for (let i = 0; i < 24; i++) {
     await page.waitForTimeout(2500)
@@ -53,8 +68,14 @@ if (stats.batchRows > 0) {
     }))
     if (detail.detail3d > 0 && detail.detailCurve > 0) break
   }
-  if (!detail || !detail.detailStrip) { console.log('FAIL drill-down missing sequence strip', JSON.stringify(detail)); process.exitCode = 1 }
-  if (detail.detailExport < 4) { console.log('FAIL drill-down missing export toolbars (3D/seq/curve PNG+CSV)', JSON.stringify(detail)); process.exitCode = 1 }
+  if (!detail?.detailStrip) {
+    console.log('FAIL drill-down missing sequence strip', JSON.stringify(detail))
+    process.exitCode = 1
+  }
+  if (detail.detailExport < 4) {
+    console.log('FAIL drill-down missing export toolbars (3D/seq/curve PNG+CSV)', JSON.stringify(detail))
+    process.exitCode = 1
+  }
   console.log('drill-down:', JSON.stringify(detail), 'errors:', JSON.stringify(errors.slice(0, 3)))
   await page.screenshot({ path: '/tmp/pv-drill.png' })
 }

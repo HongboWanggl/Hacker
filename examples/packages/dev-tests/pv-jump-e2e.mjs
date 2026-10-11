@@ -1,5 +1,7 @@
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
-const exe = '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
+
+const exe =
+  '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } })
 const errors = []
@@ -8,7 +10,10 @@ await page.goto('http://127.0.0.1:4177/', { waitUntil: 'domcontentloaded', timeo
 await page.waitForTimeout(5000)
 await page.getByText('protein-predictor').first().click()
 await page.waitForTimeout(2000)
-await page.getByRole('button', { name: /new session/i }).first().click()
+await page
+  .getByRole('button', { name: /new session/i })
+  .first()
+  .click()
 await page.waitForTimeout(2000)
 const box = page.locator('textarea').first()
 const PROMPT = '预测序列 MSTHDTSLTSTDILRGQVSAARFGLLMLLPFFVHSANVSTLA 蛋白结构并总结置信度。'
@@ -19,7 +24,10 @@ for (let attempt = 1; attempt <= 3 && !stats?.jump; attempt++) {
   if (attempt > 1) {
     console.log('turn failed (likely 429); cooling down 180s and retrying')
     await page.waitForTimeout(180000)
-    await page.getByRole('button', { name: /new session/i }).first().click()
+    await page
+      .getByRole('button', { name: /new session/i })
+      .first()
+      .click()
     await page.waitForTimeout(2000)
   }
   await box.fill(PROMPT)
@@ -30,9 +38,12 @@ for (let attempt = 1; attempt <= 3 && !stats?.jump; attempt++) {
     stats = await page.evaluate(() => ({
       pvRoots: document.querySelectorAll('.pv-root').length,
       jump: document.querySelectorAll('.pv-jump').length,
-      failed: !! [...document.querySelectorAll('*')].find((e) => e.childElementCount === 0 && /RATE_LIMIT/.test(e.textContent ?? '')),
+      failed: !![...document.querySelectorAll('*')].find(
+        (e) => e.childElementCount === 0 && /RATE_LIMIT/.test(e.textContent ?? ''),
+      ),
     }))
-    if (i % 6 === 0) console.log(`t=${(i + 1) * 5}s`, JSON.stringify({ pvRoots: stats.pvRoots, jump: stats.jump }))
+    if (i % 6 === 0)
+      console.log(`t=${(i + 1) * 5}s`, JSON.stringify({ pvRoots: stats.pvRoots, jump: stats.jump }))
     if (stats.failed && stats.pvRoots === 0) break
     if (stats.jump > 0) break
   }

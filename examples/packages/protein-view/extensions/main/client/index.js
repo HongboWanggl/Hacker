@@ -23,14 +23,23 @@ function tileTextColor(bg) {
   const m = /^#([0-9a-f]{6})$/i.exec(bg) ?? /^#([0-9a-f]{3})$/i.exec(bg)
   let r, g, b
   if (m) {
-    const v = m[1].length === 3 ? m[1].split('').map((c) => c + c).join('') : m[1]
+    const v =
+      m[1].length === 3
+        ? m[1]
+            .split('')
+            .map((c) => c + c)
+            .join('')
+        : m[1]
     r = parseInt(v.slice(0, 2), 16)
     g = parseInt(v.slice(2, 4), 16)
     b = parseInt(v.slice(4, 6), 16)
   } else {
     const rgb = /rgba?\(([^)]+)\)/.exec(bg)
     if (!rgb) return 'rgb(255 255 255 / 88%)'
-    ;[r, g, b] = rgb[1].split(',').slice(0, 3).map((x) => parseFloat(x))
+    ;[r, g, b] = rgb[1]
+      .split(',')
+      .slice(0, 3)
+      .map((x) => parseFloat(x))
   }
   if ([r, g, b].some((x) => !Number.isFinite(x))) return 'rgb(255 255 255 / 88%)'
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.56
@@ -90,7 +99,11 @@ function SequenceStrip({ residues, hover, onHover, selected, onSelect, colorOf, 
   const dense = residues.length > 800
   return h(
     'div',
-    { className: 'pv-seqstrip' + (dense ? ' pv-seqstrip--dense' : ''), role: 'listbox', 'aria-label': '残基序列条' },
+    {
+      className: `pv-seqstrip${dense ? ' pv-seqstrip--dense' : ''}`,
+      role: 'listbox',
+      'aria-label': '残基序列条',
+    },
     residues.map((r, idx) => {
       const bg = colorOf ? colorOf(r, idx) : bandColor(r.b)
       return h(
@@ -98,7 +111,9 @@ function SequenceStrip({ residues, hover, onHover, selected, onSelect, colorOf, 
         {
           key: idx,
           className:
-            'pv-seq-tile' + (idx === hover ? ' pv-seq-tile--hover' : '') + (idx === selected ? ' pv-seq-tile--sel' : ''),
+            'pv-seq-tile' +
+            (idx === hover ? ' pv-seq-tile--hover' : '') +
+            (idx === selected ? ' pv-seq-tile--sel' : ''),
           style: {
             background: bg,
             color: tileTextColor(bg),
@@ -139,7 +154,10 @@ function distColorRgb(d) {
   return from.map((v, i) => Math.round(v + (to[i] - v) * a))
 }
 const distColor = (d) => `rgb(${distColorRgb(d).join(',')})`
-const isMultiChain = (residues) => Array.isArray(residues) && residues.length > 1 && residues.some((r) => r.chain && r.chain !== residues[0].chain)
+const isMultiChain = (residues) =>
+  Array.isArray(residues) &&
+  residues.length > 1 &&
+  residues.some((r) => r.chain && r.chain !== residues[0].chain)
 
 function ChainLegend({ residues, hidden, onToggle }) {
   const m = new Map()
@@ -155,7 +173,11 @@ function ChainLegend({ residues, hidden, onToggle }) {
     { className: 'pv-chain-legend' },
     stats.map((s, k) => {
       const inner = [
-        h('span', { className: 'pv-chain-dot', key: 'dot', style: { background: CHAIN_COLORS[k % CHAIN_COLORS.length] } }),
+        h('span', {
+          className: 'pv-chain-dot',
+          key: 'dot',
+          style: { background: CHAIN_COLORS[k % CHAIN_COLORS.length] },
+        }),
         h('span', { key: 'label' }, `链 ${s.chain} · ${s.n} aa · 均值 pLDDT ${s.mean.toFixed(1)}`),
       ]
       // Toggleable chips hide/show chains in the 3D view (main panel passes
@@ -164,6 +186,7 @@ function ChainLegend({ residues, hidden, onToggle }) {
         ? h(
             'button',
             {
+              type: 'button',
               className: `pv-chain-chip${hidden?.has(s.chain) ? ' pv-chain-chip--off' : ''}`,
               key: s.chain ?? k,
               onClick: () => onToggle(s.chain),
@@ -227,7 +250,7 @@ function RainbowLegend() {
         className: 'pv-pae-legendbar',
         style: {
           width: '80px',
-          background: `linear-gradient(90deg, ${RAINBOW.map(([t, rgb]) => `rgb(${rgb.join(',')})`).join(',')})`,
+          background: `linear-gradient(90deg, ${RAINBOW.map(([_t, rgb]) => `rgb(${rgb.join(',')})`).join(',')})`,
         },
       }),
       h('span', null, 'C'),
@@ -253,8 +276,7 @@ function LigandLegend() {
   )
 }
 
-const verdictTone = (mean) =>
-  mean >= 90 ? 'high' : mean >= 70 ? 'ok' : mean >= 50 ? 'caution' : 'warn'
+const verdictTone = (mean) => (mean >= 90 ? 'high' : mean >= 70 ? 'ok' : mean >= 50 ? 'caution' : 'warn')
 const VERDICT_ZH = {
   high: '高置信结构',
   ok: '骨架可靠 · 局部待验证',
@@ -288,7 +310,11 @@ function parseReport(block) {
 function predictionSummaryMd(report) {
   if (!report) return ''
   const mean = typeof report.meanPlddt === 'number' ? report.meanPlddt : null
-  const name = String(report.savedTo ?? '').split('/').pop().replace(/\.pdb$/i, '') || '预测'
+  const name =
+    String(report.savedTo ?? '')
+      .split('/')
+      .pop()
+      .replace(/\.pdb$/i, '') || '预测'
   const lines = [`结构预测结论：${name}`]
   if (mean != null) {
     lines.push(`- 平均 pLDDT: ${mean.toFixed(1)}${report.residues ? `（${report.residues} 残基）` : ''}`)
@@ -297,10 +323,14 @@ function predictionSummaryMd(report) {
     const bandText = BANDS.map((band, i) => {
       const n = b[bandKeys[i]]?.count
       return n != null ? `${band.label} ${n}` : null
-    }).filter(Boolean).join(' · ')
+    })
+      .filter(Boolean)
+      .join(' · ')
     if (bandText) lines.push(`- 置信度分布: ${bandText}`)
     if (Array.isArray(report.lowConfidenceSegments) && report.lowConfidenceSegments.length) {
-      lines.push(`- 低置信区段: ${report.lowConfidenceSegments.map((s) => `${s.residues}（平均 ${s.meanPlddt}）`).join('、')}——可能为无序区`)
+      lines.push(
+        `- 低置信区段: ${report.lowConfidenceSegments.map((s) => `${s.residues}（平均 ${s.meanPlddt}）`).join('、')}——可能为无序区`,
+      )
     }
     lines.push(`- 解读: ${VERDICT_ZH[verdictTone(mean)]}`)
   } else {
@@ -327,10 +357,18 @@ function ConfidenceSummary({ report, onCopy }) {
           : null
   const mean = typeof report.meanPlddt === 'number' ? report.meanPlddt : complexScore?.[0]
   if (typeof mean !== 'number') return null
-  const scoreLabel = typeof report.meanPlddt === 'number' ? '平均 pLDDT' : complexScore?.[1] ?? '置信度'
+  const scoreLabel = typeof report.meanPlddt === 'number' ? '平均 pLDDT' : (complexScore?.[1] ?? '置信度')
   const isComplex = typeof report.meanPlddt !== 'number'
   // Complex interface confidences read on a stricter scale than pLDDT.
-  const tone = isComplex ? (mean >= 80 ? 'high' : mean >= 60 ? 'ok' : mean >= 40 ? 'caution' : 'warn') : verdictTone(mean)
+  const tone = isComplex
+    ? mean >= 80
+      ? 'high'
+      : mean >= 60
+        ? 'ok'
+        : mean >= 40
+          ? 'caution'
+          : 'warn'
+    : verdictTone(mean)
   const bands = report.bands ?? {}
   const bandCounts = [
     bands.veryHigh_gt90?.count ?? 0,
@@ -357,11 +395,13 @@ function ConfidenceSummary({ report, onCopy }) {
         { className: 'pv-verdict' },
         h('span', { className: `pv-verdict-dot pv-verdict-dot--${tone}` }),
         isComplex ? COMPLEX_VERDICT_ZH[tone] : VERDICT_ZH[tone],
-        report.residues
-          ? h('span', { className: 'pv-residue-count' }, ` · ${report.residues} 残基`)
-          : null,
+        report.residues ? h('span', { className: 'pv-residue-count' }, ` · ${report.residues} 残基`) : null,
         report.chains
-          ? h('span', { className: 'pv-residue-count' }, ` · ${report.chains} 链${report.hasLigand ? ' + 配体' : ''}`)
+          ? h(
+              'span',
+              { className: 'pv-residue-count' },
+              ` · ${report.chains} 链${report.hasLigand ? ' + 配体' : ''}`,
+            )
           : null,
         // Local open-source runs are tagged by the tool; surface the provenance
         // (and runtime, which explains why the panel took minutes to appear).
@@ -381,7 +421,11 @@ function ConfidenceSummary({ report, onCopy }) {
           { className: 'pv-bandbar', role: 'img', 'aria-label': 'pLDDT 置信度分布' },
           parts.map((p, i) =>
             p.w > 0
-              ? h('div', { key: i, className: 'pv-bandbar-seg', style: { flexGrow: p.w, background: p.color } })
+              ? h('div', {
+                  key: i,
+                  className: 'pv-bandbar-seg',
+                  style: { flexGrow: p.w, background: p.color },
+                })
               : null,
           ),
         ),
@@ -409,6 +453,7 @@ function ConfidenceSummary({ report, onCopy }) {
         ? h(
             'button',
             {
+              type: 'button',
               className: 'pv-export pv-summary-copy',
               title: '复制可直接粘贴的预测结论（Markdown）',
               onClick: () => {
@@ -476,8 +521,18 @@ function DeltaSparkline({ series, note, onPick, labelA = 'ESMFold', labelB = 'Al
     h(
       'div',
       { className: 'pv-legend' },
-      h('span', { className: 'pv-legend-item' }, h('span', { className: 'pv-legend-swatch', style: { background: '#38a3e8' } }), `${labelA} 更自信`),
-      h('span', { className: 'pv-legend-item' }, h('span', { className: 'pv-legend-swatch', style: { background: DELTA_NEG } }), `${labelB} 更自信`),
+      h(
+        'span',
+        { className: 'pv-legend-item' },
+        h('span', { className: 'pv-legend-swatch', style: { background: '#38a3e8' } }),
+        `${labelA} 更自信`,
+      ),
+      h(
+        'span',
+        { className: 'pv-legend-item' },
+        h('span', { className: 'pv-legend-swatch', style: { background: DELTA_NEG } }),
+        `${labelB} 更自信`,
+      ),
       note ? h('span', { className: 'pv-legend-item' }, note) : null,
     ),
   )
@@ -504,20 +559,29 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
   // The prediction may carry a ligand pose (complex-vs-complex comparisons):
   // render it element-colored like the main panel, toggleable from the toolbar.
   const ligandInfo = useMemo(
-    () => (pred?.ligandAtoms?.length ? { n: pred.ligandAtoms.length, atoms: pred.ligandAtoms, bonds: pred.ligandBonds ?? [] } : null),
+    () =>
+      pred?.ligandAtoms?.length
+        ? { n: pred.ligandAtoms.length, atoms: pred.ligandAtoms, bonds: pred.ligandBonds ?? [] }
+        : null,
     [pred],
   )
 
   useEffect(() => {
     if (!services || !predPath) return
     let alive = true
-    services.call('protein.structure', { path: predPath }).then((s) => {
-      if (alive && s?.residues?.length) setPred(s)
-    }).catch(() => {})
+    services
+      .call('protein.structure', { path: predPath })
+      .then((s) => {
+        if (alive && s?.residues?.length) setPred(s)
+      })
+      .catch(() => {})
     if (ghostPath) {
-      services.call('protein.structure', { path: ghostPath }).then((s) => {
-        if (alive && s?.residues?.length) setGhost(s)
-      }).catch(() => {})
+      services
+        .call('protein.structure', { path: ghostPath })
+        .then((s) => {
+          if (alive && s?.residues?.length) setGhost(s)
+        })
+        .catch(() => {})
     }
     return () => {
       alive = false
@@ -576,7 +640,8 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
   }
   // Hover readout: both models' pLDDT at the pointed residue, matched by number.
   // A chip-selected residue (selIdx) is the fallback subject when not hovering.
-  const activeIdx = hover != null && pred.residues[hover] ? hover : selIdx != null && selIdx >= 0 ? selIdx : null
+  const activeIdx =
+    hover != null && pred.residues[hover] ? hover : selIdx != null && selIdx >= 0 ? selIdx : null
   let hoverLine = ''
   if (activeIdx != null && pred.residues[activeIdx]) {
     const r = pred.residues[activeIdx]
@@ -609,11 +674,21 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
           h(
             'button',
             {
+              type: 'button',
               className: 'pv-export',
               onClick: async (e) => {
                 try {
                   const canvas = e.currentTarget.closest('.pv-3d-col')?.querySelector('canvas.pv-3d')
-                  const ok = await copyCompareComposite(canvas, pred.residues, stripMode, distMap, gmap, ligandInfo, showLigand, labels)
+                  const ok = await copyCompareComposite(
+                    canvas,
+                    pred.residues,
+                    stripMode,
+                    distMap,
+                    gmap,
+                    ligandInfo,
+                    showLigand,
+                    labels,
+                  )
                   setCmpCopied(ok)
                 } catch {
                   setCmpCopied(false)
@@ -626,11 +701,15 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
           h(
             'button',
             {
+              type: 'button',
               className: 'pv-export',
               onClick: (e) =>
                 exportComparePng(
                   e,
-                  `${(predPath ?? 'compare').split('/').pop().replace(/\.pdb$/i, '')}.${stripMode === 'dist' ? 'cadist' : 'plddt'}.png`,
+                  `${(predPath ?? 'compare')
+                    .split('/')
+                    .pop()
+                    .replace(/\.pdb$/i, '')}.${stripMode === 'dist' ? 'cadist' : 'plddt'}.png`,
                   pred.residues,
                   stripMode,
                   distMap,
@@ -645,11 +724,15 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
           h(
             'button',
             {
+              type: 'button',
               className: 'pv-export',
               onClick: (e) =>
                 exportCompareCsv(
                   e,
-                  `${(predPath ?? 'compare').split('/').pop().replace(/\.pdb$/i, '')}.compare.csv`,
+                  `${(predPath ?? 'compare')
+                    .split('/')
+                    .pop()
+                    .replace(/\.pdb$/i, '')}.compare.csv`,
                   pred.residues,
                   distMap,
                   gmap,
@@ -659,61 +742,64 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
           ),
           h(DownloadPdbButton, { services, path: predPath }),
         ),
-      h(Structure3D, {
-        residues: pred.residues,
-        colorMode: isMultiChain(pred.residues) ? 'chain' : 'plddt',
-        autoSpin: true,
-        ghost: ghostResidues,
-        // In the distance lens the ghost recolors by post-superposition Cα
-        // deviation — structural hot spots become visible spatially, not just
-        // in the strip. Ghost residues without a match stay gray.
-        ghostColorOf:
-          stripMode === 'dist' && distMap
-            ? (a, b) => {
-                const g = ghostResidues[a] ?? ghostResidues[b]
-                const d = g != null ? distMap.get(g.i) : undefined
-                return d != null ? distColorRgb(d) : null
-              }
-            : undefined,
-        hover,
-        onHover: setHover,
-        onSelect: (k) => {
-          const r = pred.residues[k]
-          if (r) onPickRes?.(r.i)
-        },
-        selected: selIdx != null && selIdx >= 0 ? selIdx : undefined,
-        ligand: ligandInfo,
-        showLigand,
-        hintText: `拖拽旋转 · 滚轮缩放 · 双击复位 · ${stripMode === 'dist' ? '参考链按 Cα 偏差着色，灰=无匹配' : `灰色为 ${pw ? pw[1] : 'AlphaFold 参考模型'}`}`,
-        onExport3D: (e) =>
-          exportComparePng(
-            e,
-            `${(predPath ?? 'compare').split('/').pop().replace(/\.pdb$/i, '')}.${stripMode === 'dist' ? 'cadist' : 'plddt'}.png`,
-            pred.residues,
-            stripMode,
-            distMap,
-            gmap,
-            ligandInfo,
-            showLigand,
-            labels,
-          ),
-      }),
-      isMultiChain(pred.residues) ? h(ChainLegend, { residues: pred.residues }) : null,
-      !isMultiChain(pred.residues) ? h(PlddtLegend) : null,
-      ligandInfo
-        ? h(
-            'label',
-            { className: 'pv-toggle' },
-            h('input', {
-              type: 'checkbox',
-              checked: showLigand,
-              onChange: (e) => setShowLigand(e.target.checked),
-            }),
-            `配体 (${ligandInfo.n})`,
-          )
-        : null,
-      ligandInfo && showLigand ? h(LigandLegend) : null,
-      h('div', { className: 'pv-hoverline' }, hoverLine),
+        h(Structure3D, {
+          residues: pred.residues,
+          colorMode: isMultiChain(pred.residues) ? 'chain' : 'plddt',
+          autoSpin: true,
+          ghost: ghostResidues,
+          // In the distance lens the ghost recolors by post-superposition Cα
+          // deviation — structural hot spots become visible spatially, not just
+          // in the strip. Ghost residues without a match stay gray.
+          ghostColorOf:
+            stripMode === 'dist' && distMap
+              ? (a, b) => {
+                  const g = ghostResidues[a] ?? ghostResidues[b]
+                  const d = g != null ? distMap.get(g.i) : undefined
+                  return d != null ? distColorRgb(d) : null
+                }
+              : undefined,
+          hover,
+          onHover: setHover,
+          onSelect: (k) => {
+            const r = pred.residues[k]
+            if (r) onPickRes?.(r.i)
+          },
+          selected: selIdx != null && selIdx >= 0 ? selIdx : undefined,
+          ligand: ligandInfo,
+          showLigand,
+          hintText: `拖拽旋转 · 滚轮缩放 · 双击复位 · ${stripMode === 'dist' ? '参考链按 Cα 偏差着色，灰=无匹配' : `灰色为 ${pw ? pw[1] : 'AlphaFold 参考模型'}`}`,
+          onExport3D: (e) =>
+            exportComparePng(
+              e,
+              `${(predPath ?? 'compare')
+                .split('/')
+                .pop()
+                .replace(/\.pdb$/i, '')}.${stripMode === 'dist' ? 'cadist' : 'plddt'}.png`,
+              pred.residues,
+              stripMode,
+              distMap,
+              gmap,
+              ligandInfo,
+              showLigand,
+              labels,
+            ),
+        }),
+        isMultiChain(pred.residues) ? h(ChainLegend, { residues: pred.residues }) : null,
+        !isMultiChain(pred.residues) ? h(PlddtLegend) : null,
+        ligandInfo
+          ? h(
+              'label',
+              { className: 'pv-toggle' },
+              h('input', {
+                type: 'checkbox',
+                checked: showLigand,
+                onChange: (e) => setShowLigand(e.target.checked),
+              }),
+              `配体 (${ligandInfo.n})`,
+            )
+          : null,
+        ligandInfo && showLigand ? h(LigandLegend) : null,
+        h('div', { className: 'pv-hoverline' }, hoverLine),
       ),
     ),
     // Divergence strip with two lenses over the same alignment: confidence
@@ -730,16 +816,18 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
             h(
               'button',
               {
+                type: 'button',
                 className: `pv-chip${stripMode === 'plddt' ? ' pv-chip--active' : ''}`,
                 onClick: () => setStripMode('plddt'),
                 title: '按 ΔpLDDT 着色：蓝=前者更自信，橙=后者更自信，色浓=分歧大',
               },
               '置信度差异',
             ),
-            distMap && distMap.size
+            distMap?.size
               ? h(
                   'button',
                   {
+                    type: 'button',
                     className: `pv-chip${stripMode === 'dist' ? ' pv-chip--active' : ''}`,
                     onClick: () => setStripMode('dist'),
                     title: '按叠合后 Cα 偏差（Å）着色——结构差异热点',
@@ -766,7 +854,9 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
               const dist = distMap?.get(r.i)
               const ds = dist != null ? ` · Cα ${dist.toFixed(2)} Å` : ''
               const dd =
-                g != null ? ` · ${pw ? pw[1] : '参考'} ${g.toFixed(1)} · Δ ${(r.b - g).toFixed(1)}` : ' · 参考无此残基'
+                g != null
+                  ? ` · ${pw ? pw[1] : '参考'} ${g.toFixed(1)} · Δ ${(r.b - g).toFixed(1)}`
+                  : ' · 参考无此残基'
               return `${resLabel(pred.residues, r)} · ${pw ? pw[0] : '预测'} ${r.b.toFixed(1)}${stripMode === 'dist' ? ds : dd + ds}`
             },
           }),
@@ -777,7 +867,10 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
                 h('span', null, 'Cα 偏差'),
                 h('span', {
                   className: 'pv-distlegend-bar',
-                  style: { background: 'linear-gradient(90deg, rgb(64,180,160), rgb(240,170,70) 45%, rgb(235,80,60))' },
+                  style: {
+                    background:
+                      'linear-gradient(90deg, rgb(64,180,160), rgb(240,170,70) 45%, rgb(235,80,60))',
+                  },
                 }),
                 h('span', null, '0.5 · 2 · ≥5 Å'),
               )
@@ -788,7 +881,9 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
                 h('span', {
                   className: 'pv-divlegend-bar',
                   title: '色浓 = |ΔpLDDT| 大（0 → ≥30）',
-                  style: { background: `linear-gradient(90deg, ${DELTA_NEG}, ${DELTA_MID} 50%, ${DELTA_POS})` },
+                  style: {
+                    background: `linear-gradient(90deg, ${DELTA_NEG}, ${DELTA_MID} 50%, ${DELTA_POS})`,
+                  },
                 }),
                 h('span', null, `→ ${pw ? pw[0] : '预测'} 更自信`),
               ),
@@ -813,7 +908,20 @@ function CompareCard({ report, services }) {
   const labelA = pw ? pw[0] : '预测 (ESMFold)'
   const labelB = pw ? pw[1] : 'AlphaFold DB'
   const [selRes, setSelRes] = useState(null)
-  const tone = core != null ? (core < 2 ? 'high' : core < 4 ? 'ok' : 'caution') : rmsd != null ? (rmsd < 2 ? 'high' : rmsd < 4 ? 'ok' : 'caution') : 'warn'
+  const tone =
+    core != null
+      ? core < 2
+        ? 'high'
+        : core < 4
+          ? 'ok'
+          : 'caution'
+      : rmsd != null
+        ? rmsd < 2
+          ? 'high'
+          : rmsd < 4
+            ? 'ok'
+            : 'caution'
+        : 'warn'
   const TONE_ZH = {
     high: '两模型折叠高度一致',
     ok: '整体一致 · 局部有差异',
@@ -860,7 +968,11 @@ function CompareCard({ report, services }) {
       h(
         'div',
         { className: `pv-score pv-score--${tone === 'high' ? 'high' : tone === 'ok' ? 'ok' : 'caution'}` },
-        h('div', { className: 'pv-score-value' }, core != null ? core.toFixed(1) : rmsd != null ? rmsd.toFixed(1) : '—'),
+        h(
+          'div',
+          { className: 'pv-score-value' },
+          core != null ? core.toFixed(1) : rmsd != null ? rmsd.toFixed(1) : '—',
+        ),
         h('div', { className: 'pv-score-label' }, core != null ? '核心 RMSD (Å)' : 'CA-RMSD (Å)'),
       ),
       h(
@@ -871,16 +983,24 @@ function CompareCard({ report, services }) {
           { className: 'pv-verdict' },
           h('span', { className: `pv-verdict-dot pv-verdict-dot--${tone}` }),
           TONE_ZH[tone],
-          h('span', { className: 'pv-residue-count' }, ` · ${pw ? pw.join(' vs ') : `${report.accession ?? ''} vs ${report.model ?? 'AlphaFold DB'}`}`),
+          h(
+            'span',
+            { className: 'pv-residue-count' },
+            ` · ${pw ? pw.join(' vs ') : `${report.accession ?? ''} vs ${report.model ?? 'AlphaFold DB'}`}`,
+          ),
           // Jump straight to the live AlphaFold DB entry behind the reference.
           !pw && report.accession
-            ? h('a', {
-                className: 'pv-search-link',
-                href: `https://alphafold.ebi.ac.uk/entry/AF-${encodeURIComponent(report.accession)}-F1`,
-                target: '_blank',
-                rel: 'noreferrer noopener',
-                title: '在 AlphaFold DB 打开参考模型',
-              }, 'AlphaFold DB ↗')
+            ? h(
+                'a',
+                {
+                  className: 'pv-search-link',
+                  href: `https://alphafold.ebi.ac.uk/entry/AF-${encodeURIComponent(report.accession)}-F1`,
+                  target: '_blank',
+                  rel: 'noreferrer noopener',
+                  title: '在 AlphaFold DB 打开参考模型',
+                },
+                'AlphaFold DB ↗',
+              )
             : null,
         ),
         // Mean-pLDDT side-by-side bars: prediction vs reference.
@@ -888,32 +1008,67 @@ function CompareCard({ report, services }) {
           ? h(
               'div',
               { className: 'pv-compare-bars' },
-              h('div', { className: 'pv-compare-bar-row' },
+              h(
+                'div',
+                { className: 'pv-compare-bar-row' },
                 h('span', { className: 'pv-compare-bar-label' }, labelA),
-                h('div', { className: 'pv-compare-bar' }, h('div', { style: { flexGrow: pred / maxBar, background: 'var(--pv-line)' } })),
-                h('span', { className: 'pv-compare-bar-value' }, pred.toFixed(1))),
-              h('div', { className: 'pv-compare-bar-row' },
+                h(
+                  'div',
+                  { className: 'pv-compare-bar' },
+                  h('div', { style: { flexGrow: pred / maxBar, background: 'var(--pv-line)' } }),
+                ),
+                h('span', { className: 'pv-compare-bar-value' }, pred.toFixed(1)),
+              ),
+              h(
+                'div',
+                { className: 'pv-compare-bar-row' },
                 h('span', { className: 'pv-compare-bar-label' }, labelB),
-                h('div', { className: 'pv-compare-bar' }, h('div', { style: { flexGrow: af / maxBar, background: C_VERY_HIGH } })),
-                h('span', { className: 'pv-compare-bar-value' }, af.toFixed(1))),
+                h(
+                  'div',
+                  { className: 'pv-compare-bar' },
+                  h('div', { style: { flexGrow: af / maxBar, background: C_VERY_HIGH } }),
+                ),
+                h('span', { className: 'pv-compare-bar-value' }, af.toFixed(1)),
+              ),
             )
           : null,
       ),
     ),
-    h('div', { className: 'pv-complex-metrics' },
+    h(
+      'div',
+      { className: 'pv-complex-metrics' },
       chips.map(([label, value]) =>
-        h('span', { key: label, className: 'pv-metric-chip' },
+        h(
+          'span',
+          { key: label, className: 'pv-metric-chip' },
           h('span', { className: 'pv-metric-label' }, label),
-          h('span', { className: 'pv-metric-value' }, value))),
-      h('button', { className: 'pv-export', onClick: copySummary, title: '复制可直接粘贴的对比结论（Markdown）' },
-        copied ? '已复制 ✓' : '复制结论')),
+          h('span', { className: 'pv-metric-value' }, value),
+        ),
+      ),
+      h(
+        'button',
+        {
+          type: 'button',
+          className: 'pv-export',
+          onClick: copySummary,
+          title: '复制可直接粘贴的对比结论（Markdown）',
+        },
+        copied ? '已复制 ✓' : '复制结论',
+      ),
+    ),
     h(Compare3D, {
       report,
       services,
       selectedRes: selRes,
       onPickRes: (i) => setSelRes((prev) => (prev === i ? null : i)),
     }),
-    h(DeltaSparkline, { series: c.deltaSeries, note: c.deltaSeriesNote, onPick: (i) => setSelRes((prev) => (prev === i ? null : i)), labelA, labelB }),
+    h(DeltaSparkline, {
+      series: c.deltaSeries,
+      note: c.deltaSeriesNote,
+      onPick: (i) => setSelRes((prev) => (prev === i ? null : i)),
+      labelA,
+      labelB,
+    }),
     Array.isArray(c.largestDeltas) && c.largestDeltas.length
       ? h(
           'div',
@@ -974,10 +1129,12 @@ function residuesSummaryMd(name, savedTo, residues) {
   lines.push(`- 置信度分布: ${BANDS.map((b, i) => `${b.label} ${counts[i]}`).join(' · ')}`)
   if (segs.length) {
     lines.push(
-      `- 低置信区段: ${segs.map(([a, b]) => {
-        const m = residues.slice(a, b + 1).reduce((x, r) => x + (r.b ?? 0), 0) / (b - a + 1)
-        return `${residues[a].i}–${residues[b].i}（平均 ${m.toFixed(1)}）`
-      }).join('、')}——可能为无序区`,
+      `- 低置信区段: ${segs
+        .map(([a, b]) => {
+          const m = residues.slice(a, b + 1).reduce((x, r) => x + (r.b ?? 0), 0) / (b - a + 1)
+          return `${residues[a].i}–${residues[b].i}（平均 ${m.toFixed(1)}）`
+        })
+        .join('、')}——可能为无序区`,
     )
   }
   lines.push(`- 解读: ${VERDICT_ZH[verdictTone(mean)]}`)
@@ -1019,7 +1176,12 @@ function BatchRowDetail({ job, services }) {
     return h(
       'div',
       { className: 'pv-batch-detail pv-batch-loading' },
-      h('div', { className: 'pv-loading-inner' }, h('div', { className: 'pv-spinner' }), `加载 ${job.accession} 结构…`),
+      h(
+        'div',
+        { className: 'pv-loading-inner' },
+        h('div', { className: 'pv-spinner' }),
+        `加载 ${job.accession} 结构…`,
+      ),
     )
   }
   return h(
@@ -1040,11 +1202,14 @@ function BatchRowDetail({ job, services }) {
           h(
             'button',
             {
+              type: 'button',
               className: 'pv-export',
               title: '复制可直接粘贴的预测结论（Markdown，按当前结构现算）',
               onClick: () => {
                 try {
-                  void navigator.clipboard?.writeText(residuesSummaryMd(job.accession, job.savedTo, residues))?.catch(() => {})
+                  void navigator.clipboard
+                    ?.writeText(residuesSummaryMd(job.accession, job.savedTo, residues))
+                    ?.catch(() => {})
                 } catch {}
                 setConclCopied(true)
                 setTimeout(() => setConclCopied(false), 1600)
@@ -1055,6 +1220,7 @@ function BatchRowDetail({ job, services }) {
           h(
             'button',
             {
+              type: 'button',
               className: 'pv-export',
               onClick: async (e) => {
                 try {
@@ -1072,13 +1238,24 @@ function BatchRowDetail({ job, services }) {
           ),
           h(
             'button',
-            { className: 'pv-export', onClick: (e) => export3DPng(e, `${job.accession}.3d.png`, residues, isMultiChain(residues) ? 'chain' : 'plddt') },
+            {
+              type: 'button',
+              className: 'pv-export',
+              onClick: (e) =>
+                export3DPng(
+                  e,
+                  `${job.accession}.3d.png`,
+                  residues,
+                  isMultiChain(residues) ? 'chain' : 'plddt',
+                ),
+            },
             '导出 PNG',
           ),
           h(DownloadPdbButton, { services, path: job.savedTo }),
           h(
             'button',
             {
+              type: 'button',
               className: 'pv-export',
               onClick: () => {
                 try {
@@ -1103,7 +1280,8 @@ function BatchRowDetail({ job, services }) {
           },
           colorMode: isMultiChain(residues) ? 'chain' : 'plddt',
           autoSpin: false,
-          onExport3D: (e) => export3DPng(e, `${job.accession}.3d.png`, residues, isMultiChain(residues) ? 'chain' : 'plddt'),
+          onExport3D: (e) =>
+            export3DPng(e, `${job.accession}.3d.png`, residues, isMultiChain(residues) ? 'chain' : 'plddt'),
         }),
         isMultiChain(residues) ? h(ChainLegend, { residues }) : null,
         !isMultiChain(residues) ? h(PlddtLegend) : null,
@@ -1114,7 +1292,7 @@ function BatchRowDetail({ job, services }) {
             ? `${resLabel(residues, residues[hover])} · pLDDT ${residues[hover].b.toFixed(1)}`
             : selected != null && residues[selected]
               ? `已选 ${resLabel(residues, residues[selected])} · pLDDT ${residues[selected].b.toFixed(1)}`
-              : job.verdict ?? '',
+              : (job.verdict ?? ''),
         ),
       ),
       h(
@@ -1130,11 +1308,16 @@ function BatchRowDetail({ job, services }) {
             h(
               'button',
               {
+                type: 'button',
                 className: 'pv-export',
                 onClick: async (e) => {
                   try {
                     const col = e.currentTarget.closest('.pv-curve-col')
-                    const ok = await copyCurveComposite(col?.querySelector('canvas.pv-curve'), col?.querySelector('.pv-seqstrip'), residues)
+                    const ok = await copyCurveComposite(
+                      col?.querySelector('canvas.pv-curve'),
+                      col?.querySelector('.pv-seqstrip'),
+                      residues,
+                    )
                     setCurveCopied(ok)
                   } catch {
                     setCurveCopied(false)
@@ -1146,12 +1329,20 @@ function BatchRowDetail({ job, services }) {
             ),
             h(
               'button',
-              { className: 'pv-export', onClick: (e) => exportCurvePng(e, `${job.accession}.plddt.png`, residues) },
+              {
+                type: 'button',
+                className: 'pv-export',
+                onClick: (e) => exportCurvePng(e, `${job.accession}.plddt.png`, residues),
+              },
               '导出 PNG',
             ),
             h(
               'button',
-              { className: 'pv-export', onClick: () => exportResiduesCsv(`${job.accession}.plddt.csv`, residues) },
+              {
+                type: 'button',
+                className: 'pv-export',
+                onClick: () => exportResiduesCsv(`${job.accession}.plddt.csv`, residues),
+              },
               '导出 CSV',
             ),
           ),
@@ -1211,7 +1402,7 @@ function SearchCard({ report }) {
     })
   const allSel = hits.length > 0 && hits.every((x) => !x.accession || sel.has(x.accession))
   const toggleAll = () =>
-    setSel((s) => (allSel ? new Set() : new Set(hits.map((x) => x.accession).filter(Boolean))))
+    setSel(() => (allSel ? new Set() : new Set(hits.map((x) => x.accession).filter(Boolean))))
   const copyBatch = () => {
     const text = `用 batch_predict 一次预测这些蛋白：${[...sel].join(' ')}`
     try {
@@ -1236,7 +1427,11 @@ function SearchCard({ report }) {
     h(
       'button',
       {
-        className: 'pv-search-head-cell' + (sort?.key === key ? ' pv-search-head-cell--sorted' : '') + (extra ? ` ${extra}` : ''),
+        type: 'button',
+        className:
+          'pv-search-head-cell' +
+          (sort?.key === key ? ' pv-search-head-cell--sorted' : '') +
+          (extra ? ` ${extra}` : ''),
         title: '点击排序',
         onClick: () => toggleSort(key),
       },
@@ -1248,18 +1443,28 @@ function SearchCard({ report }) {
     h(
       'div',
       { className: 'pv-score-row' },
-      h('div', { className: 'pv-score-main' },
+      h(
+        'div',
+        { className: 'pv-score-main' },
         h('div', { className: 'pv-score-label' }, 'UniProt 搜索'),
         h('div', { className: 'pv-score-num' }, `${hits.length}`),
         h('div', { className: 'pv-score-sub' }, `条结果 · ${report.query ?? ''}`),
       ),
       hits.length
-        ? h('div', { className: 'pv-search-actions' },
-            h('button', {
-              className: 'pv-export',
-              onClick: () => exportSearchCsv(sorted, report.query),
-              title: '下载检索结果 CSV（当前排序，含 UniProt 链接）',
-            }, '导出 CSV'))
+        ? h(
+            'div',
+            { className: 'pv-search-actions' },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'pv-export',
+                onClick: () => exportSearchCsv(sorted, report.query),
+                title: '下载检索结果 CSV（当前排序，含 UniProt 链接）',
+              },
+              '导出 CSV',
+            ),
+          )
         : null,
     ),
     hits.length
@@ -1272,7 +1477,8 @@ function SearchCard({ report }) {
             h(
               'button',
               {
-                className: 'pv-search-check' + (allSel ? ' pv-search-check--on' : ''),
+                type: 'button',
+                className: `pv-search-check${allSel ? ' pv-search-check--on' : ''}`,
                 title: allSel ? '取消全选' : '全选',
                 onClick: toggleAll,
               },
@@ -1287,7 +1493,8 @@ function SearchCard({ report }) {
             h(
               'button',
               {
-                className: 'pv-search-row' + (hit.accession && sel.has(hit.accession) ? ' pv-search-row--sel' : ''),
+                type: 'button',
+                className: `pv-search-row${hit.accession && sel.has(hit.accession) ? ' pv-search-row--sel' : ''}`,
                 key: hit.accession ?? k,
                 title: `点击复制 ${hit.accession ?? ''}`,
                 onClick: () => copy(hit.accession),
@@ -1295,7 +1502,9 @@ function SearchCard({ report }) {
               h(
                 'span',
                 {
-                  className: 'pv-search-check' + (hit.accession && sel.has(hit.accession) ? ' pv-search-check--on' : ''),
+                  className:
+                    'pv-search-check' +
+                    (hit.accession && sel.has(hit.accession) ? ' pv-search-check--on' : ''),
                   title: sel.has(hit.accession) ? '取消选择' : '加入批量预测',
                   onClick: (e) => {
                     e.stopPropagation()
@@ -1307,7 +1516,12 @@ function SearchCard({ report }) {
               h(
                 'span',
                 { className: 'pv-search-acccell' },
-                h('span', { className: 'pv-search-acc' }, hit.accession ?? '—', copied === hit.accession ? ' ✓' : ''),
+                h(
+                  'span',
+                  { className: 'pv-search-acc' },
+                  hit.accession ?? '—',
+                  copied === hit.accession ? ' ✓' : '',
+                ),
                 // Direct entry link — stopPropagation so the row's copy-on-click
                 // doesn't fire; researchers jump to the live UniProt entry.
                 hit.accession
@@ -1339,13 +1553,26 @@ function SearchCard({ report }) {
           h('span', { className: 'pv-batchbar-count' }, `已选 ${sel.size} 个`),
           h(
             'button',
-            { className: 'pv-chip pv-chip--active', onClick: copyBatch, title: '复制 batch_predict 指令到剪贴板，粘贴到对话框即可批量预测' },
+            {
+              type: 'button',
+              className: 'pv-chip pv-chip--active',
+              onClick: copyBatch,
+              title: '复制 batch_predict 指令到剪贴板，粘贴到对话框即可批量预测',
+            },
             batchCopied ? '已复制 ✓ 粘贴到对话框' : '复制批量预测指令',
           ),
-          h('button', { className: 'pv-batchbar-clear', onClick: () => setSel(new Set()) }, '清空'),
+          h(
+            'button',
+            { type: 'button', className: 'pv-batchbar-clear', onClick: () => setSel(new Set()) },
+            '清空',
+          ),
         )
       : null,
-    h('div', { className: 'pv-search-hint' }, '点击行复制 accession，点击表头排序，勾选后一键生成批量预测指令；回复「预测 <accession>」继续，或用 batch_predict 一次预测多个。'),
+    h(
+      'div',
+      { className: 'pv-search-hint' },
+      '点击行复制 accession，点击表头排序，勾选后一键生成批量预测指令；回复「预测 <accession>」继续，或用 batch_predict 一次预测多个。',
+    ),
   )
 }
 
@@ -1356,11 +1583,15 @@ function batchSummaryMd(jobs, s) {
   const lines = ['批处理预测结论（batch_predict）']
   lines.push(`- 完成 ${s.ok ?? okJobs.length}/${jobs.length}${s.failed ? ` · 失败 ${s.failed}` : ''}`)
   if (typeof s.meanPlddt === 'number') lines.push(`- 平均 pLDDT（各蛋白均值）: ${s.meanPlddt.toFixed(1)}`)
-  lines.push('', '| accession | 蛋白 | 状态 | 残基 | 平均 pLDDT | 低置信区段 | 备注 |', '|---|---|---|---|---|---|---|')
+  lines.push(
+    '',
+    '| accession | 蛋白 | 状态 | 残基 | 平均 pLDDT | 低置信区段 | 备注 |',
+    '|---|---|---|---|---|---|---|',
+  )
   for (const j of jobs) {
     const okr = j.status === 'ok'
     lines.push(
-      `| ${j.accession} | ${j.name ?? ''} | ${okr ? '✅' : '❌'} | ${okr ? j.residues ?? '' : '—'} | ${okr && j.meanPlddt != null ? j.meanPlddt : '—'} | ${okr ? j.lowSegments ?? 0 : '—'} | ${okr ? j.savedTo ?? '' : j.error ?? ''} |`,
+      `| ${j.accession} | ${j.name ?? ''} | ${okr ? '✅' : '❌'} | ${okr ? (j.residues ?? '') : '—'} | ${okr && j.meanPlddt != null ? j.meanPlddt : '—'} | ${okr ? (j.lowSegments ?? 0) : '—'} | ${okr ? (j.savedTo ?? '') : (j.error ?? '')} |`,
     )
   }
   return lines.join('\n')
@@ -1378,9 +1609,13 @@ function BatchCard({ report, services }) {
   // Rows always render failed jobs last; the select only reorders the successes.
   const sortedJobs =
     sortBy === 'plddt'
-      ? [...okJobs].sort((a, b) => (b.meanPlddt ?? 0) - (a.meanPlddt ?? 0)).concat(jobs.filter((j) => j.status !== 'ok'))
+      ? [...okJobs]
+          .sort((a, b) => (b.meanPlddt ?? 0) - (a.meanPlddt ?? 0))
+          .concat(jobs.filter((j) => j.status !== 'ok'))
       : sortBy === 'size'
-        ? [...okJobs].sort((a, b) => (b.residues ?? 0) - (a.residues ?? 0)).concat(jobs.filter((j) => j.status !== 'ok'))
+        ? [...okJobs]
+            .sort((a, b) => (b.residues ?? 0) - (a.residues ?? 0))
+            .concat(jobs.filter((j) => j.status !== 'ok'))
         : jobs
   return h(
     'div',
@@ -1407,9 +1642,12 @@ function BatchCard({ report, services }) {
           'div',
           { className: 'pv-complex-metrics' },
           mean != null
-            ? h('span', { className: 'pv-metric-chip' },
+            ? h(
+                'span',
+                { className: 'pv-metric-chip' },
                 h('span', { className: 'pv-metric-label' }, '平均 pLDDT（各蛋白均值）'),
-                h('span', { className: 'pv-metric-value' }, mean.toFixed(1)))
+                h('span', { className: 'pv-metric-value' }, mean.toFixed(1)),
+              )
             : null,
         ),
       ),
@@ -1427,7 +1665,12 @@ function BatchCard({ report, services }) {
               { className: 'pv-toolbar-controls' },
               h(
                 'select',
-                { className: 'pv-select', value: sortBy, onChange: (e) => setSortBy(e.target.value), title: '排序方式（失败行始终在最后）' },
+                {
+                  className: 'pv-select',
+                  value: sortBy,
+                  onChange: (e) => setSortBy(e.target.value),
+                  title: '排序方式（失败行始终在最后）',
+                },
                 h('option', { value: 'tool' }, '默认顺序'),
                 h('option', { value: 'plddt' }, '按 pLDDT 降序'),
                 h('option', { value: 'size' }, '按残基数'),
@@ -1435,6 +1678,7 @@ function BatchCard({ report, services }) {
               h(
                 'button',
                 {
+                  type: 'button',
                   className: 'pv-export',
                   title: '复制可直接粘贴的批处理结论（Markdown 表格，含失败行）',
                   onClick: () => {
@@ -1447,7 +1691,11 @@ function BatchCard({ report, services }) {
                 },
                 conclCopied ? '已复制 ✓' : '复制结论',
               ),
-              h('button', { className: 'pv-export', onClick: () => exportBatchCsv(jobs) }, '导出 CSV'),
+              h(
+                'button',
+                { type: 'button', className: 'pv-export', onClick: () => exportBatchCsv(jobs) },
+                '导出 CSV',
+              ),
             ),
           )
         : null,
@@ -1465,7 +1713,11 @@ function BatchCard({ report, services }) {
                 h('span', { className: 'pv-verdict-dot pv-verdict-dot--high' }),
                 h('span', { className: 'pv-batch-acc' }, j.accession),
                 h('span', { className: 'pv-batch-name' }, j.name ?? ''),
-                h('span', { className: 'pv-batch-meta' }, `${j.residues} 残基${j.lowSegments ? ` · ${j.lowSegments} 低置信区段` : ''}`),
+                h(
+                  'span',
+                  { className: 'pv-batch-meta' },
+                  `${j.residues} 残基${j.lowSegments ? ` · ${j.lowSegments} 低置信区段` : ''}`,
+                ),
                 // mini confidence bar: pLDDT share in the band color, so the
                 // table reads at a glance before the number registers
                 h(
@@ -1479,7 +1731,11 @@ function BatchCard({ report, services }) {
                     },
                   }),
                 ),
-                h('span', { className: `pv-batch-score pv-batch-score--${verdictTone(j.meanPlddt)}` }, (j.meanPlddt ?? 0).toFixed(1)),
+                h(
+                  'span',
+                  { className: `pv-batch-score pv-batch-score--${verdictTone(j.meanPlddt)}` },
+                  (j.meanPlddt ?? 0).toFixed(1),
+                ),
                 h('span', { className: 'pv-batch-caret' }, openAcc === j.accession ? '▾' : '▸'),
               ),
               openAcc === j.accession && j.savedTo
@@ -1564,7 +1820,7 @@ function downloadCanvas(canvas, name) {
 async function downloadPdbFile(services, path) {
   if (!services || !path) throw new Error('no file path')
   const r = await services.call('protein.file', { path })
-  if (!r || !r.b64) throw new Error('empty download')
+  if (!r?.b64) throw new Error('empty download')
   const bin = atob(r.b64)
   const bytes = new Uint8Array(bin.length)
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
@@ -1586,6 +1842,7 @@ function DownloadPdbButton({ services, path, className = 'pv-export' }) {
   return h(
     'button',
     {
+      type: 'button',
       className,
       title: '下载工作区里的 PDB 结构文件',
       onClick: async () => {
@@ -1602,21 +1859,19 @@ function DownloadPdbButton({ services, path, className = 'pv-export' }) {
   )
 }
 
-function exportCanvasPng(e, canvasClass, name) {
-  const col = e.currentTarget.closest('.pv-3d-col, .pv-curve-col')
-  const canvas = col?.querySelector(`canvas.${canvasClass}`)
-  if (!canvas || typeof canvas.toDataURL !== 'function') return
-  try {
-    downloadCanvas(canvas, name)
-  } catch {}
-}
-
 // 3D PNG export composites the chain legend for multi-chain complexes and the
 // ligand element key when a pose is shown, with the legend strip extending the
 // 3D backdrop gradient so the figure is seamless. The composite builder is
 // shared with the clipboard copy so both produce the same figure; it returns
 // null when the plain canvas already tells the whole story.
-function build3DComposite(canvas, residues, colorMode, ligandInfo = null, showLigand = false, interfaceErr = null) {
+function build3DComposite(
+  canvas,
+  residues,
+  colorMode,
+  ligandInfo = null,
+  showLigand = false,
+  interfaceErr = null,
+) {
   const withLigand = !!(ligandInfo && showLigand)
   const multi = colorMode === 'chain' && isMultiChain(residues)
   // Non-chain colorings get a scale legend row so every exported figure is
@@ -1715,7 +1970,15 @@ function build3DComposite(canvas, residues, colorMode, ligandInfo = null, showLi
   }
 }
 
-function export3DPng(e, name, residues, colorMode, ligandInfo = null, showLigand = false, interfaceErr = null) {
+function export3DPng(
+  e,
+  name,
+  residues,
+  colorMode,
+  ligandInfo = null,
+  showLigand = false,
+  interfaceErr = null,
+) {
   const col = e.currentTarget.closest('.pv-3d-col')
   const canvas = col?.querySelector('canvas.pv-3d')
   if (!canvas || typeof canvas.toDataURL !== 'function') return
@@ -1738,8 +2001,17 @@ async function copyCanvasPng(canvas, build) {
   return true
 }
 
-async function copy3DComposite(canvas, residues, colorMode, ligandInfo = null, showLigand = false, interfaceErr = null) {
-  return copyCanvasPng(canvas, (cv) => build3DComposite(cv, residues, colorMode, ligandInfo, showLigand, interfaceErr))
+async function copy3DComposite(
+  canvas,
+  residues,
+  colorMode,
+  ligandInfo = null,
+  showLigand = false,
+  interfaceErr = null,
+) {
+  return copyCanvasPng(canvas, (cv) =>
+    build3DComposite(cv, residues, colorMode, ligandInfo, showLigand, interfaceErr),
+  )
 }
 
 async function copyCurveComposite(canvas, strip, residues) {
@@ -1766,7 +2038,12 @@ function buildCurveComposite(canvas, strip, residues) {
   g.drawImage(canvas, 0, 0)
   residues.forEach((r, idx) => {
     g.fillStyle = bandColor(r.b)
-    g.fillRect((idx % perRow) * pitch + 6 * s, canvas.height + top + Math.floor(idx / perRow) * pitch, pitch - 1, pitch - 1)
+    g.fillRect(
+      (idx % perRow) * pitch + 6 * s,
+      canvas.height + top + Math.floor(idx / perRow) * pitch,
+      pitch - 1,
+      pitch - 1,
+    )
   })
   // band key row: the figure reads standalone, same key as the 3D export
   g.font = `${11 * s}px ui-sans-serif, system-ui`
@@ -1853,7 +2130,13 @@ function buildPaeComposite(canvas, n, bytes, chainSizes, scale = 1, chainPairs =
     const barH = 8 * s
     const barY = pad + titleH + canvas.height + (legendH - barH) / 2
     const grad = g.createLinearGradient(pad, 0, pad + barW, 0)
-    for (const [t, rgb] of [[0, '#440154'], [0.25, '#3b528b'], [0.5, '#21918c'], [0.75, '#5ec962'], [1, '#fde725']]) {
+    for (const [t, rgb] of [
+      [0, '#440154'],
+      [0.25, '#3b528b'],
+      [0.5, '#21918c'],
+      [0.75, '#5ec962'],
+      [1, '#fde725'],
+    ]) {
       grad.addColorStop(t, rgb)
     }
     g.fillStyle = '#6b7280'
@@ -1973,7 +2256,7 @@ function exportResiduesCsv(name, residues, interfaceErr) {
 
 // Compare per-residue CSV: pLDDT both sides, Δ and post-superposition Cα
 // distance per residue — the raw numbers behind the divergence strip.
-function exportCompareCsv(e, name, residues, distMap, gmap) {
+function exportCompareCsv(_e, name, residues, distMap, gmap) {
   const row = (r) => {
     const gb = gmap?.get(r.i)
     const d = distMap?.get(r.i)
@@ -1988,7 +2271,9 @@ function exportCompareCsv(e, name, residues, distMap, gmap) {
   }
   try {
     const url = URL.createObjectURL(
-      new Blob(['residue,aa,plddt_pred,plddt_ref,delta_plddt,ca_dist\n' + residues.map(row).join('\n')], { type: 'text/csv' }),
+      new Blob([`residue,aa,plddt_pred,plddt_ref,delta_plddt,ca_dist\n${residues.map(row).join('\n')}`], {
+        type: 'text/csv',
+      }),
     )
     const a = document.createElement('a')
     a.href = url
@@ -2004,7 +2289,16 @@ function exportCompareCsv(e, name, residues, distMap, gmap) {
 // Compare 3D export: the 3D overlay + the divergence strip (current lens)
 // composed on the same dark backdrop, so one figure carries superposition and
 // heat map. The builder is shared with the clipboard copy.
-function buildCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo = null, showLigand = false, labels = null) {
+function buildCompareComposite(
+  canvas,
+  residues,
+  mode,
+  distMap,
+  gmap,
+  ligandInfo = null,
+  showLigand = false,
+  labels = null,
+) {
   if (!canvas || typeof canvas.toDataURL !== 'function' || !residues?.length) return null
   {
     const s = canvas.width / (canvas.clientWidth || canvas.width) || 1
@@ -2062,7 +2356,12 @@ function buildCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo
           : gmap.has(r.i)
             ? deltaColor(r.b - gmap.get(r.i))
             : '#b6b6b6'
-      g.fillRect((idx % perRow) * pitch + 6 * s, canvas.height + top + ligH + labelH + Math.floor(idx / perRow) * pitch, pitch - 1, pitch - 1)
+      g.fillRect(
+        (idx % perRow) * pitch + 6 * s,
+        canvas.height + top + ligH + labelH + Math.floor(idx / perRow) * pitch,
+        pitch - 1,
+        pitch - 1,
+      )
     })
     // legend row keeps the exported figure self-explanatory without the panel
     const ly = canvas.height + top + ligH + labelH + rows * pitch + legendH / 2
@@ -2103,7 +2402,17 @@ function buildCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo
   }
 }
 
-function exportComparePng(e, name, residues, mode, distMap, gmap, ligandInfo = null, showLigand = false, labels = null) {
+function exportComparePng(
+  e,
+  name,
+  residues,
+  mode,
+  distMap,
+  gmap,
+  ligandInfo = null,
+  showLigand = false,
+  labels = null,
+) {
   const col = e.currentTarget.closest('.pv-3d-col')
   const canvas = col?.querySelector('canvas.pv-3d')
   if (!canvas || typeof canvas.toDataURL !== 'function' || !residues?.length) return
@@ -2114,8 +2423,19 @@ function exportComparePng(e, name, residues, mode, distMap, gmap, ligandInfo = n
   } catch {}
 }
 
-async function copyCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo, showLigand, labels = null) {
-  return copyCanvasPng(canvas, (cv) => buildCompareComposite(cv, residues, mode, distMap, gmap, ligandInfo, showLigand, labels))
+async function copyCompareComposite(
+  canvas,
+  residues,
+  mode,
+  distMap,
+  gmap,
+  ligandInfo,
+  showLigand,
+  labels = null,
+) {
+  return copyCanvasPng(canvas, (cv) =>
+    buildCompareComposite(cv, residues, mode, distMap, gmap, ligandInfo, showLigand, labels),
+  )
 }
 
 // Batch table → CSV download (per-accession rows, failures included).
@@ -2126,10 +2446,12 @@ function exportBatchCsv(jobs) {
   }
   const head = 'accession,name,status,residues,meanPlddt,lowSegments,savedTo,error'
   const lines = jobs.map((j) =>
-    [j.accession, j.name, j.status, j.residues, j.meanPlddt, j.lowSegments, j.savedTo, j.error].map(esc).join(','),
+    [j.accession, j.name, j.status, j.residues, j.meanPlddt, j.lowSegments, j.savedTo, j.error]
+      .map(esc)
+      .join(','),
   )
   try {
-    const url = URL.createObjectURL(new Blob([head + '\n' + lines.join('\n')], { type: 'text/csv' }))
+    const url = URL.createObjectURL(new Blob([`${head}\n${lines.join('\n')}`], { type: 'text/csv' }))
     const a = document.createElement('a')
     a.href = url
     a.download = 'batch_predict.csv'
@@ -2147,15 +2469,26 @@ function exportSearchCsv(hits, query) {
   }
   const head = 'accession,name,organism,length,uniprot'
   const lines = hits.map((x) =>
-    [x.accession, x.proteinName ?? x.id, x.organism, x.length, x.accession ? `https://www.uniprot.org/uniprotkb/${x.accession}` : '']
+    [
+      x.accession,
+      x.proteinName ?? x.id,
+      x.organism,
+      x.length,
+      x.accession ? `https://www.uniprot.org/uniprotkb/${x.accession}` : '',
+    ]
       .map(esc)
       .join(','),
   )
   try {
-    const url = URL.createObjectURL(new Blob([head + '\n' + lines.join('\n')], { type: 'text/csv' }))
+    const url = URL.createObjectURL(new Blob([`${head}\n${lines.join('\n')}`], { type: 'text/csv' }))
     const a = document.createElement('a')
     a.href = url
-    a.download = `uniprot_${String(query ?? 'search').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'search'}.csv`
+    a.download = `uniprot_${
+      String(query ?? 'search')
+        .replace(/[^\w-]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 40) || 'search'
+    }.csv`
     a.click()
     URL.revokeObjectURL(url)
   } catch {}
@@ -2349,7 +2682,9 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
     'div',
     { className: 'pv-curve-wrap', ref: wrapRef },
     noTitle ? null : h('div', { className: 'pv-section-title' }, '逐残基 pLDDT'),
-    h('div', { className: 'pv-curve-holder' },
+    h(
+      'div',
+      { className: 'pv-curve-holder' },
       h('canvas', {
         ref: canvasRef,
         className: 'pv-curve',
@@ -2373,9 +2708,7 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
       h(
         'div',
         { className: `pv-curve-tip${hovered ? ' pv-curve-tip--on' : ''}`, ref: tooltipRef },
-        hovered
-          ? `${hovered.aa}${hovered.i} · ${hovered.b.toFixed(1)}`
-          : `${n} 残基 · 点击选中`,
+        hovered ? `${hovered.aa}${hovered.i} · ${hovered.b.toFixed(1)}` : `${n} 残基 · 点击选中`,
       ),
     ),
   )
@@ -2387,18 +2720,57 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
 // (e.g. by post-superposition Cα distance); null falls back to the gray ghost.
 // Element colors for ligand ball rendering (RGB triples, muted for the dark
 // backdrop; unknown elements fall back to gray).
-const EL_COLORS = { C: [138, 147, 158], N: [88, 132, 220], O: [214, 98, 98], S: [219, 187, 70], P: [226, 148, 70], F: [140, 200, 170], CL: [140, 200, 150], BR: [160, 110, 80] }
+const EL_COLORS = {
+  C: [138, 147, 158],
+  N: [88, 132, 220],
+  O: [214, 98, 98],
+  S: [219, 187, 70],
+  P: [226, 148, 70],
+  F: [140, 200, 170],
+  CL: [140, 200, 150],
+  BR: [160, 110, 80],
+}
 const ligandColor = (el) => EL_COLORS[el] ?? [154, 165, 181]
 
-function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, autoSpin, interfaceErr, ligand, showLigand = true, ghost, ghostColorOf, hintText, hiddenChains, onExport3D, downloadPdbEl }) {
+function Structure3D({
+  residues,
+  hover,
+  onHover,
+  selected,
+  onSelect,
+  colorMode,
+  autoSpin,
+  interfaceErr,
+  ligand,
+  showLigand = true,
+  ghost,
+  ghostColorOf,
+  hintText,
+  hiddenChains,
+  onExport3D,
+  downloadPdbEl,
+}) {
   // Chain visibility toggle: hidden residues keep their indices (curve/strip
   // cross-linking stays aligned) but are skipped in drawing and hit-testing.
-  const isHidden = useCallback((k) => !!(hiddenChains?.size && hiddenChains.has(residues?.[k]?.chain)), [hiddenChains, residues])
+  const isHidden = useCallback(
+    (k) => !!(hiddenChains?.size && hiddenChains.has(residues?.[k]?.chain)),
+    [hiddenChains, residues],
+  )
   const canvasRef = useRef(null)
   const tipRef = useRef(null)
   const wrapRef = useRef(null)
   const [size, setSize] = useState({ w: 600, h: 340 })
-  const view = useRef({ yaw: -0.6, pitch: 0.35, zoom: 1, dragging: false, lastX: 0, lastY: 0, vx: 0, vy: 0, lastInteract: 0 })
+  const view = useRef({
+    yaw: -0.6,
+    pitch: 0.35,
+    zoom: 1,
+    dragging: false,
+    lastX: 0,
+    lastY: 0,
+    vx: 0,
+    vy: 0,
+    lastInteract: 0,
+  })
   const frame = useRef(0)
   const wake = useRef(0)
   // Maximized mode: the wrap goes fixed over the whole viewport (works inside
@@ -2408,7 +2780,9 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
   useEffect(() => {
     const el = wrapRef.current
     if (!el) return
-    const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: maxed ? window.innerHeight - 16 : 340 }))
+    const ro = new ResizeObserver(() =>
+      setSize({ w: el.clientWidth, h: maxed ? window.innerHeight - 16 : 340 }),
+    )
     ro.observe(el)
     return () => ro.disconnect()
   }, [maxed])
@@ -2455,7 +2829,11 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       ghostCentered = ghost.map((r) => [r.x - c[0], r.y - c[1], r.z - c[2]])
       ghostBonds = []
       for (let k = 1; k < ghost.length; k++) {
-        const d = Math.hypot(ghost[k].x - ghost[k - 1].x, ghost[k].y - ghost[k - 1].y, ghost[k].z - ghost[k - 1].z)
+        const d = Math.hypot(
+          ghost[k].x - ghost[k - 1].x,
+          ghost[k].y - ghost[k - 1].y,
+          ghost[k].z - ghost[k - 1].z,
+        )
         if (d < 4.5) ghostBonds.push([k - 1, k])
       }
       for (const v of ghostCentered) maxR = Math.max(maxR, Math.hypot(...v))
@@ -2478,7 +2856,16 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       })
       ligandContacts = [...best.values()].map(([li, k]) => [li, k])
     }
-    return { centered, bonds, radius: maxR || 1, ghostCentered, ghostBonds, ligandCentered, ligandContacts, chainIdx }
+    return {
+      centered,
+      bonds,
+      radius: maxR || 1,
+      ghostCentered,
+      ghostBonds,
+      ligandCentered,
+      ligandContacts,
+      chainIdx,
+    }
   }, [residues, ghost, ligand])
   // NOTE: `ligand` here is the normalized { n, atoms, bonds } the parent builds
   // from the service's flat ligandAtoms/ligandBonds arrays.
@@ -2513,10 +2900,13 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
         v.vx *= 0.92
         v.vy *= 0.92
       }
-      const cy = Math.cos(v.yaw), sy = Math.sin(v.yaw)
-      const cp = Math.cos(v.pitch), sp = Math.sin(v.pitch)
+      const cy = Math.cos(v.yaw),
+        sy = Math.sin(v.yaw)
+      const cp = Math.cos(v.pitch),
+        sp = Math.sin(v.pitch)
       const scale = (Math.min(w, hh) * 0.42 * v.zoom) / geo.radius
-      const cx0 = w / 2, cy0 = hh / 2
+      const cx0 = w / 2,
+        cy0 = hh / 2
 
       const projected = geo.centered.map(([x, y, z]) => {
         const x1 = x * cy + z * sy
@@ -2532,13 +2922,15 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
         const z2 = y * sp + z1 * cp
         return { x: cx0 + x1 * scale, y: cy0 + y1 * scale, z: z2 }
       })
-      const ligProjected = showLigand ? geo.ligandCentered?.map(([x, y, z]) => {
-        const x1 = x * cy + z * sy
-        const z1 = -x * sy + z * cy
-        const y1 = y * cp - z1 * sp
-        const z2 = y * sp + z1 * cp
-        return { x: cx0 + x1 * scale, y: cy0 + y1 * scale, z: z2 }
-      }) : null
+      const ligProjected = showLigand
+        ? geo.ligandCentered?.map(([x, y, z]) => {
+            const x1 = x * cy + z * sy
+            const z1 = -x * sy + z * cy
+            const y1 = y * cp - z1 * sp
+            const z2 = y * sp + z1 * cp
+            return { x: cx0 + x1 * scale, y: cy0 + y1 * scale, z: z2 }
+          })
+        : null
 
       const zmin = Math.min(...projected.map((p) => p.z))
       const zmax = Math.max(...projected.map((p) => p.z))
@@ -2554,8 +2946,12 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       }
       const colorOf = (k) => {
         const r = residues[k]
-        if (colorMode === 'chain') return hexToRgb(CHAIN_COLORS[(geo.chainIdx?.[k] ?? 0) % CHAIN_COLORS.length])
-        if (colorMode === 'rainbow') return rainbowAt(k / Math.max(1, residues.length - 1)).match(/\d+/g).map(Number)
+        if (colorMode === 'chain')
+          return hexToRgb(CHAIN_COLORS[(geo.chainIdx?.[k] ?? 0) % CHAIN_COLORS.length])
+        if (colorMode === 'rainbow')
+          return rainbowAt(k / Math.max(1, residues.length - 1))
+            .match(/\d+/g)
+            .map(Number)
         // Interface mode: viridis over the residue's mean inter-chain PAE —
         // same semantics as the heatmap (purple = confident interface).
         if (colorMode === 'interface' && interfaceErr) {
@@ -2581,7 +2977,9 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
           if (a >= ligProjected.length || b >= ligProjected.length) continue
           items.push({ kind: 'ligb', a, b, z: (ligProjected[a].z + ligProjected[b].z) / 2 })
         }
-        ligProjected.forEach((p, k) => items.push({ kind: 'liga', k, z: p.z }))
+        ligProjected.forEach((p, k) => {
+          items.push({ kind: 'liga', k, z: p.z })
+        })
       }
       // Pocket contact lines: faint dashed ties from ligand atoms to nearby
       // Cαs, drawn beneath the atoms so the binding pocket reads at a glance
@@ -2666,7 +3064,12 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
           const col = colorOf(it.k)
           ctx2d.beginPath()
           ctx2d.arc(p.x, p.y, r, 0, Math.PI * 2)
-          ctx2d.fillStyle = dimmed ? fog(col.map((c) => c * 0.35 + 30), d) : fog(col, d)
+          ctx2d.fillStyle = dimmed
+            ? fog(
+                col.map((c) => c * 0.35 + 30),
+                d,
+              )
+            : fog(col, d)
           ctx2d.fill()
           if (isHover || isSel) {
             ctx2d.strokeStyle = isSel ? '#ffffff' : 'rgba(255,255,255,0.85)'
@@ -2679,7 +3082,7 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
               ctx2d.fillStyle = isSel ? '#ffffff' : 'rgba(255,255,255,0.85)'
               ctx2d.font = `${11}px ui-sans-serif, system-ui`
               ctx2d.textBaseline = 'bottom'
-              const label = `${res.chain ? res.chain + ':' : ''}${res.aa ?? ''}${res.i}`
+              const label = `${res.chain ? `${res.chain}:` : ''}${res.aa ?? ''}${res.i}`
               ctx2d.fillText(label, p.x + r + 3, p.y - r - 2)
             }
           }
@@ -2694,9 +3097,12 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       if (spinning || inertia || v.dragging) {
         frame.current = requestAnimationFrame(draw)
       } else if (autoSpin) {
-        wake.current = setTimeout(() => {
-          frame.current = requestAnimationFrame(draw)
-        }, Math.max(50, 2510 - (now - v.lastInteract)))
+        wake.current = setTimeout(
+          () => {
+            frame.current = requestAnimationFrame(draw)
+          },
+          Math.max(50, 2510 - (now - v.lastInteract)),
+        )
       }
     }
     frame.current = requestAnimationFrame(draw)
@@ -2704,7 +3110,21 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       cancelAnimationFrame(frame.current)
       clearTimeout(wake.current)
     }
-  }, [geo, size, residues, hover, selected, colorMode, autoSpin, interfaceErr, ligand, showLigand, ghost, ghostColorOf, isHidden])
+  }, [
+    geo,
+    size,
+    residues,
+    hover,
+    selected,
+    colorMode,
+    autoSpin,
+    interfaceErr,
+    ligand,
+    showLigand,
+    ghost,
+    ghostColorOf,
+    isHidden,
+  ])
 
   const pick = useCallback(
     (ev) => {
@@ -2712,8 +3132,10 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       if (!canvas || !geo) return null
       const rect = canvas.getBoundingClientRect()
       const v = view.current
-      const cy = Math.cos(v.yaw), sy = Math.sin(v.yaw)
-      const cp = Math.cos(v.pitch), sp = Math.sin(v.pitch)
+      const cy = Math.cos(v.yaw),
+        sy = Math.sin(v.yaw)
+      const cp = Math.cos(v.pitch),
+        sp = Math.sin(v.pitch)
       const scale = (Math.min(rect.width, rect.height) * 0.42 * v.zoom) / geo.radius
       const mx = ev.clientX - rect.left - rect.width / 2
       const my = ev.clientY - rect.top - rect.height / 2
@@ -2857,6 +3279,7 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
         ? h(
             'button',
             {
+              type: 'button',
               className: 'pv-3d-maxbtn',
               title: '导出当前 3D 视图 PNG（含图例合成）',
               onClick: (e) => onExport3D(e),
@@ -2867,6 +3290,7 @@ function Structure3D({ residues, hover, onHover, selected, onSelect, colorMode, 
       h(
         'button',
         {
+          type: 'button',
           className: 'pv-3d-maxbtn',
           title: maxed ? '退出全屏（Esc）' : '全屏显示 3D 视图（Esc 退出）',
           onClick: () => setMaxed((m) => !m),
@@ -2991,7 +3415,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
   // Mean inter-chain PAE per chain pair — the per-pair view iptm can't give:
   // a low A–B mean says the modeled interface itself is confident.
   const chainPairs = useMemo(() => {
-    if (!pae || !n || !residues || !residues.length) return null
+    if (!pae || !n || !residues?.length) return null
     const cellChain = []
     for (let c = 0; c < n; c++) {
       const r = residues[Math.min(c * scale, residues.length - 1)]
@@ -3006,7 +3430,10 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
         if (a === b) continue
         const key = a < b ? `${a}|${b}` : `${b}|${a}`
         let e = acc.get(key)
-        if (!e) acc.set(key, (e = { sum: 0, cnt: 0 }))
+        if (!e) {
+          e = { sum: 0, cnt: 0 }
+          acc.set(key, e)
+        }
         e.sum += pae.bytes[i * n + j]
         e.cnt++
       }
@@ -3023,7 +3450,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
   // pooled cells are re-expanded). Lifted to the parent so the 3D view can
   // offer interface-error coloring; null on single-chain panels.
   const interfaceErr = useMemo(() => {
-    if (!pae || !n || !residues || !residues.length) return null
+    if (!pae || !n || !residues?.length) return null
     const cellChain = []
     for (let c = 0; c < n; c++) {
       const r = residues[Math.min(c * scale, residues.length - 1)]
@@ -3056,7 +3483,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
 
   // Cell-index range spanned by each chain — for the chip-click block outline.
   const chainRanges = useMemo(() => {
-    if (!pae || !n || !residues || !residues.length) return null
+    if (!pae || !n || !residues?.length) return null
     const ranges = {}
     for (let c = 0; c < n; c++) {
       const ch = residues[Math.min(c * scale, residues.length - 1)]?.chain ?? '?'
@@ -3130,8 +3557,18 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
       if (ra && rb) {
         ctx2d.strokeStyle = 'rgba(255,255,255,0.95)'
         ctx2d.lineWidth = 1.5
-        ctx2d.strokeRect(ra.start * cell + 0.5, rb.start * cell + 0.5, (ra.end - ra.start) * cell - 1, (rb.end - rb.start) * cell - 1)
-        ctx2d.strokeRect(rb.start * cell + 0.5, ra.start * cell + 0.5, (rb.end - rb.start) * cell - 1, (ra.end - ra.start) * cell - 1)
+        ctx2d.strokeRect(
+          ra.start * cell + 0.5,
+          rb.start * cell + 0.5,
+          (ra.end - ra.start) * cell - 1,
+          (rb.end - rb.start) * cell - 1,
+        )
+        ctx2d.strokeRect(
+          rb.start * cell + 0.5,
+          ra.start * cell + 0.5,
+          (rb.end - rb.start) * cell - 1,
+          (ra.end - ra.start) * cell - 1,
+        )
       }
     }
   }, [pae, n, px, cell, chainSizes, hover, scale, focusPair, chainRanges])
@@ -3192,15 +3629,15 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
   const cellLabel = (c) => {
     const a = c * scale
     const b = Math.min((c + 1) * scale, residues?.length ?? a + 1) - 1
-    const la = residues && residues[a] ? resLabel(residues, residues[a]) : `${a + 1}`
+    const la = residues?.[a] ? resLabel(residues, residues[a]) : `${a + 1}`
     if (b <= a) return la
-    const lb = residues && residues[b] ? resLabel(residues, residues[b]) : `${b + 1}`
+    const lb = residues?.[b] ? resLabel(residues, residues[b]) : `${b + 1}`
     return `${la}–${lb}`
   }
   const readout = hoverCell
-    ? `${cellLabel(hoverCell.i)} → ${cellLabel(hoverCell.j)} · ${(pae.bytes[hoverCell.i * n + hoverCell.j] / 255 * 32).toFixed(2)} Å`
+    ? `${cellLabel(hoverCell.i)} → ${cellLabel(hoverCell.j)} · ${((pae.bytes[hoverCell.i * n + hoverCell.j] / 255) * 32).toFixed(2)} Å`
     : stripRow != null && rowMeans
-      ? `${cellLabel(stripRow)} · 平均 ${(rowMeans[stripRow] / 255 * 32).toFixed(2)} Å`
+      ? `${cellLabel(stripRow)} · 平均 ${((rowMeans[stripRow] / 255) * 32).toFixed(2)} Å`
       : ''
 
   return h(
@@ -3209,7 +3646,11 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
     h(
       'div',
       { className: 'pv-3d-toolbar' },
-      h('div', { className: 'pv-section-title' }, `PAE 误差热图 · ${n}×${n}${scale > 1 ? `（每格 ${scale} 残基）` : ''}`),
+      h(
+        'div',
+        { className: 'pv-section-title' },
+        `PAE 误差热图 · ${n}×${n}${scale > 1 ? `（每格 ${scale} 残基）` : ''}`,
+      ),
       h(
         'div',
         { className: 'pv-toolbar-controls' },
@@ -3223,6 +3664,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
         h(
           'button',
           {
+            type: 'button',
             className: 'pv-export',
             title: maxed ? '退出全屏（Esc）' : '全屏显示误差热图（Esc 退出）',
             onClick: () => setMaxed((m) => !m),
@@ -3232,6 +3674,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
         h(
           'button',
           {
+            type: 'button',
             className: 'pv-export',
             onClick: async (e) => {
               try {
@@ -3248,12 +3691,20 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
         ),
         h(
           'button',
-          { className: 'pv-export', onClick: (e) => exportPaePng(e, `${name}.pae.png`, n, pae.bytes, chainSizes, scale, chainPairs) },
+          {
+            type: 'button',
+            className: 'pv-export',
+            onClick: (e) => exportPaePng(e, `${name}.pae.png`, n, pae.bytes, chainSizes, scale, chainPairs),
+          },
           '导出 PNG',
         ),
         h(
           'button',
-          { className: 'pv-export', onClick: () => exportPaeCsv(`${name}.pae.csv`, n, pae.bytes, residues, scale) },
+          {
+            type: 'button',
+            className: 'pv-export',
+            onClick: () => exportPaeCsv(`${name}.pae.csv`, n, pae.bytes, residues, scale),
+          },
           '导出 CSV',
         ),
       ),
@@ -3281,7 +3732,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
             // Sync the 3D/curve hover to the row's first residue — cross-view
             // linkage (pooled cells map back to residue i*scale).
             const r = i * scale
-            if (residues && residues[r] && onHover) onHover(r)
+            if (residues?.[r] && onHover) onHover(r)
           },
           onMouseLeave: () => setHoverCell(null),
         }),
@@ -3299,7 +3750,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
             if (i < 0 || i >= n) return
             setStripRow(i)
             const r = i * scale
-            if (residues && residues[r] && onHover) onHover(r)
+            if (residues?.[r] && onHover) onHover(r)
           },
           onMouseLeave: () => setStripRow(null),
         }),
@@ -3315,12 +3766,17 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
                 h(
                   'button',
                   {
+                    type: 'button',
                     key: `${p.a}|${p.b}`,
-                    className: 'pv-pae-pair' + (focusPair && focusPair.a === p.a && focusPair.b === p.b ? ' pv-pae-pair--on' : ''),
+                    className:
+                      'pv-pae-pair' +
+                      (focusPair && focusPair.a === p.a && focusPair.b === p.b ? ' pv-pae-pair--on' : ''),
                     title: '链间平均 PAE——低值说明该链对的结合界面建模可信；点击在热图中框出该链对的误差块',
                     style: { background: `rgb(${viridisRgb(Math.min(1, p.meanA / 32)).join(',')})` },
                     onClick: () =>
-                      setFocusPair((prev) => (prev && prev.a === p.a && prev.b === p.b ? null : { a: p.a, b: p.b })),
+                      setFocusPair((prev) =>
+                        prev && prev.a === p.a && prev.b === p.b ? null : { a: p.a, b: p.b },
+                      ),
                   },
                   `${p.a}–${p.b} ${p.meanA.toFixed(2)} Å`,
                 ),
@@ -3372,7 +3828,12 @@ function ProteinToolView({ owner, services }) {
     const p = report?.savedTo ?? report?.file
     return typeof p === 'string' && p.endsWith('.pdb') ? p : null
   }, [report])
-  const pdbName = pdbPath ? pdbPath.split('/').pop().replace(/\.pdb$/, '') || 'structure' : 'structure'
+  const pdbName = pdbPath
+    ? pdbPath
+        .split('/')
+        .pop()
+        .replace(/\.pdb$/, '') || 'structure'
+    : 'structure'
 
   const [structure, setStructure] = useState(null)
   const [loadError, setLoadError] = useState(null)
@@ -3393,7 +3854,14 @@ function ProteinToolView({ owner, services }) {
   // The service returns flat ligandAtoms/ligandBonds (nested object schemas are
   // rejected by the protocol); normalize to the { n, atoms, bonds } Structure3D expects.
   const ligandInfo = useMemo(
-    () => (structure?.ligandAtoms?.length ? { n: structure.ligandAtoms.length, atoms: structure.ligandAtoms, bonds: structure.ligandBonds ?? [] } : null),
+    () =>
+      structure?.ligandAtoms?.length
+        ? {
+            n: structure.ligandAtoms.length,
+            atoms: structure.ligandAtoms,
+            bonds: structure.ligandBonds ?? [],
+          }
+        : null,
     [structure],
   )
   // Per-residue distance to the closest ligand atom (same Cα geometry the 3D
@@ -3433,20 +3901,23 @@ function ProteinToolView({ owner, services }) {
   const segRange = useMemo(() => (highlightSeg ? parseSeg(highlightSeg) : null), [highlightSeg])
   // Chain visibility: toggle from the legend chips; the last visible chain
   // can't be hidden (an empty canvas would read as "broken").
-  const toggleChain = useCallback((c) => {
-    setHiddenChains((prev) => {
-      const n = new Set(prev)
-      if (n.has(c)) {
-        n.delete(c)
+  const toggleChain = useCallback(
+    (c) => {
+      setHiddenChains((prev) => {
+        const n = new Set(prev)
+        if (n.has(c)) {
+          n.delete(c)
+          return n
+        }
+        const chains = new Set((structure?.residues ?? []).map((r) => r.chain))
+        const visible = [...chains].filter((x) => !n.has(x))
+        if (visible.length <= 1) return prev
+        n.add(c)
         return n
-      }
-      const chains = new Set((structure?.residues ?? []).map((r) => r.chain))
-      const visible = [...chains].filter((x) => !n.has(x))
-      if (visible.length <= 1) return prev
-      n.add(c)
-      return n
-    })
-  }, [structure])
+      })
+    },
+    [structure],
+  )
 
   // Multi-chain complexes (Boltz-2) default to per-chain coloring once loaded.
   useEffect(() => {
@@ -3480,9 +3951,11 @@ function ProteinToolView({ owner, services }) {
     return h(
       'div',
       { className: 'pv-root pv-root--fallback' },
-      h('div', { className: 'pv-fallback' }, typeof block.resultPreview === 'string'
-        ? block.resultPreview.slice(0, 400)
-        : '（无结构结果预览）'),
+      h(
+        'div',
+        { className: 'pv-fallback' },
+        typeof block.resultPreview === 'string' ? block.resultPreview.slice(0, 400) : '（无结构结果预览）',
+      ),
     )
   }
 
@@ -3565,18 +4038,39 @@ function ProteinToolView({ owner, services }) {
                   : null,
                 h(
                   'button',
-                  { className: 'pv-export', onClick: (e) => export3DPng(e, `${pdbName}.3d.png`, residues, colorMode, ligandInfo, showLigand, interfaceErr) },
+                  {
+                    type: 'button',
+                    className: 'pv-export',
+                    onClick: (e) =>
+                      export3DPng(
+                        e,
+                        `${pdbName}.3d.png`,
+                        residues,
+                        colorMode,
+                        ligandInfo,
+                        showLigand,
+                        interfaceErr,
+                      ),
+                  },
                   '导出 PNG',
                 ),
                 h(DownloadPdbButton, { services, path: pdbPath }),
                 h(
                   'button',
                   {
+                    type: 'button',
                     className: 'pv-export',
                     onClick: async (e) => {
                       try {
                         const canvas = e.currentTarget.closest('.pv-3d-col')?.querySelector('canvas.pv-3d')
-                        const ok = await copy3DComposite(canvas, residues, colorMode, ligandInfo, showLigand, interfaceErr)
+                        const ok = await copy3DComposite(
+                          canvas,
+                          residues,
+                          colorMode,
+                          ligandInfo,
+                          showLigand,
+                          interfaceErr,
+                        )
                         setImgCopied(ok)
                       } catch {
                         setImgCopied(false)
@@ -3590,6 +4084,7 @@ function ProteinToolView({ owner, services }) {
                 h(
                   'button',
                   {
+                    type: 'button',
                     className: 'pv-export',
                     onClick: () => {
                       if (!residues) return
@@ -3620,9 +4115,15 @@ function ProteinToolView({ owner, services }) {
                     // with chain letters on complexes, so only offered there
                     const am = !isMultiChain(residues) ? /^([A-Za-z])(\d+)$/.exec(raw) : null
                     const idx = cm
-                      ? residues.findIndex((r) => r.chain && r.chain.toUpperCase() === cm[1].toUpperCase() && r.i === Number(cm[2]))
+                      ? residues.findIndex(
+                          (r) =>
+                            r.chain && r.chain.toUpperCase() === cm[1].toUpperCase() && r.i === Number(cm[2]),
+                        )
                       : am
-                        ? residues.findIndex((r) => r.i === Number(am[2]) && (r.aa ?? '')[0]?.toUpperCase() === am[1].toUpperCase())
+                        ? residues.findIndex(
+                            (r) =>
+                              r.i === Number(am[2]) && (r.aa ?? '')[0]?.toUpperCase() === am[1].toUpperCase(),
+                          )
                         : residues.findIndex((r) => r.i === Number(raw))
                     if (idx >= 0) {
                       setSelected(idx)
@@ -3655,10 +4156,21 @@ function ProteinToolView({ owner, services }) {
               ligand: ligandInfo,
               showLigand,
               hiddenChains,
-              onExport3D: (e) => export3DPng(e, `${pdbName}.3d.png`, residues, colorMode, ligandInfo, showLigand, interfaceErr),
+              onExport3D: (e) =>
+                export3DPng(
+                  e,
+                  `${pdbName}.3d.png`,
+                  residues,
+                  colorMode,
+                  ligandInfo,
+                  showLigand,
+                  interfaceErr,
+                ),
               downloadPdbEl: h(DownloadPdbButton, { services, path: pdbPath, className: 'pv-3d-maxbtn' }),
             }),
-            colorMode === 'chain' ? h(ChainLegend, { residues, hidden: hiddenChains, onToggle: toggleChain }) : null,
+            colorMode === 'chain'
+              ? h(ChainLegend, { residues, hidden: hiddenChains, onToggle: toggleChain })
+              : null,
             colorMode === 'interface'
               ? h(InterfaceLegend)
               : colorMode === 'rainbow'
@@ -3690,10 +4202,14 @@ function ProteinToolView({ owner, services }) {
                   ? (colorMode === 'interface' && interfaceErr
                       ? `${resLabel(residues, residues[hover])} · 界面误差 ${interfaceErr[hover].toFixed(2)} Å`
                       : `${resLabel(residues, residues[hover])} · pLDDT ${residues[hover].b.toFixed(1)}`) +
-                    (ligandDist && ligandDist[hover] <= 6 ? ` · 距配体 ${ligandDist[hover].toFixed(1)} Å` : '')
+                    (ligandDist && ligandDist[hover] <= 6
+                      ? ` · 距配体 ${ligandDist[hover].toFixed(1)} Å`
+                      : '')
                   : selected != null && residues[selected]
                     ? `已选 ${resLabel(residues, residues[selected])} · pLDDT ${residues[selected].b.toFixed(1)}（点击曲线取消）` +
-                      (ligandDist && ligandDist[selected] <= 6 ? ` · 距配体 ${ligandDist[selected].toFixed(1)} Å` : '')
+                      (ligandDist && ligandDist[selected] <= 6
+                        ? ` · 距配体 ${ligandDist[selected].toFixed(1)} Å`
+                        : '')
                     : '',
             ),
           ),
@@ -3710,11 +4226,16 @@ function ProteinToolView({ owner, services }) {
                 h(
                   'button',
                   {
+                    type: 'button',
                     className: 'pv-export',
                     onClick: async (e) => {
                       try {
                         const col = e.currentTarget.closest('.pv-curve-col')
-                        const ok = await copyCurveComposite(col?.querySelector('canvas.pv-curve'), col?.querySelector('.pv-seqstrip'), residues)
+                        const ok = await copyCurveComposite(
+                          col?.querySelector('canvas.pv-curve'),
+                          col?.querySelector('.pv-seqstrip'),
+                          residues,
+                        )
                         setCurveCopied(ok)
                       } catch {
                         setCurveCopied(false)
@@ -3726,12 +4247,20 @@ function ProteinToolView({ owner, services }) {
                 ),
                 h(
                   'button',
-                  { className: 'pv-export', onClick: (e) => exportCurvePng(e, `${pdbName}.plddt.png`, residues) },
+                  {
+                    type: 'button',
+                    className: 'pv-export',
+                    onClick: (e) => exportCurvePng(e, `${pdbName}.plddt.png`, residues),
+                  },
                   '导出 PNG',
                 ),
                 h(
                   'button',
-                  { className: 'pv-export', onClick: () => exportResiduesCsv(`${pdbName}.plddt.csv`, residues, interfaceErr) },
+                  {
+                    type: 'button',
+                    className: 'pv-export',
+                    onClick: () => exportResiduesCsv(`${pdbName}.plddt.csv`, residues, interfaceErr),
+                  },
                   '导出 CSV',
                 ),
               ),
@@ -3759,15 +4288,18 @@ function ProteinToolView({ owner, services }) {
           { className: 'pv-loading' },
           loadError
             ? `结构加载失败：${loadError}`
-            : h(
-                'div',
-                { className: 'pv-loading-inner' },
-                h('div', { className: 'pv-spinner' }),
-                '加载结构…',
-              ),
+            : h('div', { className: 'pv-loading-inner' }, h('div', { className: 'pv-spinner' }), '加载结构…'),
         ),
     report.paePath
-      ? h(PaesModule, { paePath: report.paePath, residues, services, onHover: setHover, hover, onInterface: setInterfaceErr, name: pdbName })
+      ? h(PaesModule, {
+          paePath: report.paePath,
+          residues,
+          services,
+          onHover: setHover,
+          hover,
+          onInterface: setInterfaceErr,
+          name: pdbName,
+        })
       : null,
   )
 }
@@ -3775,7 +4307,15 @@ function ProteinToolView({ owner, services }) {
 export function apply(ctx) {
   const services = ctx.agnes?.services
   const view = (owner) => h(ProteinToolView, { owner, services })
-  const KEYS = ['predict_structure', 'analyze_confidence', 'compare_alphafold', 'predict_complex', 'batch_predict', 'compare_structures', 'uniprot_search']
+  const KEYS = [
+    'predict_structure',
+    'analyze_confidence',
+    'compare_alphafold',
+    'predict_complex',
+    'batch_predict',
+    'compare_structures',
+    'uniprot_search',
+  ]
   const SLOT = 'tool.call.toolview'
 
   // Slot components receive { owner }; bind the services facade once here.
@@ -3794,10 +4334,7 @@ export function apply(ctx) {
       const existing = new Set(ctx.slots.entriesOfSlot(SLOT).map((e) => e.options?.key))
       for (const key of KEYS) {
         if (existing.has(key)) continue
-        ctx.slots.register(
-          { name: SLOT, key, id: `protein-view-${key}`, priority: 20 },
-          makeSlot(),
-        )
+        ctx.slots.register({ name: SLOT, key, id: `protein-view-${key}`, priority: 20 }, makeSlot())
       }
     } catch {
       // The slot may be mid-collapse (undeclared); the next declaration event retries.

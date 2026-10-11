@@ -9,12 +9,15 @@
 // `pairwise.labels` tells the panel to use generic names instead of
 // "ESMFold / AlphaFold DB".
 
-import { parseCA, normalizePlddt, meanPlddt, kabsch, rmsdVerdict } from './alphafold.mjs'
+import { kabsch, meanPlddt, normalizePlddt, parseCA, rmsdVerdict } from './alphafold.mjs'
 
 const Kind = Symbol.for('TypeBox.Kind')
 
 const text = (s) => ({ content: [{ type: 'text', text: s }] })
-const result = (structured, s) => ({ content: [{ type: 'text', text: JSON.stringify(structured) }], structured })
+const result = (structured, _s) => ({
+  content: [{ type: 'text', text: JSON.stringify(structured) }],
+  structured,
+})
 const fail = (s) => ({ ...text(s), isError: true })
 
 const str = (desc, extra = {}) => ({ [Kind]: 'String', type: 'string', description: desc, ...extra })
@@ -80,9 +83,15 @@ export const compareStructures = {
       meta,
       async execute({ structure_a, structure_b, label_a, label_b, save_report = false }, tctx) {
         const pdbA = await readPdb(tctx, structure_a)
-        if (pdbA === undefined) return fail(`Cannot read ${structure_a}. Pass workspace paths exactly as returned by predict_structure / compare_alphafold.`)
+        if (pdbA === undefined)
+          return fail(
+            `Cannot read ${structure_a}. Pass workspace paths exactly as returned by predict_structure / compare_alphafold.`,
+          )
         const pdbB = await readPdb(tctx, structure_b)
-        if (pdbB === undefined) return fail(`Cannot read ${structure_b}. Pass workspace paths exactly as returned by predict_structure / compare_alphafold.`)
+        if (pdbB === undefined)
+          return fail(
+            `Cannot read ${structure_b}. Pass workspace paths exactly as returned by predict_structure / compare_alphafold.`,
+          )
 
         const a = parseCA(pdbA)
         const b = parseCA(pdbB)
@@ -107,7 +116,8 @@ export const compareStructures = {
             : ''
 
         const deltas = common.map((r) => Math.round((a.get(r).plddt100 - b.get(r).plddt100) * 10) / 10)
-        const meanAbsDelta = Math.round((deltas.reduce((s, d) => s + Math.abs(d), 0) / deltas.length) * 10) / 10
+        const meanAbsDelta =
+          Math.round((deltas.reduce((s, d) => s + Math.abs(d), 0) / deltas.length) * 10) / 10
         const largestDeltas = common
           .map((residue, i) => ({ residue, delta: deltas[i] }))
           .sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta))
@@ -118,8 +128,14 @@ export const compareStructures = {
 
         // A is the fixed target, B is rotated onto it (ghost in the panel).
         const sup = kabsch(
-          common.map((r) => { const p = a.get(r); return [p.x, p.y, p.z] }),
-          common.map((r) => { const p = b.get(r); return [p.x, p.y, p.z] }),
+          common.map((r) => {
+            const p = a.get(r)
+            return [p.x, p.y, p.z]
+          }),
+          common.map((r) => {
+            const p = b.get(r)
+            return [p.x, p.y, p.z]
+          }),
         )
 
         // Core RMSD over residues both models call confidently.
@@ -127,8 +143,14 @@ export const compareStructures = {
         let core
         if (coreCommon.length >= 10) {
           const supCore = kabsch(
-            coreCommon.map((r) => { const p = a.get(r); return [p.x, p.y, p.z] }),
-            coreCommon.map((r) => { const p = b.get(r); return [p.x, p.y, p.z] }),
+            coreCommon.map((r) => {
+              const p = a.get(r)
+              return [p.x, p.y, p.z]
+            }),
+            coreCommon.map((r) => {
+              const p = b.get(r)
+              return [p.x, p.y, p.z]
+            }),
           )
           if (supCore) {
             core = {
@@ -148,7 +170,10 @@ export const compareStructures = {
             meanAbsPlddtDelta: meanAbsDelta,
             largestDeltas,
             deltaSeries: series,
-            deltaSeriesNote: binSize > 1 ? `横轴按每 ${binSize} 个残基分箱 · 正值=A 更自信，负值=B 更自信` : '横轴为残基编号 · 正值=A 更自信，负值=B 更自信',
+            deltaSeriesNote:
+              binSize > 1
+                ? `横轴按每 ${binSize} 个残基分箱 · 正值=A 更自信，负值=B 更自信`
+                : '横轴为残基编号 · 正值=A 更自信，负值=B 更自信',
             ...(core ?? {}),
             verdict: sup ? rmsdVerdict(sup.rmsd) + overlapNote : undefined,
             ...(sup ? { caRmsd: sup.rmsd, superposition: sup } : {}),
@@ -157,7 +182,11 @@ export const compareStructures = {
 
         let reportPath
         if (save_report) {
-          const base = (x) => x.split('/').pop().replace(/\.pdb$/i, '')
+          const base = (x) =>
+            x
+              .split('/')
+              .pop()
+              .replace(/\.pdb$/i, '')
           reportPath = `reports/${base(structure_a)}.vs-${base(structure_b)}.compare.json`
           await tctx.fs.write(reportPath, JSON.stringify(report, null, 2))
           report.compared.reportPath = reportPath

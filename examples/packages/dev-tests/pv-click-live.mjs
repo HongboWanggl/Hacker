@@ -4,7 +4,9 @@
 // Uses a historical compare_structures session; session titles churn, so match
 // the tool name first and fall back to known titles.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
-const exe = '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
+
+const exe =
+  '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } })
 const errors = []
@@ -29,7 +31,9 @@ for (const title of candidates) {
   }, title)
   await page.waitForTimeout(3500)
   await page.evaluate(() => {
-    document.querySelectorAll('details.turn-process:not([open])').forEach((d) => d.querySelector('summary')?.click())
+    document.querySelectorAll('details.turn-process:not([open])').forEach((d) => {
+      d.querySelector('summary')?.click()
+    })
   })
   await page.waitForTimeout(2000)
   if (await page.evaluate(() => !!document.querySelector('.pv-compare-wrap'))) {
@@ -38,10 +42,15 @@ for (const title of candidates) {
     break
   }
 }
-if (!opened) { console.log('FAIL session not found'); process.exit(1) }
+if (!opened) {
+  console.log('FAIL session not found')
+  process.exit(1)
+}
 await page.waitForTimeout(2000)
 await page.evaluate(() => {
-  document.querySelectorAll('details.turn-process:not([open])').forEach((d) => d.querySelector('summary')?.click())
+  document.querySelectorAll('details.turn-process:not([open])').forEach((d) => {
+    d.querySelector('summary')?.click()
+  })
 })
 await page.waitForTimeout(5000)
 await page.evaluate(() => document.querySelector('.pv-3d')?.scrollIntoView({ block: 'center' }))
@@ -51,7 +60,10 @@ await page.waitForTimeout(800)
 
 const canvas = page.locator('.pv-3d').first()
 const bb = await canvas.boundingBox().catch(() => null)
-const ok = (name, cond) => { console.log(cond ? 'ok ' : 'FAIL', name); if (!cond) process.exitCode = 1 }
+const ok = (name, cond) => {
+  console.log(cond ? 'ok ' : 'FAIL', name)
+  if (!cond) process.exitCode = 1
+}
 let hoverText = ''
 if (bb) {
   // find a residue via hover first, then click the same spot
@@ -59,7 +71,12 @@ if (bb) {
   await page.waitForTimeout(600)
   await page.mouse.move(bb.x + bb.width * 0.44, bb.y + bb.height * 0.47, { steps: 4 })
   await page.waitForTimeout(900)
-  hoverText = await page.evaluate(() => [...document.querySelectorAll('.pv-hoverline')].map((e) => e.textContent).filter(Boolean).join(' | '))
+  hoverText = await page.evaluate(() =>
+    [...document.querySelectorAll('.pv-hoverline')]
+      .map((e) => e.textContent)
+      .filter(Boolean)
+      .join(' | '),
+  )
   console.log('hover:', hoverText.slice(0, 160))
   await page.mouse.down()
   await page.mouse.up()
@@ -68,7 +85,12 @@ if (bb) {
   // pointer leaves the residue (selIdx still set). Move to canvas corner.
   await page.mouse.move(bb.x + 4, bb.y + 4, { steps: 4 })
   await page.waitForTimeout(900)
-  const away = await page.evaluate(() => [...document.querySelectorAll('.pv-hoverline')].map((e) => e.textContent).filter(Boolean).join(' | '))
+  const away = await page.evaluate(() =>
+    [...document.querySelectorAll('.pv-hoverline')]
+      .map((e) => e.textContent)
+      .filter(Boolean)
+      .join(' | '),
+  )
   ok('click selects residue (已选 readout)', away.includes('已选'))
   // NOTE: not asserting the clicked residue == hovered residue — autoSpin keeps
   // rotating between hover capture and click, so the residue under the cursor
@@ -82,7 +104,12 @@ if (bb) {
   await page.waitForTimeout(600)
   await page.mouse.move(bb.x + 4, bb.y + 4, { steps: 4 })
   await page.waitForTimeout(900)
-  const after2 = await page.evaluate(() => [...document.querySelectorAll('.pv-hoverline')].map((e) => e.textContent).filter(Boolean).join(' | '))
+  const after2 = await page.evaluate(() =>
+    [...document.querySelectorAll('.pv-hoverline')]
+      .map((e) => e.textContent)
+      .filter(Boolean)
+      .join(' | '),
+  )
   ok('second click toggles selection off', !after2.includes('已选'))
 } else {
   ok('3D canvas present', false)

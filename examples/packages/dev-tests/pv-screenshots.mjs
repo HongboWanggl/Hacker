@@ -2,16 +2,30 @@
 // examples/packages/docs/screenshots/ for the README gallery. Not part of
 // run-all.sh — run manually: node pv-screenshots.mjs
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
-const exe = '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
+
+const exe =
+  '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
 const OUT = '/Users/wanghanbao/agnes-harness/examples/packages/docs/screenshots'
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 const page = await browser.newPage({ viewport: { width: 1280, height: 1400 }, deviceScaleFactor: 2 })
 await page.goto('http://127.0.0.1:4177/', { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForTimeout(5000)
-try { await page.getByRole('button', { name: /close|关闭/i }).first().click({ timeout: 3000 }) } catch {}
-await page.getByText(/p53蛋白P04637|p53蛋白/).first().click({ timeout: 5000 })
+try {
+  await page
+    .getByRole('button', { name: /close|关闭/i })
+    .first()
+    .click({ timeout: 3000 })
+} catch {}
+await page
+  .getByText(/p53蛋白P04637|p53蛋白/)
+  .first()
+  .click({ timeout: 5000 })
 await page.waitForTimeout(9000)
-await page.evaluate(() => document.querySelectorAll('details.turn-process:not([open]) summary').forEach((s) => s.click()))
+await page.evaluate(() =>
+  document.querySelectorAll('details.turn-process:not([open]) summary').forEach((s) => {
+    s.click()
+  }),
+)
 await page.waitForTimeout(2500)
 
 async function shoot(selector, name, pad = 12) {
@@ -43,7 +57,7 @@ async function shoot(selector, name, pad = 12) {
   }
 }
 
-await shoot('.pv-root:has(.pv-3d) .pv-grid', 'confidence-3d-curve')          // 3D + curve side by side
+await shoot('.pv-root:has(.pv-3d) .pv-grid', 'confidence-3d-curve') // 3D + curve side by side
 // (No complex-card shot: real Boltz reports need an API key, so no live session
 // exists. `.pv-complex-metrics` also matches the confidence summary — unusable.)
 
@@ -52,13 +66,18 @@ await shoot('.pv-root:has(.pv-3d) .pv-grid', 'confidence-3d-curve')          // 
 // playwright, so click via DOM dispatch.)
 async function openSession(titleRe) {
   await page.evaluate((re) => {
-    const el = [...document.querySelectorAll('.session-title, li, [role=button], span')]
-      .find((e) => e.childElementCount === 0 && new RegExp(re).test((e.textContent ?? '').trim()))
+    const el = [...document.querySelectorAll('.session-title, li, [role=button], span')].find(
+      (e) => e.childElementCount === 0 && new RegExp(re).test((e.textContent ?? '').trim()),
+    )
     el?.closest('li, [role=button], button, div')?.click()
     el?.click()
   }, titleRe.source)
   await page.waitForTimeout(6000)
-  await page.evaluate(() => document.querySelectorAll('details.turn-process:not([open]) summary').forEach((s) => s.click()))
+  await page.evaluate(() =>
+    document.querySelectorAll('details.turn-process:not([open]) summary').forEach((s) => {
+      s.click()
+    }),
+  )
   await page.waitForTimeout(2000)
 }
 

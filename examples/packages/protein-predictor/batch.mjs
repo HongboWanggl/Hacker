@@ -4,7 +4,7 @@
 // same endpoints, same workspace layout, same confidence reports. Per-job
 // failures are recorded and never abort the batch.
 
-import { uniprotFetch, predictStructure } from './index.mjs'
+import { predictStructure, uniprotFetch } from './index.mjs'
 
 const Kind = Symbol.for('TypeBox.Kind')
 
@@ -12,7 +12,10 @@ const MAX_JOBS = 8
 const AA_RE = /^[ACDEFGHIKLMNPQRSTVWYBXZUO]+$/i
 
 const text = (s) => ({ content: [{ type: 'text', text: s }] })
-const result = (structured, s) => ({ content: [{ type: 'text', text: JSON.stringify(structured) }], structured })
+const result = (structured, _s) => ({
+  content: [{ type: 'text', text: JSON.stringify(structured) }],
+  structured,
+})
 const fail = (s) => ({ ...text(s), isError: true })
 
 const str = (desc, extra = {}) => ({ [Kind]: 'String', type: 'string', description: desc, ...extra })
@@ -70,7 +73,10 @@ export const batchPredictor = {
           ),
         ]
         if (list.length === 0) return fail('No accessions given. Example: "P04637 P61626".')
-        if (list.length > MAX_JOBS) return fail(`Too many accessions (${list.length}). Batch supports up to ${MAX_JOBS}; run the rest separately.`)
+        if (list.length > MAX_JOBS)
+          return fail(
+            `Too many accessions (${list.length}). Batch supports up to ${MAX_JOBS}; run the rest separately.`,
+          )
 
         const jobs = []
         for (const acc of list) {
@@ -83,7 +89,11 @@ export const batchPredictor = {
           try {
             const fetched = await fetchSpec.execute({ accession: acc }, tctx)
             if (fetched.isError) {
-              jobs.push({ accession: acc, status: 'failed', error: (fetched.content?.[0]?.text ?? 'fetch failed').slice(0, 200) })
+              jobs.push({
+                accession: acc,
+                status: 'failed',
+                error: (fetched.content?.[0]?.text ?? 'fetch failed').slice(0, 200),
+              })
               continue
             }
             sequence = fetched.structured?.sequence
@@ -99,7 +109,12 @@ export const batchPredictor = {
           try {
             const predicted = await predictSpec.execute({ sequence, name: acc }, tctx)
             if (predicted.isError) {
-              jobs.push({ accession: acc, name: proteinName, status: 'failed', error: (predicted.content?.[0]?.text ?? 'prediction failed').slice(0, 200) })
+              jobs.push({
+                accession: acc,
+                name: proteinName,
+                status: 'failed',
+                error: (predicted.content?.[0]?.text ?? 'prediction failed').slice(0, 200),
+              })
               continue
             }
             const r = predicted.structured ?? {}
@@ -114,7 +129,12 @@ export const batchPredictor = {
               verdict: r.verdict,
             })
           } catch (error) {
-            jobs.push({ accession: acc, name: proteinName, status: 'failed', error: String(error).slice(0, 200) })
+            jobs.push({
+              accession: acc,
+              name: proteinName,
+              status: 'failed',
+              error: String(error).slice(0, 200),
+            })
           }
           // Small gap between folds — the ESMFold endpoint is a free shared service.
           if (list.length > 1) await new Promise((r) => setTimeout(r, 1500))
