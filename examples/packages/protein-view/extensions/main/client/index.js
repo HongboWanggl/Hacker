@@ -1292,6 +1292,9 @@ function BatchRowDetail({ job, services }) {
   // dropdown overrides, exactly like the single-prediction panel. (effMode is
   // computed after `residues` is derived below.)
   const [colorMode, setColorMode] = useState(null)
+  // Off by default (drill-downs open for quick inspection); the toolbar
+  // checkbox enables the same idle spin the main panel has.
+  const [autoSpin, setAutoSpin] = useState(false)
   const [seqCopied, setSeqCopied] = useState(false)
   const [curveCopied, setCurveCopied] = useState(null)
   const [imgCopied, setImgCopied] = useState(null)
@@ -1394,6 +1397,16 @@ function BatchRowDetail({ job, services }) {
             isMultiChain(residues) ? h('option', { value: 'chain' }, '按链着色') : null,
           ),
           h(
+            'label',
+            { className: 'pv-toggle' },
+            h('input', {
+              type: 'checkbox',
+              checked: autoSpin,
+              onChange: (e) => setAutoSpin(e.target.checked),
+            }),
+            '自动旋转',
+          ),
+          h(
             'button',
             {
               type: 'button',
@@ -1444,7 +1457,7 @@ function BatchRowDetail({ job, services }) {
             setHover(k)
           },
           colorMode: effMode,
-          autoSpin: false,
+          autoSpin,
           seg: segRange,
           onExport3D: (e) => export3DPng(e, `${job.accession}.3d.png`, residues, effMode),
         }),

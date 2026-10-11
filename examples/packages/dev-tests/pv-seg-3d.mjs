@@ -291,6 +291,14 @@ check(dimCount() === 0, `clicking the focus chip clears the focus (got ${dimCoun
   bsel.dispatchEvent(new win.Event('change', { bubbles: true }))
   await new Promise((r) => setTimeout(r, 200))
   check(legendNote().includes('N→C'), `rainbow legend appears after switch (got "${legendNote()}")`)
+
+  // Auto-rotate toggle: off by default; React fires onChange on click for
+  // checkboxes — dispatch a real click and the controlled input stays flipped.
+  const spin = bcontainer.querySelector('.pv-batch-detail .pv-toggle input[type=checkbox]')
+  check(!!spin && !spin.checked, 'drill-down auto-rotate toggle present, off by default')
+  spin.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+  await new Promise((r) => setTimeout(r, 200))
+  check(spin.checked, 'drill-down auto-rotate click toggles on (controlled input kept it)')
   bcontainer.remove()
 }
 
