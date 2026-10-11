@@ -10,15 +10,15 @@ standalone in papers and slides.
 
 | 单蛋白预测 + 置信度 | 预测 vs AlphaFold DB 对比 |
 |---|---|
-| ![单蛋白预测面板](screenshots/confidence-3d-curve.png) | ![对比面板](screenshots/compare-card.png) |
+| ![单蛋白预测面板](../docs/screenshots/confidence-3d-curve.png) | ![对比面板](../docs/screenshots/compare-card.png) |
 
 批处理与搜索结果卡片；Cα 偏差透镜下的对比面板（3D ghost 与序列条按叠合后 Cα 距离重着色）：
 
 | 多蛋白批处理 | UniProt 搜索 |
 |---|---|
-| ![批处理](screenshots/batch-card.png) | ![搜索](screenshots/search-card.png) |
+| ![批处理](../docs/screenshots/batch-card.png) | ![搜索](../docs/screenshots/search-card.png) |
 
-![Cα 偏差透镜](screenshots/compare-dist-lens.png)
+![Cα 偏差透镜](../docs/screenshots/compare-dist-lens.png)
 
 序列条支持键盘导航（Tab 聚焦，←/→ 移动光标、回车选中、Home/End 跳转、Esc 退出），
 光标复用悬停高亮——鼠标与键盘共享同一套 3D/曲线联动；对比卡的分歧序列条复用同一组件，
@@ -32,7 +32,7 @@ standalone in papers and slides.
 
 | 单蛋白（深色） | 对比（深色） |
 |---|---|
-| ![深色单蛋白面板](screenshots/main-panel-dark.png) | ![深色对比面板](screenshots/compare-panel-dark.png) |
+| ![深色单蛋白面板](../docs/screenshots/main-panel-dark.png) | ![深色对比面板](../docs/screenshots/compare-panel-dark.png) |
 
 ## Layout
 
