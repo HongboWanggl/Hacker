@@ -47,6 +47,7 @@ run pv-batch-live.mjs
 run pv-kbd-strip.mjs             # sequence strip keyboard nav (listbox)
 run pv-kbd-search.mjs             # search table keyboard roving (rows)
 run pv-kbd-batch.mjs              # batch table keyboard toggle + roving
+run pv-motion.mjs                 # auto-rotate respects prefers-reduced-motion
 
 if [ "${1:-}" = "--live" ]; then
   echo "=== live E2E (needs daemon + web on 4177) ==="

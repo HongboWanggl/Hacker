@@ -85,6 +85,18 @@ function parseSeg(s) {
   return m ? { chain: m[1] || null, a: Number(m[2]), b: Number(m[3]) } : null
 }
 
+// Users who ask the OS for less motion shouldn't get a perpetually spinning
+// structure: auto-rotate defaults to off under "prefers-reduced-motion: reduce"
+// (the toolbar checkbox can still turn it back on). Init-time check is enough —
+// flipping the OS setting mid-session doesn't need to live-update the canvas.
+function prefersReducedMotion() {
+  try {
+    return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+  } catch {
+    return false
+  }
+}
+
 // Multi-chain complexes (Boltz-2): one hue per chain, assigned in first-appearance
 // order so Structure3D coloring and the legend chips always agree.
 const CHAIN_COLORS = ['#4e79e6', '#f28e2b', '#2ca02c', '#e15759', '#9467bd', '#17becf']
@@ -789,7 +801,7 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
         h(Structure3D, {
           residues: pred.residues,
           colorMode: isMultiChain(pred.residues) ? 'chain' : 'plddt',
-          autoSpin: true,
+          autoSpin: !prefersReducedMotion(),
           ghost: ghostResidues,
           // In the distance lens the ghost recolors by post-superposition Cα
           // deviation — structural hot spots become visible spatially, not just
@@ -3937,7 +3949,7 @@ function ProteinToolView({ owner, services }) {
   const [hover, setHover] = useState(null)
   const [selected, setSelected] = useState(null)
   const [colorMode, setColorMode] = useState('plddt')
-  const [autoSpin, setAutoSpin] = useState(true)
+  const [autoSpin, setAutoSpin] = useState(() => !prefersReducedMotion())
   const [seqCopied, setSeqCopied] = useState(false)
   // null = idle, true/false = last copy-image attempt (button flashes the result)
   const [imgCopied, setImgCopied] = useState(null)
