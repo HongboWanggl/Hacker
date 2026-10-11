@@ -182,6 +182,67 @@ function killed(error) {
   )
 }
 
+// Persist the PAE npz for the panel's error heatmap; returns the saved
+// workspace path or undefined. The fs seam checkpoints any file it OVERWRITES
+// and refuses binary content there (NUL bytes → E_CHECKPOINT_UNRESTORABLE), so
+// a stale npz from an earlier run blocks the canonical name. A fresh path has
+// no previous bytes to capture, so retry once time-suffixed. The tool fs
+// exposes no delete, so the stale file stays — cosmetic only.
+async function writePaeBestEffort(tctx, label, bytes) {
+  try {
+    const paePath = `structures/${label}_pae.npz`
+    await tctx.fs.write(paePath, bytes)
+    return paePath
+  } catch (error) {
+    console.error(
+      '[predict_complex] npz overwrite blocked, retrying unique name:',
+      String(error?.message ?? error).slice(0, 160),
+    )
+    try {
+      const paePath = `structures/${label}_${Date.now()}_pae.npz`
+      await tctx.fs.write(paePath, bytes)
+      return paePath
+    } catch (retryError) {
+      // Still cosmetic — the caller keeps its report, the log keeps the cause.
+      console.error(
+        '[predict_complex] pae npz copy failed:',
+        String(retryError?.message ?? retryError).slice(0, 200),
+      )
+      return undefined
+    }
+  }
+}
+
+// API-mode PAE pickup: the panel's heatmap rides on `paePath`, and the API may
+// expose the matrix alongside the structure files. Detection is defensive —
+// an entry whose name/url looks like a PAE npz is downloaded (capped, binary)
+// and persisted through the same best-effort writer as local runs; anything
+// else leaves the heatmap hidden rather than guessing.
+const isPaeEntry = (f) => {
+  const u = typeof f === 'string' ? f : (f?.url ?? f?.name ?? '')
+  return /pae/i.test(String(u)) && /\.npz(\?|#|$)/i.test(String(u))
+}
+async function fetchApiPae(tctx, files) {
+  const entry = (files ?? []).find(isPaeEntry)
+  if (!entry) return undefined
+  const url = typeof entry === 'string' ? entry : entry.url
+  const dl = await tctx.net.fetch(url, { timeoutMs: 60000 })
+  if (!dl.ok) {
+    console.error('[predict_complex] pae download failed: HTTP', dl.status)
+    return undefined
+  }
+  if (typeof dl.arrayBuffer !== 'function') {
+    console.error('[predict_complex] pae download skipped: no binary body support')
+    return undefined
+  }
+  const buf = Buffer.from(await dl.arrayBuffer())
+  if (buf.length === 0 || buf.length > 16 * 1024 * 1024) {
+    console.error('[predict_complex] pae download rejected: size', buf.length)
+    return undefined
+  }
+  return buf
+}
+
 async function boltzFetch(tctx, path, init) {
   const key = resolveApiKey()
   if (!key) return { authError: true }
@@ -390,33 +451,8 @@ export const predictComplex = {
           // Persist the PAE matrix for the panel's error heatmap. Best-effort:
           // its absence only hides the heatmap, never the model itself.
           if (out.paeNpz) {
-            const bytes = await readFile(out.paeNpz)
-            try {
-              const paePath = `structures/${label}_pae.npz`
-              await tctx.fs.write(paePath, bytes)
-              report.paePath = paePath
-            } catch (error) {
-              // The fs seam checkpoints any file it OVERWRITES and refuses binary
-              // content there (NUL bytes → E_CHECKPOINT_UNRESTORABLE), so a stale
-              // npz from an earlier run blocks the canonical name. A fresh path has
-              // no previous bytes to capture, so retry once time-suffixed. The tool
-              // fs exposes no delete, so the stale file stays — cosmetic only.
-              console.error(
-                '[predict_complex] npz overwrite blocked, retrying unique name:',
-                String(error?.message ?? error).slice(0, 160),
-              )
-              try {
-                const paePath = `structures/${label}_${Date.now()}_pae.npz`
-                await tctx.fs.write(paePath, bytes)
-                report.paePath = paePath
-              } catch (retryError) {
-                // Still cosmetic — keep the report, keep the log line.
-                console.error(
-                  '[predict_complex] pae npz copy failed:',
-                  String(retryError?.message ?? retryError).slice(0, 200),
-                )
-              }
-            }
+            const paePath = await writePaeBestEffort(tctx, label, await readFile(out.paeNpz))
+            if (paePath) report.paePath = paePath
           } else {
             console.error('[predict_complex] no pae_*.npz found next to the model; heatmap hidden')
           }
@@ -491,7 +527,10 @@ export const predictComplex = {
               }
             : metricsAll
         const files = done.outputs?.structures ?? done.outputs?.files ?? done.files
-        const pdbUrl = files?.[0]?.url ?? files?.[0]
+        // files[0] is the model download — unless the API lists the PAE npz
+        // first, so pick the first non-PAE entry for the structure.
+        const pdbEntry = (files ?? []).find((f) => !isPaeEntry(f))
+        const pdbUrl = pdbEntry?.url ?? pdbEntry
         if (!pdbUrl) {
           return result(
             { predictionId: id, status: done.status, metrics },
@@ -516,6 +555,13 @@ export const predictComplex = {
             : verdictFrom(rawMetrics)
               ? { verdict: verdictFrom(rawMetrics) }
               : {}),
+        }
+        // PAE pickup (defensive — see fetchApiPae): heatmap data when the API
+        // exposes it, silence when it doesn't.
+        const paeBytes = await fetchApiPae(tctx, files)
+        if (paeBytes) {
+          const paePath = await writePaeBestEffort(tctx, label, paeBytes)
+          if (paePath) report.paePath = paePath
         }
         return result(report, JSON.stringify(report))
       },

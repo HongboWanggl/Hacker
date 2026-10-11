@@ -151,6 +151,154 @@ const jsonRes = (obj: Record<string, unknown>, status = 200) => ({
   ok('ligand gets next chain id', JSON.parse(calls[0].init.body).input.entities[2]?.chain_ids?.[0] === 'C')
 }
 
+// Fake npz bytes for PAE-pickup mocks: only shape matters to the tool (it
+// persists whatever it downloads); the service decodes real matrices.
+const NPZ = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x01, 0x02, 0x03, 0xff, 0xfe])
+
+// --- 2b. API mode: PAE npz listed FIRST → structure still picked correctly,
+//         pae downloaded and persisted (paePath in report)
+{
+  const calls: Call[] = []
+  const tctx = makeTctx(calls, (path) => {
+    if (path === '/compute/v1/predictions/structure-and-binding')
+      return jsonRes({ id: 'pred_2b', status: 'pending' })
+    if (path.startsWith('/compute/v1/predictions/structure-and-binding/pred_2b')) {
+      return jsonRes({
+        status: 'succeeded',
+        metrics: { ptm: 0.9, iptm: 0.85 },
+        outputs: {
+          structures: [
+            { url: 'https://files.example/pred_2b_pae.npz' },
+            { url: 'https://files.example/pred_2b_model.pdb' },
+          ],
+        },
+      })
+    }
+    if (path.includes('pred_2b_pae.npz'))
+      return {
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => NPZ.buffer.slice(NPZ.byteOffset, NPZ.byteOffset + NPZ.byteLength),
+      }
+    if (path.includes('pred_2b_model.pdb')) return { ok: true, status: 200, text: async () => PDB }
+    return jsonRes({ error: { message: `unexpected ${path}` } }, 404)
+  })
+  const res = await spec.execute(
+    { sequences: 'MKTAYIAKQRQISFVKSHFSRQ,EIAKQGQVTMVIKKSMLEK', name: 'mock pae' },
+    tctx,
+  )
+  const r = res.structured ?? {}
+  ok('pae-first list still saves the PDB', r.savedTo === 'structures/mock_pae_boltz.pdb' && !res.isError)
+  ok('paePath reported', typeof r.paePath === 'string' && r.paePath.startsWith('structures/mock_pae_pae.npz'))
+  const saved = tctx.written.get(String(r.paePath))
+  ok('npz bytes persisted', saved !== undefined && saved.length === NPZ.length)
+}
+
+// --- 2c. API mode: no PAE entry → report identical, no paePath, no crash
+{
+  const calls: Call[] = []
+  const tctx = makeTctx(calls, (path) => {
+    if (path === '/compute/v1/predictions/structure-and-binding')
+      return jsonRes({ id: 'pred_2c', status: 'pending' })
+    if (path.startsWith('/compute/v1/predictions/structure-and-binding/pred_2c')) {
+      return jsonRes({
+        status: 'succeeded',
+        metrics: { ptm: 0.9, iptm: 0.85 },
+        outputs: { structures: [{ url: 'https://files.example/pred_2c_model.pdb' }] },
+      })
+    }
+    if (path.includes('pred_2c_model.pdb')) return { ok: true, status: 200, text: async () => PDB }
+    return jsonRes({ error: { message: `unexpected ${path}` } }, 404)
+  })
+  const res = await spec.execute(
+    { sequences: 'MKTAYIAKQRQISFVKSHFSRQ,EIAKQGQVTMVIKKSMLEK', name: 'mock nopae' },
+    tctx,
+  )
+  ok('no pae entry → no paePath', !res.isError && res.structured?.paePath === undefined)
+}
+
+// --- 2d. API mode: pae download HTTP-fails → prediction still succeeds
+{
+  const calls: Call[] = []
+  const tctx = makeTctx(calls, (path) => {
+    if (path === '/compute/v1/predictions/structure-and-binding')
+      return jsonRes({ id: 'pred_2d', status: 'pending' })
+    if (path.startsWith('/compute/v1/predictions/structure-and-binding/pred_2d')) {
+      return jsonRes({
+        status: 'succeeded',
+        metrics: { ptm: 0.9, iptm: 0.85 },
+        outputs: {
+          structures: [
+            { url: 'https://files.example/pred_2d_pae.npz' },
+            { url: 'https://files.example/pred_2d_model.pdb' },
+          ],
+        },
+      })
+    }
+    if (path.includes('pred_2d_pae.npz')) return { ok: false, status: 403 }
+    if (path.includes('pred_2d_model.pdb')) return { ok: true, status: 200, text: async () => PDB }
+    return jsonRes({ error: { message: `unexpected ${path}` } }, 404)
+  })
+  const res = await spec.execute(
+    { sequences: 'MKTAYIAKQRQISFVKSHFSRQ,EIAKQGQVTMVIKKSMLEK', name: 'mock paefail' },
+    tctx,
+  )
+  ok('pae download failure is not fatal', !res.isError && res.structured?.paePath === undefined)
+}
+
+// --- 2e. canonical npz name blocked (stale-file overwrite) → falls back to a
+//         time-suffixed fresh path
+{
+  const calls: Call[] = []
+  const base = makeTctx(calls, (path) => {
+    if (path === '/compute/v1/predictions/structure-and-binding')
+      return jsonRes({ id: 'pred_2e', status: 'pending' })
+    if (path.startsWith('/compute/v1/predictions/structure-and-binding/pred_2e')) {
+      return jsonRes({
+        status: 'succeeded',
+        metrics: { ptm: 0.9, iptm: 0.85 },
+        outputs: {
+          structures: [
+            { url: 'https://files.example/pred_2e_pae.npz' },
+            { url: 'https://files.example/pred_2e_model.pdb' },
+          ],
+        },
+      })
+    }
+    if (path.includes('pred_2e_pae.npz'))
+      return {
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => NPZ.buffer.slice(NPZ.byteOffset, NPZ.byteOffset + NPZ.byteLength),
+      }
+    if (path.includes('pred_2e_model.pdb')) return { ok: true, status: 200, text: async () => PDB }
+    return jsonRes({ error: { message: `unexpected ${path}` } }, 404)
+  })
+  const tctx = {
+    ...base,
+    fs: {
+      write: async (p: string, data: unknown) => {
+        // The canonical npz name is stale on disk (binary overwrite refused);
+        // every other path writes through.
+        if (p === 'structures/mock_stale_pae.npz') {
+          throw new Error('E_SEAM_MISSING: checkpoint unavailable: E_CHECKPOINT_UNRESTORABLE')
+        }
+        base.written.set(p, String(data))
+      },
+    },
+  }
+  const res = await spec.execute(
+    { sequences: 'MKTAYIAKQRQISFVKSHFSRQ,EIAKQGQVTMVIKKSMLEK', name: 'mock stale' },
+    tctx,
+  )
+  const r = res.structured ?? {}
+  ok(
+    'stale canonical name → suffixed fallback',
+    typeof r.paePath === 'string' && /_\d{13}_pae\.npz$/.test(String(r.paePath)),
+  )
+  ok('suffixed npz persisted', tctx.written.get(String(r.paePath)) !== undefined)
+}
+
 // --- 3. bearer 401 → x-api-key fallback still succeeds
 {
   const calls: Call[] = []
