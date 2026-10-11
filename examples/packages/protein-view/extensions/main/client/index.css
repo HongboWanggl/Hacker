@@ -2,6 +2,10 @@
    falls back gracefully when rendered outside the workbench. */
 
 .pv-root {
+  /* Container query context: panel breakpoints respond to the panel's own
+     width (it renders inside the host chat column), not the viewport. */
+  container-type: inline-size;
+  container-name: pvpanel;
   --pv-bg: #141c2b;
   --pv-line: rgba(140, 150, 170, 0.16);
   --pv-text: #1d232e;
@@ -223,6 +227,7 @@ button.pv-delta-bar--neg:hover { background: #ff9d70; }
   gap: 12px;
 }
 @media (max-width: 760px) { .pv-grid { grid-template-columns: 1fr; } }
+@container pvpanel (max-width: 760px) { .pv-grid { grid-template-columns: 1fr; } }
 
 .pv-3d-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .pv-curve-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
