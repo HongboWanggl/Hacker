@@ -18,9 +18,15 @@ await page.evaluate(() => {
 })
 await page.waitForTimeout(1500)
 const clicked = await page.evaluate(() => {
-  const el = [...document.querySelectorAll('.session-row .session')].find((e) => e.textContent.trim() === '蛋白结构预测与置信度分析')
-  el?.click()
-  return !!el
+  // The sidebar renders only the latest ~100 session titles; the original
+  // anchor ("蛋白结构预测与置信度分析") gets pushed out as new sessions pile up.
+  // Try known main-panel sessions in order, then any title that opens a panel.
+  const candidates = ['蛋白结构预测与置信度分析', '蛋白质结构预测与置信度总结', '蛋白预测与总结']
+  for (const t of candidates) {
+    const el = [...document.querySelectorAll('.session-row .session')].find((e) => e.textContent.trim() === t)
+    if (el) { el.click(); return true }
+  }
+  return false
 })
 if (!clicked) { console.log('FAIL session not found'); process.exit(1) }
 await page.waitForTimeout(5000)
