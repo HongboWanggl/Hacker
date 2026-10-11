@@ -20,6 +20,9 @@ standalone in papers and slides.
 
 ![Cα 偏差透镜](screenshots/compare-dist-lens.png)
 
+序列条支持键盘导航（Tab 聚焦，←/→ 移动光标、回车选中、Home/End 跳转、Esc 退出），
+光标复用悬停高亮——鼠标与键盘共享同一套 3D/曲线联动；鼠标与键盘均可全流程操作面板。
+
 深色模式（跟随宿主 system/light/dark 设置；canvas 图表保留白底「论文图卡」风格，导出 PNG 跨主题逐字节一致）：
 
 | 单蛋白（深色） | 对比（深色） |

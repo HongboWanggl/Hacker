@@ -93,23 +93,67 @@ const CHAIN_COLORS = ['#4e79e6', '#f28e2b', '#2ca02c', '#e15759', '#9467bd', '#1
 // hover/click wired to the same hover/selected state as the 3D view and curve —
 // a third way to scan the sequence. Chain changes get a small gap. `colorOf`
 // and `titleOf` let callers re-skin the strip (e.g. |ΔpLDDT| divergence).
+// Keyboard: the strip is one focusable listbox; ←/→ move a roving cursor that
+// drives the same hover state as the mouse, Enter selects, Home/End jump,
+// Esc leaves. The cursor lives in a ref (synchronous, race-free for fast
+// repeats) and reuses the hover highlight, so mouse and keyboard share one
+// visual language and the 3D/curve linkage follows for free.
 function SequenceStrip({ residues, hover, onHover, selected, onSelect, colorOf, titleOf }) {
+  const stripRef = useRef(null)
+  const kbRef = useRef(null)
   if (!Array.isArray(residues) || !residues.length) return null
   // Dense mode for long chains: smaller tiles keep the strip to a sane height.
   const dense = residues.length > 800
+  const move = (next) => {
+    kbRef.current = next
+    onHover?.(next)
+    stripRef.current?.children?.[next]?.scrollIntoView?.({ block: 'nearest' })
+  }
   return h(
     'div',
     {
+      ref: stripRef,
       className: `pv-seqstrip${dense ? ' pv-seqstrip--dense' : ''}`,
       role: 'listbox',
-      'aria-label': '残基序列条',
+      'aria-label': '残基序列条（方向键移动，回车选中）',
+      tabIndex: 0,
+      onFocus: () => {
+        if (kbRef.current == null) kbRef.current = hover ?? selected ?? 0
+        onHover?.(kbRef.current)
+      },
+      onBlur: () => {
+        kbRef.current = null
+        onHover?.(null)
+      },
+      onKeyDown: (e) => {
+        const n = residues.length
+        const cur = kbRef.current ?? hover ?? selected ?? 0
+        let handled = true
+        if (e.key === 'ArrowLeft') move(Math.max(0, cur - 1))
+        else if (e.key === 'ArrowRight') move(Math.min(n - 1, cur + 1))
+        else if (e.key === 'Home') move(0)
+        else if (e.key === 'End') move(n - 1)
+        else if (e.key === 'Enter' || e.key === ' ') onSelect?.(cur)
+        else if (e.key === 'Escape') e.currentTarget.blur()
+        else handled = false
+        if (!handled) return
+        // The panel root steps the residue selection on ←/→ (and the
+        // selection snaps hover back to it); when the strip has focus the
+        // keys mean strip navigation, so keep them from bubbling up.
+        e.stopPropagation()
+        e.preventDefault()
+      },
     },
     residues.map((r, idx) => {
       const bg = colorOf ? colorOf(r, idx) : bandColor(r.b)
+      const label = titleOf ? titleOf(r, idx) : `${resLabel(residues, r)} · pLDDT ${r.b.toFixed(1)}`
       return h(
         'div',
         {
           key: idx,
+          role: 'option',
+          'aria-selected': idx === selected,
+          'aria-label': label,
           className:
             'pv-seq-tile' +
             (idx === hover ? ' pv-seq-tile--hover' : '') +
@@ -119,7 +163,7 @@ function SequenceStrip({ residues, hover, onHover, selected, onSelect, colorOf, 
             color: tileTextColor(bg),
             marginLeft: idx > 0 && r.chain && residues[idx - 1].chain !== r.chain ? 5 : undefined,
           },
-          title: titleOf ? titleOf(r, idx) : `${resLabel(residues, r)} · pLDDT ${r.b.toFixed(1)}`,
+          title: label,
           onMouseEnter: () => onHover?.(idx),
           onMouseLeave: () => onHover?.(null),
           onClick: () => onSelect?.(idx),
