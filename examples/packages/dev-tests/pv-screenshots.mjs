@@ -1,6 +1,10 @@
 // Capture curated panel screenshots from the historical session into
 // examples/packages/docs/screenshots/ for the README gallery. Not part of
 // run-all.sh — run manually: node pv-screenshots.mjs
+//
+// Session titles rotate as probes accumulate (the sidebar renders only the
+// latest ~100), so every panel is found by trying title candidates in order
+// and accepting the first session whose panel actually mounted.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
@@ -15,17 +19,41 @@ try {
     .first()
     .click({ timeout: 3000 })
 } catch {}
-await page
-  .getByText(/p53蛋白P04637|p53蛋白/)
-  .first()
-  .click({ timeout: 5000 })
-await page.waitForTimeout(9000)
-await page.evaluate(() =>
-  document.querySelectorAll('details.turn-process:not([open]) summary').forEach((s) => {
-    s.click()
-  }),
-)
-await page.waitForTimeout(2500)
+
+// (Sidebar spans can be "not visible" to playwright → click via DOM dispatch,
+// like the other live probes.)
+async function openPanel(candidates, acceptSel, tilesMin = 0) {
+  for (const rx of candidates) {
+    await page.evaluate((re) => {
+      const el = [...document.querySelectorAll('.session-title, li, [role=button], span')].find(
+        (e) => e.childElementCount === 0 && new RegExp(re).test((e.textContent ?? '').trim()),
+      )
+      el?.closest('li, [role=button], button, div')?.click()
+      el?.click()
+    }, rx.source)
+    await page.waitForTimeout(9000)
+    await page.evaluate(() =>
+      document.querySelectorAll('details.turn-process:not([open]) summary').forEach((s) => {
+        s.click()
+      }),
+    )
+    await page.waitForTimeout(2500)
+    const ok = await page.evaluate(
+      ({ sel, min }) => {
+        const root = document.querySelector('.pv-root:has(' + sel + ')')
+        return !!root && document.querySelectorAll('.pv-seq-tile').length >= min
+      },
+      { sel: acceptSel, min: tilesMin },
+    )
+    if (ok) {
+      console.log('session matched:', rx, '→', acceptSel)
+      return true
+    }
+  }
+  console.log('NO SESSION matched for', acceptSel)
+  process.exitCode = 1
+  return false
+}
 
 async function shoot(selector, name, pad = 12) {
   // Hide host floating buttons that can overlap the panel.
@@ -56,31 +84,30 @@ async function shoot(selector, name, pad = 12) {
   }
 }
 
-await shoot('.pv-root:has(.pv-3d) .pv-grid', 'confidence-3d-curve') // 3D + curve side by side
+// 3D + curve side by side — needs a long-protein main panel (≥100 tiles) so
+// the shot shows the dense strip, not a 4-aa stub.
+await openPanel(
+  [
+    /预测指定序列蛋白结构与置信度/,
+    /蛋白结构预测与置信度总结/,
+    /预测蛋白结构并总结置信度/,
+    /p53蛋白P04637/,
+    /p53蛋白/,
+    /预测P61626/,
+    /P61626/,
+    /预测蛋白质/,
+  ],
+  '.pv-3d',
+  100,
+)
+await shoot('.pv-root:has(.pv-3d) .pv-grid', 'confidence-3d-curve')
 // (No complex-card shot: real Boltz reports need an API key, so no live session
 // exists. `.pv-complex-metrics` also matches the confidence summary — unusable.)
 
-// compare / batch cards live in sessions created by the live E2E suite —
-// switch sessions by sidebar title. (Sidebar spans can be "not visible" to
-// playwright, so click via DOM dispatch.)
-async function openSession(titleRe) {
-  await page.evaluate((re) => {
-    const el = [...document.querySelectorAll('.session-title, li, [role=button], span')].find(
-      (e) => e.childElementCount === 0 && new RegExp(re).test((e.textContent ?? '').trim()),
-    )
-    el?.closest('li, [role=button], button, div')?.click()
-    el?.click()
-  }, titleRe.source)
-  await page.waitForTimeout(6000)
-  await page.evaluate(() =>
-    document.querySelectorAll('details.turn-process:not([open]) summary').forEach((s) => {
-      s.click()
-    }),
-  )
-  await page.waitForTimeout(2000)
-}
-
-await openSession(/compare_alphafold 对比|compare_structures 对比/)
+await openPanel(
+  [/compare_alphafold|对比p53|AlphaFold 对比|对比.*AlphaFold/, /compare_structures|对比两个|突变体/],
+  '.pv-compare-bars',
+)
 await shoot('.pv-root:has(.pv-compare-bars)', 'compare-card')
 // Cα-deviation lens variant: same card with the distance lens active — the
 // strip recolors by post-superposition Cα distance and so does the 3D ghost.
@@ -90,9 +117,9 @@ if (await distChip.count()) {
   await page.waitForTimeout(1200)
   await shoot('.pv-root:has(.pv-compare-bars)', 'compare-dist-lens')
 }
-await openSession(/batch_predict 预测/)
+await openPanel([/batch_predict|批处理|一次预测|两个蛋白/], '.pv-batch')
 await shoot('.pv-root:has(.pv-batch)', 'batch-card')
-await openSession(/uniprot_search|lysozyme|搜索/)
+await openPanel([/uniprot_search|检索UniProt|UniProt.*搜索|lysozyme|溶菌酶|搜索/], '.pv-search-table')
 await shoot('.pv-root:has(.pv-search-table)', 'search-card')
 await browser.close()
 console.log('SCREENSHOTS DONE')
