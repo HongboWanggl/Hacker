@@ -2021,10 +2021,19 @@ function buildCompareComposite(canvas, residues, mode, distMap, gmap, ligandInfo
     const ly = canvas.height + top + ligH + labelH + rows * pitch + legendH / 2
     g.font = `${11 * s}px ui-sans-serif, system-ui`
     if (mode === 'dist') {
-      g.fillStyle = '#b6b6b6'
-      g.fillRect(6 * s, ly - 5 * s, 10 * s, 10 * s)
+      // same teal→amber→red key as the in-panel distance legend
+      const grad = g.createLinearGradient(6 * s, 0, 86 * s, 0)
+      grad.addColorStop(0, 'rgb(64,180,160)')
+      grad.addColorStop(0.45, 'rgb(240,170,70)')
+      grad.addColorStop(1, 'rgb(235,80,60)')
+      g.fillStyle = grad
+      g.fillRect(6 * s, ly - 5 * s, 80 * s, 10 * s)
       g.fillStyle = 'rgba(255,255,255,0.85)'
-      g.fillText('参考无对应残基', 20 * s, ly)
+      g.fillText('0.5 · 2 · ≥5 Å', 92 * s, ly)
+      const x2 = 92 * s + g.measureText('0.5 · 2 · ≥5 Å').width + 14 * s
+      g.fillStyle = '#b6b6b6'
+      g.fillRect(x2, ly - 5 * s, 10 * s, 10 * s)
+      g.fillText('参考无对应残基', x2 + 14 * s, ly)
     } else {
       const la = labels?.a ?? '预测'
       const lb = labels?.b ?? '参考'
