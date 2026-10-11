@@ -63,6 +63,30 @@ try {
     () => document.activeElement !== document.querySelector('canvas.pv-pae-canvas'),
   )
   ok('Escape blurs the heatmap canvas', blurred)
+
+  // Click-to-pin: a real click fixes the readout — it survives the mouse
+  // leaving AND Esc-blur, and a second click (plus blur) releases it.
+  const hbox = await page.locator('canvas.pv-pae-canvas').boundingBox()
+  if (!hbox) throw new Error('heatmap canvas box unavailable')
+  const cx = hbox.x + hbox.width * 0.4
+  const cy = hbox.y + hbox.height * 0.6
+  await page.mouse.click(cx, cy)
+  await page.waitForTimeout(400)
+  const pinned = await readout()
+  ok(`click pins a pair readout (got "${pinned}")`, pinned.includes('→'))
+  await page.mouse.move(5, 5)
+  await page.waitForTimeout(400)
+  ok('pinned readout survives mouse-leave', (await readout()) === pinned)
+  await page.keyboard.press('Escape') // blur — the pin must still survive
+  await page.waitForTimeout(400)
+  ok('pinned readout survives Esc-blur', (await readout()) === pinned)
+  await page.mouse.click(cx, cy) // second click releases; click refocuses
+  await page.waitForTimeout(400)
+  await page.keyboard.press('Escape') // blur clears the keyboard cursor
+  await page.mouse.move(5, 5) // and the pointer must leave (hover would own the readout)
+  await page.waitForTimeout(400)
+  const released = await readout()
+  ok(`release + blur + mouse-out returns the strip readout (got "${released}")`, released !== pinned)
 } catch (e) {
   console.log('FAIL', e?.message ?? e)
   failed++

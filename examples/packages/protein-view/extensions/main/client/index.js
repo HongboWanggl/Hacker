@@ -3651,9 +3651,16 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
   // cell — the keyboard path feeds the SAME signals as the mouse (readout +
   // cross-view hover linkage), so both channels stay one mechanism.
   const [kbCell, setKbCell] = useState(null)
-  // Unified readout cell: mouse hover wins while present, else the keyboard
-  // cursor — one draw path (cell outline) and one readout for both channels.
+  // Pinned readout: click (or Enter on the keyboard cursor) fixes one cell so
+  // its pair stays on the readout after the mouse leaves — the reading you came
+  // for doesn't vanish when you move to the 3D view. Click/Enter the pinned
+  // cell again to release. Pin outranks hover/kb in the readout.
+  const [pinCell, setPinCell] = useState(null)
+  // Unified readout cell: pin wins (explicit commitment), then mouse hover,
+  // then the keyboard cursor — one draw path (cell outline) and one readout for
+  // all three channels.
   const cursorCell = hoverCell ?? kbCell
+  const readoutCell = pinCell ?? cursorCell
   const [stripRow, setStripRow] = useState(null) // row hovered in the side profile
   const [focusPair, setFocusPair] = useState(null) // 'A|B' — chip-clicked chain pair
   const canvasRef = useRef(null)
@@ -3900,7 +3907,16 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
       ctx2d.lineWidth = 1.5
       ctx2d.strokeRect(cursorCell.i * cell + 0.5, cursorCell.j * cell + 0.5, cell - 1, cell - 1)
     }
-  }, [pae, n, px, cell, chainSizes, hover, scale, focusPair, chainRanges, cursorCell])
+    // Pinned cell (click/Enter): a dashed amber outline that survives
+    // mouse-leave, distinct from the transient white cursor outline.
+    if (pinCell) {
+      ctx2d.strokeStyle = '#f5a623'
+      ctx2d.setLineDash([3, 2])
+      ctx2d.lineWidth = 1.5
+      ctx2d.strokeRect(pinCell.i * cell + 0.5, pinCell.j * cell + 0.5, cell - 1, cell - 1)
+      ctx2d.setLineDash([])
+    }
+  }, [pae, n, px, cell, chainSizes, hover, scale, focusPair, chainRanges, cursorCell, pinCell])
 
   // Side profile: one bar per (pooled) row = that residue's mean PAE against
   // all partners. Same hover linkage as the heatmap — the hovered row lights up.
@@ -3963,8 +3979,8 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
     const lb = residues?.[b] ? resLabel(residues, residues[b]) : `${b + 1}`
     return `${la}–${lb}`
   }
-  const readout = cursorCell
-    ? `${cellLabel(cursorCell.i)} → ${cellLabel(cursorCell.j)} · ${((pae.bytes[cursorCell.i * n + cursorCell.j] / 255) * 32).toFixed(2)} Å`
+  const readout = readoutCell
+    ? `${cellLabel(readoutCell.i)} → ${cellLabel(readoutCell.j)} · ${((pae.bytes[readoutCell.i * n + readoutCell.j] / 255) * 32).toFixed(2)} Å`
     : stripRow != null && rowMeans
       ? `${cellLabel(stripRow)} · 平均 ${((rowMeans[stripRow] / 255) * 32).toFixed(2)} Å`
       : ''
@@ -4050,13 +4066,13 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
           role: 'application',
           tabIndex: 0,
           'aria-label':
-            'PAE 误差热图（紫=低误差，黄=高误差）；Tab 聚焦后用方向键移动读出格，Home/End 跳行首行尾，Esc 退出',
+            'PAE 误差热图（紫=低误差，黄=高误差）；Tab 聚焦后用方向键移动读出格，Home/End 跳行首行尾，Enter 固定读数，Esc 退出',
           width: px,
           height: px,
           style: { width: `${px}px`, height: `${px}px` },
           onFocus: () => {
             if (kbCell) return
-            const init = hoverCell ?? { i: 0, j: 0 }
+            const init = hoverCell ?? pinCell ?? { i: 0, j: 0 }
             setKbCell(init)
             const r = init.i * scale
             if (residues?.[r] && onHover) onHover(r)
@@ -4075,6 +4091,13 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
             else if (e.key === 'End') ni = n - 1
             else if (e.key === 'Escape') {
               e.currentTarget.blur()
+              return
+            } else if (e.key === 'Enter' || e.key === ' ') {
+              // Pin / release the cursor cell — the keyboard twin of the click
+              // path below, so the pin survives Esc-blur and mouse-leave.
+              e.preventDefault()
+              e.stopPropagation()
+              setPinCell((p) => (p && p.i === cur.i && p.j === cur.j ? null : { i: cur.i, j: cur.j }))
               return
             } else handled = false
             if (!handled) return
@@ -4100,6 +4123,17 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
             if (residues?.[r] && onHover) onHover(r)
           },
           onMouseLeave: () => setHoverCell(null),
+          onClick: (e) => {
+            const rect = e.currentTarget.getBoundingClientRect()
+            const i = Math.floor((e.clientX - rect.left) / (rect.width / n))
+            const j = Math.floor((e.clientY - rect.top) / (rect.height / n))
+            if (i < 0 || j < 0 || i >= n || j >= n) return
+            // Second click on the pinned cell releases it; anywhere else moves
+            // the pin. The readout follows the pin after the mouse leaves.
+            setPinCell((p) => (p && p.i === i && p.j === j ? null : { i, j }))
+            const r = i * scale
+            if (residues?.[r] && onHover) onHover(r)
+          },
         }),
         h('canvas', {
           ref: stripRef,
@@ -4153,8 +4187,8 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
           'div',
           { className: 'pv-pae-caption' },
           scale > 1
-            ? `矩阵按 ${scale} 残基/格均值降采样显示；紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界。右侧条形为各残基平均误差（不含自身）——长条提示界面或无序区。悬停或 Tab 聚焦后用方向键读出并联动 3D。`
-            : '紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界，块外亮区提示接口或折叠不确定性。右侧条形为各残基平均误差（不含自身）——长条提示界面残基或无序区。悬停（或 Tab 聚焦后方向键）读出残基对误差并联动 3D。',
+            ? `矩阵按 ${scale} 残基/格均值降采样显示；紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界。右侧条形为各残基平均误差（不含自身）——长条提示界面或无序区。悬停或 Tab 聚焦后用方向键读出并联动 3D；点击格（或按 Enter）固定读数，再点取消。`
+            : '紫=低误差（可信），黄=高误差（≥32 Å 封顶）；虚线为链边界，块外亮区提示接口或折叠不确定性。右侧条形为各残基平均误差（不含自身）——长条提示界面残基或无序区。悬停（或 Tab 聚焦后方向键）读出残基对误差并联动 3D；点击格固定读数，再点取消。',
         ),
       ),
     ),

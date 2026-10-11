@@ -221,6 +221,60 @@ for (const [name, ok] of kbdChecks) {
   if (!ok) failed++
 }
 
+// --- click-to-pin: the readout survives mouse-leave; second click releases ---
+// Rect stub is {0,0,100,100}, n=4 → 25 px cells; click at (37.5, 62.5) = cell (1,2).
+const pinChecks = []
+const clickCell = (cx, cy) =>
+  canvas.dispatchEvent(new win.MouseEvent('click', { bubbles: true, clientX: cx, clientY: cy }))
+clickCell(37.5, 62.5)
+pinChecks.push([
+  `click pins the cell readout (got "${await kbReadout()}")`,
+  (await kbReadout()) === 'A:A2 → B:A1 · 15.06 Å',
+])
+// Mouse leaves (hover cleared) — the pin must keep the pair on the readout.
+canvas.dispatchEvent(new win.MouseEvent('mouseout', { bubbles: true, relatedTarget: win.document.body }))
+pinChecks.push([
+  `pinned readout survives mouse-leave (got "${await kbReadout()}")`,
+  (await kbReadout()) === 'A:A2 → B:A1 · 15.06 Å',
+])
+clickCell(37.5, 62.5)
+pinChecks.push([
+  `second click releases the pin (got "${await kbReadout()}")`,
+  (await kbReadout()) === 'A:A2 · 平均 17.15 Å',
+])
+
+// --- keyboard pin: Enter fixes the cursor cell, survives Esc-blur ---
+canvas.focus()
+await new Promise((r) => setTimeout(r, 150))
+key('ArrowRight') // cursor → (1,0)
+await new Promise((r) => setTimeout(r, 150)) // let the cursor render before pinning
+key('Enter')
+pinChecks.push([
+  `Enter pins the cursor cell (got "${await kbReadout()}")`,
+  (await kbReadout()) === 'A:A2 → A:A1 · 11.29 Å',
+])
+key('Escape') // blur — pin must survive
+pinChecks.push([
+  `pinned readout survives Esc-blur (got "${await kbReadout()}")`,
+  (await kbReadout()) === 'A:A2 → A:A1 · 11.29 Å',
+])
+canvas.focus() // cursor re-initializes on the pinned cell
+await new Promise((r) => setTimeout(r, 150))
+pinChecks.push([
+  `refocus starts cursor at the pin (got "${await kbReadout()}")`,
+  (await kbReadout()) === 'A:A2 → A:A1 · 11.29 Å',
+])
+key('Enter') // releases the pin — but the keyboard cursor still owns the readout
+key('Escape') // blur clears the cursor too; only then the strip mean returns
+pinChecks.push([
+  `Enter on the pinned cell releases it (got "${await kbReadout()}")`,
+  (await kbReadout()) === 'A:A2 · 平均 17.15 Å',
+])
+for (const [name, ok] of pinChecks) {
+  console.log(ok ? 'ok ' : 'FAIL', name)
+  if (!ok) failed++
+}
+
 // --- pooled matrix (scale > 1): labels become residue ranges ----------------
 const pooled = Uint8Array.from([0, 255, 64, 128])
 const container2 = win.document.createElement('div')
