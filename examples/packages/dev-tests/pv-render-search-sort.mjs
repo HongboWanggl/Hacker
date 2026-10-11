@@ -76,4 +76,21 @@ const clearBtn = [...container.querySelectorAll('.pv-batchbar-clear')][0]
 clearBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
 await sleep(150)
 check('clear removes the bar and selection', !container.querySelector('.pv-batchbar') && container.querySelectorAll('.pv-search-row--sel').length === 0)
+
+// CSV export: right-aligned action in the score row, exports the current sort
+const csvBtn = container.querySelector('.pv-search-actions .pv-export')
+check('export CSV button in score row', !!csvBtn && (csvBtn.textContent ?? '').trim() === '导出 CSV')
+if (csvBtn) {
+  const urls = []
+  // the component calls the ambient URL/Blob globals, not win.URL
+  const origCreate = URL.createObjectURL?.bind(URL)
+  URL.createObjectURL = (blob) => { const u = origCreate ? origCreate(blob) : `blob:spy-${urls.length}`; urls.push({ u, blob }); return u }
+  csvBtn.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await sleep(150)
+  if (origCreate) URL.createObjectURL = origCreate
+  const hit = urls[0]
+  const text = hit ? await hit.blob.text() : ''
+  check('CSV carries header + 3 sorted rows', text.startsWith('accession,name,organism,length,uniprot') && text.trim().split('\n').length === 4)
+  check('CSV rows carry uniprot links', text.includes('https://www.uniprot.org/uniprotkb/P04637'))
+}
 process.exit(failed ? 1 : 0)

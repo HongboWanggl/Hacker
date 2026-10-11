@@ -1251,6 +1251,14 @@ function SearchCard({ report }) {
         h('div', { className: 'pv-score-num' }, `${hits.length}`),
         h('div', { className: 'pv-score-sub' }, `条结果 · ${report.query ?? ''}`),
       ),
+      hits.length
+        ? h('div', { className: 'pv-search-actions' },
+            h('button', {
+              className: 'pv-export',
+              onClick: () => exportSearchCsv(sorted, report.query),
+              title: '下载检索结果 CSV（当前排序，含 UniProt 链接）',
+            }, '导出 CSV'))
+        : null,
     ),
     hits.length
       ? h(
@@ -2069,6 +2077,29 @@ function exportBatchCsv(jobs) {
     const a = document.createElement('a')
     a.href = url
     a.download = 'batch_predict.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch {}
+}
+
+// UniProt hit table → CSV, honoring the table's current sort so what the
+// researcher sees is what lands in the file. Every row carries its UniProt URL.
+function exportSearchCsv(hits, query) {
+  const esc = (v) => {
+    const s = String(v ?? '')
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const head = 'accession,name,organism,length,uniprot'
+  const lines = hits.map((x) =>
+    [x.accession, x.proteinName ?? x.id, x.organism, x.length, x.accession ? `https://www.uniprot.org/uniprotkb/${x.accession}` : '']
+      .map(esc)
+      .join(','),
+  )
+  try {
+    const url = URL.createObjectURL(new Blob([head + '\n' + lines.join('\n')], { type: 'text/csv' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `uniprot_${String(query ?? 'search').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'search'}.csv`
     a.click()
     URL.revokeObjectURL(url)
   } catch {}

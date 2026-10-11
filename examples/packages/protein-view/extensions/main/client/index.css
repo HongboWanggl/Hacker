@@ -557,6 +557,13 @@ button.pv-chain-chip:hover { background: rgb(29 35 46 / 9%); }
   .pv-search-row > .pv-search-org { grid-area: org; }
   .pv-search-row > .pv-search-len { grid-area: len; align-self: center; }
 }
+/* Export button right-aligned in the search score row; wraps under the count
+   on phones instead of squeezing the result line. */
+.pv-search-actions { margin-left: auto; flex: none; }
+@container pvpanel (max-width: 480px) {
+  .pv-score-row:has(.pv-search-actions) { flex-wrap: wrap; }
+  .pv-search-actions { margin-left: 0; }
+}
 .pv-search-hint {
   margin-top: 6px;
   font-size: 11px;
