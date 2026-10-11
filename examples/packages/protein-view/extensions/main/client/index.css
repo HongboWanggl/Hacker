@@ -437,7 +437,7 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
 /* uniprot_search results table */
 .pv-search-table {
   margin-top: 8px;
-  border: 1px solid rgb(255 255 255 / 10%);
+  border: 1px solid var(--pv-line);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -456,7 +456,7 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
   width: 15px;
   height: 15px;
   box-sizing: border-box;
-  border: 1.5px solid rgb(255 255 255 / 22%);
+  border: 1.5px solid rgb(29 35 46 / 28%);
   border-radius: 4px;
   cursor: pointer;
   color: #fff;
@@ -484,29 +484,29 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
 .pv-batchbar-clear {
   all: unset;
   cursor: pointer;
-  color: #8d99af;
+  color: var(--pv-muted);
   font-size: 11px;
 }
-.pv-batchbar-clear:hover { color: #c9d4ee; text-decoration: underline; }
+.pv-batchbar-clear:hover { color: #3b6fe0; text-decoration: underline; }
 .pv-search-head {
   font-size: 11px;
-  color: #8d99af;
-  background: rgb(255 255 255 / 4%);
+  color: var(--pv-muted);
+  background: rgb(109 125 160 / 6%);
 }
 /* Sortable header cells (search card): plain buttons reset to the grid text */
 .pv-search-head-cell {
   all: unset;
   cursor: pointer;
   font-size: 11px;
-  color: #8d99af;
+  color: var(--pv-muted);
   white-space: nowrap;
 }
 .pv-search-head-cell:hover { color: #c9d4ee; }
-.pv-search-head-cell--sorted { color: #8fb0ff; font-weight: 600; }
+.pv-search-head-cell--sorted { color: #3b6fe0; font-weight: 600; }
 .pv-search-row {
   width: 100%;
   border: none;
-  border-top: 1px solid rgb(255 255 255 / 8%);
+  border-top: 1px solid var(--pv-line);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -516,27 +516,51 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
 .pv-search-row:hover { background: rgb(108 141 255 / 12%); }
 .pv-search-acc {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #8fb0ff;
+  color: #3b6fe0;
   font-size: 12px;
 }
 /* accession cell: mono code + external UniProt link */
 .pv-search-acccell { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 .pv-search-link {
-  color: #8d99af;
+  color: var(--pv-muted);
   font-size: 10.5px;
   text-decoration: none;
   padding: 0 2px;
   border-radius: 3px;
 }
-.pv-search-link:hover { color: #8fb0ff; background: rgb(143 176 255 / 15%); text-decoration: underline; }
+.pv-search-link:hover { color: #3b6fe0; background: rgb(59 111 224 / 10%); text-decoration: underline; }
 .pv-verdict .pv-search-link { margin-left: 6px; color: #6f7d96; }
-.pv-search-name { color: #e8ecf5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pv-search-org { color: #9aa7bd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pv-search-len { color: #b9c2d4; text-align: right; font-variant-numeric: tabular-nums; }
+.pv-search-name { color: var(--pv-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-search-org { color: var(--pv-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-search-len { color: var(--pv-text); text-align: right; font-variant-numeric: tabular-nums; }
+/* Declared after the search-table rules above so the override wins the cascade
+   (same lesson as the toolbar-title override: container-query blocks placed
+   earlier in the file lose equal-specificity fights). */
+@container pvpanel (max-width: 480px) {
+  /* Search results: the 5-column grid collapses on phones ("蛋白/物种" shrink to
+     1–2 unreadable characters) — restack each row as a card: checkbox +
+     accession + length on the first line, name and organism on their own
+     full-width lines. Header row hidden; the fields are self-evident. */
+  .pv-search-head { display: none; }
+  .pv-search-row {
+    grid-template-columns: 22px 1fr auto;
+    grid-template-areas:
+      'cb acc len'
+      '. name name'
+      '. org org';
+    row-gap: 2px;
+    padding: 8px 10px;
+  }
+  .pv-search-row > .pv-search-check { grid-area: cb; }
+  .pv-search-row > .pv-search-acccell { grid-area: acc; }
+  .pv-search-row > .pv-search-name { grid-area: name; min-width: 0; }
+  .pv-search-row > .pv-search-org { grid-area: org; }
+  .pv-search-row > .pv-search-len { grid-area: len; align-self: center; }
+}
 .pv-search-hint {
   margin-top: 6px;
   font-size: 11px;
-  color: #8d99af;
+  color: var(--pv-muted);
 }
 
 /* Panel is keyboard-focusable (←/→ steps through residues); keep the focus
