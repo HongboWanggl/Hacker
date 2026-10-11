@@ -227,3 +227,4 @@ structures/p53_R248W_393aa.pdb（R248W 热点突变体），label 分别设为
 | 未配 Boltz key 的提示 | 工具返回配置指引；key 放 `$AGH_HOME/secrets/boltz/default`（600）或 `BOLTZ_API_KEY` |
 | 面板里的图看着小 | 用各视图的「⤢ 全屏」投满整窗 |
 | 想批量预测多个 | 搜索表勾选多行生成指令，或直接写 batch_predict + 多个 accession |
+| 手机浏览器打开会不会乱 | 不会。面板按自身宽度自适应，窄屏自动变单列，340px（小手机）起即完整可用、无横向滚动 |
