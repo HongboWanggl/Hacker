@@ -80,5 +80,22 @@ sel.dispatchEvent(new win.Event('change', { bubbles: true }))
 await new Promise((r) => setTimeout(r, 300))
 const accs = [...container.querySelectorAll('.pv-batch-row--ok .pv-batch-acc')].map((e) => e.textContent)
 check(`plddt sort reorders rows (got ${accs.join(' > ')})`, accs[0] === 'P61626' && accs[1] === 'P04637')
+
+// 复制结论: a ready-to-paste Markdown block — completion line, cross-job mean,
+// and a table row per job with the failure's error text.
+const conclBtn2 = [...container.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === '复制结论')
+check('batch copy-conclusion button rendered', !!conclBtn2)
+if (conclBtn2) {
+  const mdTexts = []
+  try { Object.defineProperty(win.navigator, 'clipboard', { value: { writeText: (t) => mdTexts.push(t) }, configurable: true }) } catch {}
+  conclBtn2.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 120))
+  const md = mdTexts.join('\n')
+  check('batch markdown: header + counts', md.startsWith('批处理预测结论（batch_predict）') && md.includes('- 完成 2/3 · 失败 1'))
+  check('batch markdown: mean pLDDT line', md.includes('- 平均 pLDDT（各蛋白均值）: 78.7'))
+  check('batch markdown: ok row carries file', md.includes('| P61626 | Lysozyme C | ✅ | 130 | 92.4 | 0 | structures/lyz.pdb |'))
+  check('batch markdown: failed row carries error', md.includes('| P00439 | PAH | ❌ | — | — | — | ESMFold HTTP 413 |'))
+  check('batch button confirms copy', (conclBtn2.textContent ?? '').includes('已复制'))
+}
 process.exit(failed ? 1 : 0)
 console.log('BATCH TABLE TESTS DONE')

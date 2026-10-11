@@ -1,0 +1,69 @@
+# @aghes/protein-view
+
+Interactive toolview panels for protein-predictor results: 3D backbone with
+pLDDT / rainbow / chain / interface coloring, confidence curve, sequence strip,
+PAE error heatmap, compare overlay, batch table, and search results — each
+figure carries its own legend and exports (PNG / CSV / clipboard) so it reads
+standalone in papers and slides.
+
+## Layout
+
+```
+package.json                     @aghes/protein-view manifest (client descriptor)
+index.mjs                        re-exports the in-process runtime
+extensions/main/
+  index.mjs                      runtime side (service defs, permissions)
+  agnes.client.json              client descriptor: entry, styles, slots, services
+  client/index.js                THE client bundle (single file, plain ESM + h())
+  client/index.css               panel styles
+```
+
+`client/index.js` is a hand-maintained bundle (no build step). Everything the
+browser runs lives there: components written with `h(tag, props, children)`,
+canvas renderers (3D projection, curve, PAE heatmap), export/clipboard helpers,
+and the slot registration in `apply(ctx)`.
+
+## How panels attach
+
+`apply(ctx)` registers one slot component per tool key (`predict_structure`,
+`analyze_confidence`, `compare_alphafold`, `predict_complex`, `batch_predict`,
+`compare_structures`, `uniprot_search`) under the `tool.call.toolview` slot.
+The slot re-asserts itself on declaration events because transcript remounts
+collapse child records (see the comment in `apply`). Panels parse the tool's
+`resultPreview` JSON and fetch structure data through the allowed services:
+
+- `protein.structure` — parsed PDB: residues, ligand atoms/bonds
+- `protein.pae` — PAE matrix npz (base64 bytes)
+- `protein.report` — auxiliary report data
+
+Adding a toolview for a new tool = add the key to `KEYS` and branch on
+`owner.toolName` inside `ProteinToolView`.
+
+## Development loop
+
+Tests live in `../dev-tests` (shared with protein-predictor):
+
+1. **Offline suites** (`run-all.sh`, no daemon): mount components under
+   happy-dom with stubbed services and a recording 2d-context. Before running,
+   refresh the snapshot the suites import:
+   `cp ../protein-view/extensions/main/client/index.js /tmp/pv-client-test/index.js`
+   (a stale snapshot produces baffling failures — this has bitten repeatedly).
+2. **Republish** after any client change:
+   `node --import tsx agh-update-view.mts` (cwd `dev-tests`).
+3. **Live probes** (`run-all.sh --live`, ~10 min): drive the real Web UI at
+   `127.0.0.1:4177` via chrome-headless-shell. The sidebar renders only the
+   latest ~100 session titles, so probes match sessions by content candidates
+   rather than fixed titles.
+
+Gotchas live in `~/.claude/projects/-Users-wanghanbao/memory/agh-web-ui-live-probes.md`
+(happy-dom event quirks, headless clipboard denial, α-blend pixel thresholds).
+
+## Conventions
+
+- Flat output schemas only (nested objects are rejected by the protocol);
+  complex payloads are normalized client-side (e.g. ligand atoms/bonds).
+- Every export figure is self-explanatory: composites embed the active
+  color-scale legend (see `build3DComposite` / `buildCurveComposite` /
+  `buildPaeComposite` / `buildCompareComposite`); export and clipboard copy
+  share one code path per panel.
+- New services must be added to `services` in `agnes.client.json` (allowlist).

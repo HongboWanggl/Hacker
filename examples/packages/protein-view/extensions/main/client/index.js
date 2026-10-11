@@ -1251,6 +1251,23 @@ function SearchCard({ report }) {
   )
 }
 
+// Ready-to-paste Markdown summary for the batch table — completion counts,
+// cross-job mean, then one row per job (failures included with their error).
+function batchSummaryMd(jobs, s) {
+  const okJobs = jobs.filter((j) => j.status === 'ok')
+  const lines = ['批处理预测结论（batch_predict）']
+  lines.push(`- 完成 ${s.ok ?? okJobs.length}/${jobs.length}${s.failed ? ` · 失败 ${s.failed}` : ''}`)
+  if (typeof s.meanPlddt === 'number') lines.push(`- 平均 pLDDT（各蛋白均值）: ${s.meanPlddt.toFixed(1)}`)
+  lines.push('', '| accession | 蛋白 | 状态 | 残基 | 平均 pLDDT | 低置信区段 | 备注 |', '|---|---|---|---|---|---|---|')
+  for (const j of jobs) {
+    const okr = j.status === 'ok'
+    lines.push(
+      `| ${j.accession} | ${j.name ?? ''} | ${okr ? '✅' : '❌'} | ${okr ? j.residues ?? '' : '—'} | ${okr && j.meanPlddt != null ? j.meanPlddt : '—'} | ${okr ? j.lowSegments ?? 0 : '—'} | ${okr ? j.savedTo ?? '' : j.error ?? ''} |`,
+    )
+  }
+  return lines.join('\n')
+}
+
 function BatchCard({ report, services }) {
   const jobs = Array.isArray(report.jobs) ? report.jobs : []
   const s = report.summary ?? {}
@@ -1259,6 +1276,7 @@ function BatchCard({ report, services }) {
   const tone = mean != null ? verdictTone(mean) : s.failed ? 'caution' : 'high'
   const [openAcc, setOpenAcc] = useState(null)
   const [sortBy, setSortBy] = useState('tool')
+  const [conclCopied, setConclCopied] = useState(false)
   // Rows always render failed jobs last; the select only reorders the successes.
   const sortedJobs =
     sortBy === 'plddt'
@@ -1315,6 +1333,21 @@ function BatchCard({ report, services }) {
                 h('option', { value: 'tool' }, '默认顺序'),
                 h('option', { value: 'plddt' }, '按 pLDDT 降序'),
                 h('option', { value: 'size' }, '按残基数'),
+              ),
+              h(
+                'button',
+                {
+                  className: 'pv-export',
+                  title: '复制可直接粘贴的批处理结论（Markdown 表格，含失败行）',
+                  onClick: () => {
+                    try {
+                      void navigator.clipboard?.writeText(batchSummaryMd(jobs, s))?.catch(() => {})
+                    } catch {}
+                    setConclCopied(true)
+                    setTimeout(() => setConclCopied(false), 1600)
+                  },
+                },
+                conclCopied ? '已复制 ✓' : '复制结论',
               ),
               h('button', { className: 'pv-export', onClick: () => exportBatchCsv(jobs) }, '导出 CSV'),
             ),
