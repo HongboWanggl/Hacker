@@ -85,7 +85,7 @@
 }
 .pv-bandbar-seg { min-width: 2px; }
 .pv-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 10.5px; color: var(--pv-muted); }
-.pv-legend-item { display: inline-flex; align-items: center; gap: 4px; }
+.pv-legend-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .pv-complex-metrics { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .pv-summary-copy { align-self: flex-start; margin-top: 6px; }
 .pv-metric-chip {
@@ -398,6 +398,7 @@ button.pv-delta-bar--neg:hover { background: #ff9d70; }
   border: 1px solid rgb(255 255 255 / 10%);
   font-size: 11px;
   color: #b9c2d4;
+  white-space: nowrap;
 }
 .pv-chain-dot {
   width: 9px;
@@ -621,6 +622,7 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
   font-size: 11px;
   color: var(--pv-muted, rgba(128, 128, 128, 0.9));
   margin-left: 4px;
+  white-space: nowrap;
 }
 .pv-pae-pairs {
   display: flex;
@@ -658,6 +660,7 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
   align-items: center;
   gap: 4px;
   color: var(--pv-fg, #dfe5ee);
+  white-space: nowrap;
 }
 .pv-plddt-el i,
 .pv-ligand-el i {
