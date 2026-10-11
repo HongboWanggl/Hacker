@@ -265,6 +265,20 @@ check(allStrokes().length > 0, `canvas still draws normally after clearing (${al
   await new Promise((r) => setTimeout(r, 300))
   const bhover = bcontainer.querySelector('.pv-hoverline')?.textContent ?? ''
   check(bhover.includes('A9'), `drill-down residue jump selects A9 (got "${bhover.slice(0, 40)}")`)
+
+  // Color mode dropdown: single-chain default is pLDDT; switching to rainbow
+  // swaps the legend (same dropdown as the main panel).
+  const bsel = bcontainer.querySelector('.pv-batch-detail .pv-select')
+  check(!!bsel, 'drill-down exposes the color mode dropdown')
+  const legendNote = () =>
+    [...bcontainer.querySelectorAll('.pv-legend-note')].map((n) => n.textContent).join('|')
+  check(legendNote().includes('pLDDT'), `default legend is pLDDT (got "${legendNote()}")`)
+  // React tracks select.value through its own descriptor — set via the native
+  // setter so the change event carries the new value into React's onChange.
+  Object.getOwnPropertyDescriptor(win.HTMLSelectElement.prototype, 'value').set.call(bsel, 'rainbow')
+  bsel.dispatchEvent(new win.Event('change', { bubbles: true }))
+  await new Promise((r) => setTimeout(r, 200))
+  check(legendNote().includes('N→C'), `rainbow legend appears after switch (got "${legendNote()}")`)
   bcontainer.remove()
 }
 

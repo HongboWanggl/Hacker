@@ -1288,6 +1288,10 @@ function BatchRowDetail({ job, services }) {
   // the main panel: curve band + faded 3D outside the range.
   const [seg, setSeg] = useState(null)
   const segRange = useMemo(() => (seg ? parseSeg(seg) : null), [seg])
+  // Coloring: defaults follow the panel kind (complexes → by-chain) and the
+  // dropdown overrides, exactly like the single-prediction panel. (effMode is
+  // computed after `residues` is derived below.)
+  const [colorMode, setColorMode] = useState(null)
   const [seqCopied, setSeqCopied] = useState(false)
   const [curveCopied, setCurveCopied] = useState(null)
   const [imgCopied, setImgCopied] = useState(null)
@@ -1313,6 +1317,7 @@ function BatchRowDetail({ job, services }) {
     return h('div', { className: 'pv-batch-detail pv-batch-detail--err' }, `结构加载失败：${loadError}`)
   }
   const residues = structure?.residues ?? null
+  const effMode = colorMode ?? (isMultiChain(residues) ? 'chain' : 'plddt')
   if (!residues) {
     return h(
       'div',
@@ -1366,8 +1371,7 @@ function BatchRowDetail({ job, services }) {
               onClick: async (e) => {
                 try {
                   const canvas = e.currentTarget.closest('.pv-3d-col')?.querySelector('canvas.pv-3d')
-                  const mode = isMultiChain(residues) ? 'chain' : 'plddt'
-                  const ok = await copy3DComposite(canvas, residues, mode)
+                  const ok = await copy3DComposite(canvas, residues, effMode)
                   setImgCopied(ok)
                 } catch {
                   setImgCopied(false)
@@ -1378,17 +1382,23 @@ function BatchRowDetail({ job, services }) {
             imgCopied == null ? '复制图像' : imgCopied ? '已复制 ✓' : '复制失败',
           ),
           h(
+            'select',
+            {
+              className: 'pv-select',
+              value: effMode,
+              onChange: (e) => setColorMode(e.target.value),
+              title: '切换 3D 与图例的着色方式',
+            },
+            h('option', { value: 'plddt' }, '按 pLDDT 着色'),
+            h('option', { value: 'rainbow' }, '彩虹 (N→C)'),
+            isMultiChain(residues) ? h('option', { value: 'chain' }, '按链着色') : null,
+          ),
+          h(
             'button',
             {
               type: 'button',
               className: 'pv-export',
-              onClick: (e) =>
-                export3DPng(
-                  e,
-                  `${job.accession}.3d.png`,
-                  residues,
-                  isMultiChain(residues) ? 'chain' : 'plddt',
-                ),
+              onClick: (e) => export3DPng(e, `${job.accession}.3d.png`, residues, effMode),
             },
             '导出 PNG',
           ),
@@ -1433,14 +1443,14 @@ function BatchRowDetail({ job, services }) {
             setSelected((prev) => (prev === k ? null : k))
             setHover(k)
           },
-          colorMode: isMultiChain(residues) ? 'chain' : 'plddt',
+          colorMode: effMode,
           autoSpin: false,
           seg: segRange,
-          onExport3D: (e) =>
-            export3DPng(e, `${job.accession}.3d.png`, residues, isMultiChain(residues) ? 'chain' : 'plddt'),
+          onExport3D: (e) => export3DPng(e, `${job.accession}.3d.png`, residues, effMode),
         }),
-        isMultiChain(residues) ? h(ChainLegend, { residues }) : null,
-        !isMultiChain(residues) ? h(PlddtLegend) : null,
+        effMode === 'chain' && isMultiChain(residues) ? h(ChainLegend, { residues }) : null,
+        effMode === 'rainbow' ? h(RainbowLegend) : null,
+        effMode !== 'chain' && effMode !== 'rainbow' ? h(PlddtLegend) : null,
         h(
           'div',
           { className: 'pv-hoverline' },
