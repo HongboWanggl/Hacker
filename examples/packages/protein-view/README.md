@@ -10,11 +10,21 @@ standalone in papers and slides.
 
 | 单蛋白预测 + 置信度 | 预测 vs AlphaFold DB 对比 |
 |---|---|
-| ![单蛋白预测面板](screenshots/main-panel.png) | ![对比面板](screenshots/compare-panel.png) |
+| ![单蛋白预测面板](screenshots/confidence-3d-curve.png) | ![对比面板](screenshots/compare-card.png) |
 
-复合物面板（Boltz-2 本地引擎）与 PAE 误差热图：
+批处理与搜索结果卡片；Cα 偏差透镜下的对比面板（3D ghost 与序列条按叠合后 Cα 距离重着色）：
 
-![复合物 + PAE](screenshots/complex-pae.png)
+| 多蛋白批处理 | UniProt 搜索 |
+|---|---|
+| ![批处理](screenshots/batch-card.png) | ![搜索](screenshots/search-card.png) |
+
+![Cα 偏差透镜](screenshots/compare-dist-lens.png)
+
+深色模式（跟随宿主 system/light/dark 设置；canvas 图表保留白底「论文图卡」风格，导出 PNG 跨主题逐字节一致）：
+
+| 单蛋白（深色） | 对比（深色） |
+|---|---|
+| ![深色单蛋白面板](screenshots/main-panel-dark.png) | ![深色对比面板](screenshots/compare-panel-dark.png) |
 
 ## Layout
 

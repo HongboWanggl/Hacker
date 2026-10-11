@@ -56,6 +56,7 @@ if [ "${1:-}" = "--live" ]; then
   live pv-click-live.mjs        # 3D click-to-select + toggle-off
   live pv-export-live.mjs       # PNG export downloads
   live pv-search-live.mjs       # uniprot_search hit-table card
+  live pv-dark-live.mjs         # dark-theme surfaces flip + restore
   live pv-complex-guide.mjs     # predict_complex no-key guidance
   live af-e2e-live2.mjs         # compare_alphafold live run
   live pv-mobile-e2e.mjs        # fresh-session full loop at 400px phone width
