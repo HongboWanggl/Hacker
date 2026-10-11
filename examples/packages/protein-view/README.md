@@ -65,7 +65,12 @@ The panel renders inside the host chat column, so breakpoints respond to the
 (`container-type: inline-size`) and `.pv-grid` stacks to a single column under
 `@container pvpanel (max-width: 760px)` (a viewport media query remains as a
 fallback). Legend items (`.pv-legend-item`, `.pv-chain-chip`, `.pv-plddt-el`,
-`.pv-legend-note`) are `white-space: nowrap` so labels wrap as whole units.
+`.pv-legend-note`) are `white-space: nowrap` so labels wrap as whole units —
+the chip itself is `flex-wrap: wrap`, so phone-width panels (~300px) re-flow
+the legend into multiple rows instead of overflowing. Long tool titles in the
+3D toolbar (e.g. `3D 叠合 · ESMFold 预测 393 aa + AlphaFold 参考 393 aa`) also
+gain `white-space: normal` under the same container query. Verified down to a
+340px viewport with zero horizontal overflow across main / batch / compare.
 Two known-benign behaviors: host styles leak `select { width: 100% }`, capped
 by `.pv-toolbar-controls .pv-select`; toolbars flex-wrap buttons at narrow
 widths.

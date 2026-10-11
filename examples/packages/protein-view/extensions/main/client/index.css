@@ -233,6 +233,12 @@ button.pv-delta-bar--neg:hover { background: #ff9d70; }
 .pv-curve-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .pv-3d-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .pv-3d-toolbar .pv-section-title { white-space: nowrap; }
+@container pvpanel (max-width: 760px) {
+  /* Long tool titles ("3D 叠合 · ESMFold 预测 393 aa + AlphaFold 参考 393 aa") may
+     exceed a phone-width toolbar — let them wrap instead of overflowing. Declared
+     after the nowrap rule above so the override wins the cascade. */
+  .pv-3d-toolbar .pv-section-title { white-space: normal; min-width: 0; }
+}
 .pv-toolbar-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .pv-toolbar-controls .pv-select { white-space: nowrap; width: auto; max-width: 240px; }
 .pv-select {
@@ -395,16 +401,19 @@ button.pv-delta-bar--neg:hover { background: #ff9d70; }
 }
 .pv-chain-chip {
   display: inline-flex;
+  flex-wrap: wrap; /* narrow panels: children wrap as whole units inside the chip */
   align-items: center;
-  gap: 6px;
+  gap: 4px 6px;
   padding: 2px 9px;
   border-radius: 999px;
   background: rgb(255 255 255 / 6%);
   border: 1px solid rgb(255 255 255 / 10%);
   font-size: 11px;
   color: #b9c2d4;
-  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
 }
+.pv-chain-chip > span { white-space: nowrap; }
 .pv-chain-dot {
   width: 9px;
   height: 9px;
