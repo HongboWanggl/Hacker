@@ -172,7 +172,7 @@ button.pv-delta-bar--neg:hover { background: #ff9d70; }
   min-height: 80px;
   display: grid;
   place-items: center;
-  color: #9aa7bd;
+  color: var(--pv-muted);
   font-size: 12px;
 }
 .pv-batch-loading .pv-spinner {
