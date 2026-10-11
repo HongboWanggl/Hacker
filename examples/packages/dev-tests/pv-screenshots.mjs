@@ -101,6 +101,18 @@ await openPanel(
   100,
 )
 await shoot('.pv-root:has(.pv-3d) .pv-grid', 'confidence-3d-curve')
+// Segment focus: a jump-box range lights the curve band AND fades the 3D
+// outside the range — the "where can I trust this fold" money shot.
+const jump = page.locator('.pv-jump').first()
+if (await jump.count()) {
+  await jump.fill('30-60')
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(1500)
+  await shoot('.pv-root:has(.pv-3d) .pv-grid', 'segment-focus')
+  await jump.fill('30-60')
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(800)
+}
 // (No complex-card shot: real Boltz reports need an API key, so no live session
 // exists. `.pv-complex-metrics` also matches the confidence summary — unusable.)
 

@@ -20,6 +20,11 @@ standalone in papers and slides.
 
 ![Cα 偏差透镜](../docs/screenshots/compare-dist-lens.png)
 
+区段聚焦（低置信 chip / 跳转框 `36-42` / 序列条拖选三路驱动同一机制）：
+曲线画出橙色区段带，3D 中段外残基淡化为灰——可信与存疑的折叠在空间上直接分开：
+
+![区段聚焦：曲线色带 + 3D 段外淡化](../docs/screenshots/segment-focus.png)
+
 序列条支持键盘导航（Tab 聚焦，←/→ 移动光标、回车选中、Home/End 跳转、Esc 退出），
 光标复用悬停高亮——鼠标与键盘共享同一套 3D/曲线联动；对比卡的分歧序列条复用同一组件，
 键盘行为一致；搜索表与批处理表同样可键盘操作（↑↓/Home/End 行间移动，空格勾选/展开，
