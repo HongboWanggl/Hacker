@@ -415,10 +415,10 @@ button.pv-delta-bar--neg:hover { background: #ff9d70; }
   gap: 4px 6px;
   padding: 2px 9px;
   border-radius: 999px;
-  background: rgb(255 255 255 / 6%);
-  border: 1px solid rgb(255 255 255 / 10%);
+  background: rgb(29 35 46 / 5%);
+  border: 1px solid var(--pv-line);
   font-size: 11px;
-  color: #b9c2d4;
+  color: var(--pv-text);
   min-width: 0;
   max-width: 100%;
 }
@@ -431,7 +431,7 @@ button.pv-delta-bar--neg:hover { background: #ff9d70; }
   box-shadow: 0 0 0 2px rgb(255 255 255 / 12%);
 }
 button.pv-chain-chip { cursor: pointer; transition: background 0.15s; }
-button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
+button.pv-chain-chip:hover { background: rgb(29 35 46 / 9%); }
 .pv-chain-chip--off { opacity: 0.4; text-decoration: line-through; }
 
 /* uniprot_search results table */
@@ -501,7 +501,7 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
   color: var(--pv-muted);
   white-space: nowrap;
 }
-.pv-search-head-cell:hover { color: #c9d4ee; }
+.pv-search-head-cell:hover { color: #3b6fe0; }
 .pv-search-head-cell--sorted { color: #3b6fe0; font-weight: 600; }
 .pv-search-row {
   width: 100%;
@@ -706,7 +706,7 @@ button.pv-chain-chip:hover { background: rgb(255 255 255 / 12%); }
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--pv-fg, #dfe5ee);
+  color: var(--pv-text);
   white-space: nowrap;
 }
 .pv-plddt-el i,
