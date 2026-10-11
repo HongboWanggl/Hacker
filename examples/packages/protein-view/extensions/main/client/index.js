@@ -2814,6 +2814,21 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
       g.fillText(String(v), w - padX - 16, py(v) - 2)
     }
 
+    // Mean line: a distinct long-dash + "μ" tag so the panel's headline number
+    // is visible in the curve itself. Skipped when it would sit on a grid line.
+    const mean = residues.reduce((s, r) => s + (r.b ?? 0), 0) / n
+    if (![90, 70, 50].some((v) => Math.abs(v - mean) < 2.5)) {
+      g.strokeStyle = 'rgba(72,82,102,0.5)'
+      g.setLineDash([5, 3])
+      g.beginPath()
+      g.moveTo(padX, py(mean))
+      g.lineTo(w - padX, py(mean))
+      g.stroke()
+      g.setLineDash([])
+      g.fillStyle = 'rgba(72,82,102,0.85)'
+      g.fillText(`μ${mean.toFixed(1)}`, w - padX - 30, py(mean) - 3)
+    }
+
     // x-axis residue ticks: sequence positions along the bottom (~6 labels)
     const tickStep = [10, 20, 50, 100, 200, 500].find((s) => n / s <= 8) ?? 1000
     g.fillStyle = 'rgba(90,90,90,0.8)'

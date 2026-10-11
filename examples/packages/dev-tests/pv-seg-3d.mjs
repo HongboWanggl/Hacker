@@ -38,11 +38,12 @@ const DIM = 'rgba(120,130,150,0.25)'
 // Recording 2D context: logs strokeStyle on every stroke() so the dimmed
 // bonds are detectable without pixel access.
 function recordingCtx() {
-  const t = { canvas: null, __strokes: [] }
+  const t = { canvas: null, __strokes: [], __texts: [] }
   return new Proxy(t, {
     get(target, prop) {
       if (prop === 'stroke') return () => void target.__strokes.push(target.strokeStyle)
       if (prop === 'fill') return () => void target.__strokes.push(null)
+      if (prop === 'fillText') return (txt) => void target.__texts.push(txt)
       if (prop === 'measureText') return () => ({ width: 10 })
       if (prop === 'createLinearGradient' || prop === 'createRadialGradient')
         return () => ({ addColorStop() {} })
@@ -77,7 +78,8 @@ const mkCtx = () => ({
 })
 
 // Gentle zig-zag keeps consecutive Cα at ~3.8 Å so the 4.5 Å bond gate
-// actually produces bonds (a tight helix pitches past the gate).
+// actually produces bonds (a tight helix pitches past the gate). b = 55+i puts
+// the mean at 64.5 — clear of the 90/70/50 grid lines so the μ line draws.
 const mkResidues = (n) =>
   Array.from({ length: n }, (_, i) => ({
     i: i + 1,
@@ -85,7 +87,7 @@ const mkResidues = (n) =>
     x: i * 3.8,
     y: (i % 2) * 0.5,
     z: 0,
-    b: 60 + i,
+    b: 55 + i,
   }))
 
 const services = {
@@ -277,6 +279,17 @@ check(dimCount() === 0, `clicking the focus chip clears the focus (got ${dimCoun
   await new Promise((r) => setTimeout(r, 300))
   const bhover = bcontainer.querySelector('.pv-hoverline')?.textContent ?? ''
   check(bhover.includes('A9'), `drill-down residue jump selects A9 (got "${bhover.slice(0, 40)}")`)
+
+  // Curve draws a mean reference line ("μ64.5") — headline number visible in
+  // the plot, not just the summary.
+  const cvTexts = () => {
+    const cv = container.querySelector('canvas.pv-curve')
+    return cv.getContext().__texts.map(String)
+  }
+  check(
+    cvTexts().some((t) => t.startsWith('μ')),
+    `curve draws the mean line tag (got [${cvTexts().filter((t) => t.startsWith('μ'))}])`,
+  )
 
   // Color mode dropdown: single-chain default is pLDDT; switching to rainbow
   // swaps the legend (same dropdown as the main panel).
