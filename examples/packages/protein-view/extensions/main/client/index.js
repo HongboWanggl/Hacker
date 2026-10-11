@@ -1238,6 +1238,10 @@ function BatchRowDetail({ job, services }) {
   const [loadError, setLoadError] = useState(null)
   const [hover, setHover] = useState(null)
   const [selected, setSelected] = useState(null)
+  // Segment focus for the drill-down (strip drag-select), same semantics as
+  // the main panel: curve band + faded 3D outside the range.
+  const [seg, setSeg] = useState(null)
+  const segRange = useMemo(() => (seg ? parseSeg(seg) : null), [seg])
   const [seqCopied, setSeqCopied] = useState(false)
   const [curveCopied, setCurveCopied] = useState(null)
   const [imgCopied, setImgCopied] = useState(null)
@@ -1371,6 +1375,7 @@ function BatchRowDetail({ job, services }) {
           },
           colorMode: isMultiChain(residues) ? 'chain' : 'plddt',
           autoSpin: false,
+          seg: segRange,
           onExport3D: (e) =>
             export3DPng(e, `${job.accession}.3d.png`, residues, isMultiChain(residues) ? 'chain' : 'plddt'),
         }),
@@ -1444,6 +1449,7 @@ function BatchRowDetail({ job, services }) {
           onHover: setHover,
           selected,
           onSelect: (idx) => setSelected((prev) => (prev === idx ? null : idx)),
+          highlight: seg,
         }),
         h(SequenceStrip, {
           residues,
@@ -1451,6 +1457,18 @@ function BatchRowDetail({ job, services }) {
           onHover: setHover,
           selected,
           onSelect: (idx) => setSelected((prev) => (prev === idx ? null : idx)),
+          // Drag-select commits a segment focus, same as the main panel —
+          // multi-chain drags must stay within one chain to stay unambiguous.
+          onRangeSelect: (s, t) => {
+            const a = residues[s]
+            const b = residues[t]
+            if (!a || !b) return
+            const multi = isMultiChain(residues)
+            if (multi && a.chain !== b.chain) return
+            const lo = Math.min(a.i, b.i)
+            const hi = Math.max(a.i, b.i)
+            setSeg(multi && a.chain ? `${a.chain}:${lo}-${hi}` : `${lo}-${hi}`)
+          },
         }),
       ),
     ),
@@ -2891,6 +2909,7 @@ function Structure3D({
   ghostColorOf,
   hintText,
   hiddenChains,
+  seg,
   onExport3D,
   downloadPdbEl,
 }) {
@@ -2899,6 +2918,17 @@ function Structure3D({
   const isHidden = useCallback(
     (k) => !!(hiddenChains?.size && hiddenChains.has(residues?.[k]?.chain)),
     [hiddenChains, residues],
+  )
+  // Segment focus (low-confidence chips / jump ranges / strip drag-select):
+  // residues outside the segment fade into the background so the in-segment
+  // fold reads at a glance — the 3D side of the curve's orange band.
+  const segIn = useCallback(
+    (k) => {
+      if (!seg) return true
+      const r = residues?.[k]
+      return !!r && (!seg.chain || r.chain === seg.chain) && r.i >= seg.a && r.i <= seg.b
+    },
+    [seg, residues],
   )
   const canvasRef = useRef(null)
   const tipRef = useRef(null)
@@ -3190,7 +3220,7 @@ function Structure3D({
           const p1 = projected[it.a]
           const p2 = projected[it.b]
           const d = depth01(it.z)
-          const dimmed = selected != null && it.a !== selected && it.b !== selected
+          const dimmed = (selected != null && it.a !== selected && it.b !== selected) || !segIn(it.a)
           ctx2d.strokeStyle = dimmed ? 'rgba(120,130,150,0.25)' : fog(colorOf(it.a), d)
           ctx2d.lineWidth = (0.8 + 2.4 * (1 - d)) * (dimmed ? 0.6 : 1)
           ctx2d.lineCap = 'round'
@@ -3203,7 +3233,7 @@ function Structure3D({
           const d = depth01(p.z)
           const isHover = hover === it.k
           const isSel = selected === it.k
-          const dimmed = selected != null && !isSel
+          const dimmed = (selected != null && !isSel) || !segIn(it.k)
           const r = (1.7 + 1.5 * (1 - d)) * (isHover || isSel ? 1.6 : 1)
           const col = colorOf(it.k)
           ctx2d.beginPath()
@@ -3268,6 +3298,7 @@ function Structure3D({
     ghost,
     ghostColorOf,
     isHidden,
+    segIn,
   ])
 
   const pick = useCallback(
@@ -4320,6 +4351,7 @@ function ProteinToolView({ owner, services }) {
               ligand: ligandInfo,
               showLigand,
               hiddenChains,
+              seg: segRange,
               onExport3D: (e) =>
                 export3DPng(
                   e,

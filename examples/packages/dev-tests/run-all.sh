@@ -50,6 +50,7 @@ run pv-kbd-batch.mjs              # batch table keyboard toggle + roving
 run pv-motion.mjs                 # auto-rotate respects prefers-reduced-motion
 run pv-kbd-compare.mjs            # compare divergence strip inherits keyboard nav
 run pv-drag-range.mjs             # strip mouse drag-select commits segment focus
+run pv-seg-3d.mjs                 # segment focus fades out-of-segment 3D bonds (main + drill-down)
 
 if [ "${1:-}" = "--live" ]; then
   echo "=== live E2E (needs daemon + web on 4177) ==="
