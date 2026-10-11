@@ -1462,8 +1462,13 @@ function BatchRowDetail({ job, services }) {
         ),
         segRange
           ? h(
-              'div',
-              { className: 'pv-fmt' },
+              'button',
+              {
+                type: 'button',
+                className: 'pv-fmt pv-fmt--clear',
+                title: '点击取消区段聚焦',
+                onClick: () => setSeg(null),
+              },
               `聚焦区段 ${segRange.chain ? `${segRange.chain}:` : ''}${segRange.a}–${segRange.b}`,
             )
           : null,
@@ -4370,8 +4375,13 @@ function ProteinToolView({ owner, services }) {
             ),
             segRange
               ? h(
-                  'div',
-                  { className: 'pv-fmt' },
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'pv-fmt pv-fmt--clear',
+                    title: '点击取消区段聚焦',
+                    onClick: () => setHighlightSeg(null),
+                  },
                   `聚焦区段 ${segRange.chain ? `${segRange.chain}:` : ''}${segRange.a}–${segRange.b}`,
                 )
               : null,

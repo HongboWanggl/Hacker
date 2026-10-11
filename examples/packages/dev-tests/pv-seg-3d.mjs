@@ -170,6 +170,18 @@ const after = dimCount()
 check(after === 0, `clearing the focus removes dim bonds (got ${after})`)
 check(allStrokes().length > 0, `canvas still draws normally after clearing (${allStrokes().length} strokes)`)
 
+// The 聚焦区段 chip is a button — clicking it clears the focus too.
+resetStrokes()
+jump.value = '3-6'
+jump.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+await new Promise((r) => setTimeout(r, 300))
+const chip = container.querySelector('button.pv-fmt--clear')
+check(!!chip, 'focus chip renders as a clearable button')
+resetStrokes() // drop the focused draw's dim strokes; only the post-click redraw counts
+chip?.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true }))
+await new Promise((r) => setTimeout(r, 300))
+check(dimCount() === 0, `clicking the focus chip clears the focus (got ${dimCount()} dim strokes)`)
+
 // --- batch drill-down: strip drag-select must drive the same 3D fade
 {
   const bctx = mkCtx()

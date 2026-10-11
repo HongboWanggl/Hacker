@@ -585,6 +585,16 @@ button.pv-delta-bar--neg:hover {
   padding: 3px 8px;
   align-self: flex-start;
 }
+/* The focus chip is a button: clicking (or Enter/Space on keyboard focus)
+   clears the segment focus — same toggle the jump box's re-entry provides. */
+button.pv-fmt--clear {
+  cursor: pointer;
+  border: none;
+  font: inherit;
+}
+button.pv-fmt--clear:hover {
+  background: rgb(255 125 69 / 22%);
+}
 
 .pv-3d {
   border-radius: 10px;
