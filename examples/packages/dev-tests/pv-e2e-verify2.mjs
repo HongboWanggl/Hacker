@@ -24,20 +24,39 @@ const labels = await page.evaluate(() =>
 )
 console.log('labels:', JSON.stringify([...new Set(labels)].slice(0, 10)))
 // Session titles rotate as new probes run; try known historical titles in
-// order, else stay on the current view. The point is slot replay of an
-// already-completed turn, so any opened session works.
-const candidates = [/p53蛋白P04637/, /p53蛋白/, /对比p53/, /预测P61626/, /预测蛋白质/]
+// order. The point is slot replay of an already-completed turn, and the
+// hover check below needs a ≥101-residue panel — so accept a candidate only
+// when its mounted strip is long enough, else keep looking (a short-protein
+// session like a 41-aa custom sequence otherwise hijacks the run).
+const candidates = [
+  /p53蛋白P04637/,
+  /p53蛋白/,
+  /对比p53/,
+  /预测P61626/,
+  /P04637/,
+  /P61626/,
+  /预测蛋白结构并总结置信度/,
+  /蛋白结构预测与置信度总结/,
+  /预测指定序列蛋白结构与置信度/,
+  /预测蛋白质/,
+]
 let opened = false
 for (const rx of candidates) {
   try {
     await page.getByText(rx).first().click({ timeout: 4000 })
-    console.log('opened session', rx)
+  } catch {
+    continue
+  }
+  await page.waitForTimeout(9000)
+  const tiles = await page.evaluate(() => document.querySelectorAll('.pv-seq-tile').length)
+  console.log('opened session', rx, '→ seqTiles', tiles)
+  if (tiles >= 100) {
     opened = true
     break
-  } catch {}
+  }
 }
-if (!opened) console.log('no historical title matched; using current view')
-await page.waitForTimeout(9000)
+if (!opened) console.log('no long-protein session matched; using current view')
+await page.waitForTimeout(3000)
 const stats = await page.evaluate(() => ({
   pvRoots: document.querySelectorAll('.pv-root').length,
   curve: document.querySelectorAll('.pv-curve').length,
