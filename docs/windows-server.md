@@ -59,6 +59,10 @@ mkdir C:\agh-home\data, C:\agh-home\secrets -Force
 | `~/agh-home/data/secrets/agnes-ai/default` | `C:\agh-home\data\secrets\agnes-ai\default` |
 | `~/agh-home/secrets/boltz/default`（如有） | `C:\agh-home\secrets\boltz\default` |
 
+> 异地不方便 scp/U 盘时：先把文件拷到对方**桌面**（向日葵文件传送或聊天工具传文件均可），
+> 再由部署步骤移入 `C:\agh-home` 并收紧权限。**任何情况下密钥文件内容不要粘贴进聊天、
+> 截图或 git 仓库**——传「文件」而不是传「文字」。
+
 拷完在 PowerShell 里收紧权限（NTFS）：
 ```powershell
 icacls C:\agh-home\data\secrets /inheritance:r /grant:r "$env:USERNAME:R"
@@ -103,6 +107,20 @@ powercfg /change hibernate-timeout-ac 0
 |---|---|
 | 同一局域网 | 直接开 `http://<windows-ip>:4177` |
 | 异地 | 两边都装 **Tailscale**（免费）登同一账号，访问 `http://<tailscale-ip>:4177`——加密且自带鉴权，不暴露公网 |
+
+### 异地部署流程（不在同一局域网时）
+
+代码与文档走 GitHub，密钥走人工点对点，部署交给对面机器上的 Claude Code：
+
+1. **GitHub 传代码**：本仓库（`HongboWanggl/Hacker`）已含本文档；对面 `git clone` 即得全部代码与 `docs/windows-server.md`。
+2. **密钥人工传**：Mac 上把第 4 步表格里的 2–3 个文件拷到对方**桌面**（向日葵文件传送等），不要走 git。
+3. **Tailscale 组网**：两边都装 Tailscale、登同一账号；Windows 上 `ipconfig` 记下 `100.x.x.x` 的 Tailscale IP。此后所有访问都走这个 IP，向日葵只留作应急/传文件。
+4. **对面跑 Claude Code** 执行部署（提示词见下），装依赖、移密钥入 `C:\agh-home`、收紧 NTFS 权限、配防火墙与自启。
+5. **防火墙**：用了 Tailscale 后，防火墙规则可直接限定 Tailscale 网段（更干净）：
+   ```powershell
+   New-NetFirewallRule -DisplayName "AGH Web 4177 (Tailscale)" -Direction Inbound -Protocol TCP -LocalPort 4177 -Action Allow -RemoteAddress 100.64.0.0/10
+   ```
+   向日葵建议平时退出登录，用时再上，减少暴露面。
 
 查本机局域网 IP：`ipconfig`（找 IPv4 地址）。
 
