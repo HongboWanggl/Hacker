@@ -126,5 +126,14 @@ check(
   'click still copies the accession (✓ feedback)',
 )
 
+// Sort headers are native <button>s: real browsers give Tab/Enter/Space for
+// free (happy-dom doesn't synthesize Enter→click, so pin the structure).
+check(
+  [...container.querySelectorAll('.pv-search-head-cell')].every(
+    (c) => c.tagName === 'BUTTON' && c.getAttribute('type') === 'button',
+  ),
+  'sort headers are native buttons (keyboard-sortable by construction)',
+)
+
 console.log(failed ? 'KBD SEARCH FAIL' : 'KBD SEARCH OK')
 process.exit(failed ? 1 : 0)
