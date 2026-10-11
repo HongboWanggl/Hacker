@@ -2826,7 +2826,8 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
       g.stroke()
       g.setLineDash([])
       g.fillStyle = 'rgba(72,82,102,0.85)'
-      g.fillText(`μ${mean.toFixed(1)}`, w - padX - 30, py(mean) - 3)
+      // Near the top edge the label would clip — flip below the line instead.
+      g.fillText(`μ${mean.toFixed(1)}`, w - padX - 30, py(mean) + (py(mean) < 20 ? 11 : -3))
     }
 
     // x-axis residue ticks: sequence positions along the bottom (~6 labels)
