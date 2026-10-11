@@ -67,6 +67,21 @@ check('row click opens drill-down', !!container.querySelector('.pv-batch-detail'
     check('drill-down clipboard write receives image/png', !!clipItems && clipItems['image/png'] instanceof Blob && clipItems['image/png'].type === 'image/png')
     check('drill-down button confirms copy', (detailCopy.textContent ?? '').includes('已复制'))
   }
+  // drill-down 复制结论: recomputed from the loaded residues (mean, bands,
+  // verdict, output file) — same markdown shape as the single-panel conclusion.
+  const mdTexts2 = []
+  try { Object.defineProperty(win.navigator, 'clipboard', { value: { writeText: (t) => mdTexts2.push(t) }, configurable: true }) } catch {}
+  const detailConcl = [...container.querySelectorAll('.pv-batch-detail button')].find((b) => (b.textContent ?? '').trim() === '复制结论')
+  check('drill-down copy-conclusion button rendered', !!detailConcl)
+  if (detailConcl) {
+    detailConcl.dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 120))
+    const md = mdTexts2.join('\n')
+    check('drill-down markdown: title + mean from residues', md.startsWith('结构预测结论：P61626') && md.includes('- 平均 pLDDT: 81.0（2 残基）'))
+    check('drill-down markdown: band distribution', md.includes('高 (70–90) 2'))
+    check('drill-down markdown: verdict + file', md.includes('- 解读: 骨架可靠 · 局部待验证') && md.includes('- 结构文件: structures/lyz.pdb'))
+    check('drill-down conclusion button confirms', (detailConcl.textContent ?? '').includes('已复制'))
+  }
 }
 okRows[0].dispatchEvent(new win.MouseEvent('click', { bubbles: true }))
 await new Promise((r) => setTimeout(r, 300))

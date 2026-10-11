@@ -912,6 +912,42 @@ function CompareCard({ report, services }) {
 // Inline drill-down for a batch row: lazily loads that protein's structure via
 // the protein.structure service and renders the same 3D + curve pair the single
 // prediction panel uses, so a batch becomes a multi-protein workbench.
+// Ready-to-paste Markdown conclusion for a batch drill-down: the tool report
+// carries only per-job aggregates, so the stats are recomputed from the loaded
+// residues (same thresholds as the band coloring).
+function residuesSummaryMd(name, savedTo, residues) {
+  if (!residues?.length) return ''
+  const mean = residues.reduce((a, r) => a + (r.b ?? 0), 0) / residues.length
+  const counts = [0, 0, 0, 0]
+  for (const r of residues) counts[(r.b ?? 0) >= 90 ? 0 : (r.b ?? 0) >= 70 ? 1 : (r.b ?? 0) >= 50 ? 2 : 3]++
+  // contiguous <70 runs (≥3 residues) — same "可能为无序区" reading as the tool report
+  const segs = []
+  let start = null
+  residues.forEach((r, idx) => {
+    if ((r.b ?? 0) < 70) {
+      if (start == null) start = idx
+    } else if (start != null) {
+      if (idx - start >= 3) segs.push([start, idx - 1])
+      start = null
+    }
+  })
+  if (start != null && residues.length - start >= 3) segs.push([start, residues.length - 1])
+  const lines = [`结构预测结论：${name}`]
+  lines.push(`- 平均 pLDDT: ${mean.toFixed(1)}（${residues.length} 残基）`)
+  lines.push(`- 置信度分布: ${BANDS.map((b, i) => `${b.label} ${counts[i]}`).join(' · ')}`)
+  if (segs.length) {
+    lines.push(
+      `- 低置信区段: ${segs.map(([a, b]) => {
+        const m = residues.slice(a, b + 1).reduce((x, r) => x + (r.b ?? 0), 0) / (b - a + 1)
+        return `${residues[a].i}–${residues[b].i}（平均 ${m.toFixed(1)}）`
+      }).join('、')}——可能为无序区`,
+    )
+  }
+  lines.push(`- 解读: ${VERDICT_ZH[verdictTone(mean)]}`)
+  if (savedTo) lines.push(`- 结构文件: ${savedTo}`)
+  return lines.join('\n')
+}
+
 function BatchRowDetail({ job, services }) {
   const [structure, setStructure] = useState(null)
   const [loadError, setLoadError] = useState(null)
@@ -920,6 +956,7 @@ function BatchRowDetail({ job, services }) {
   const [seqCopied, setSeqCopied] = useState(false)
   const [curveCopied, setCurveCopied] = useState(null)
   const [imgCopied, setImgCopied] = useState(null)
+  const [conclCopied, setConclCopied] = useState(false)
 
   useEffect(() => {
     if (!job.savedTo || !services) return
@@ -963,6 +1000,21 @@ function BatchRowDetail({ job, services }) {
           'div',
           { className: 'pv-3d-toolbar' },
           h('div', { className: 'pv-section-title' }, `${job.accession} 3D 结构`),
+          h(
+            'button',
+            {
+              className: 'pv-export',
+              title: '复制可直接粘贴的预测结论（Markdown，按当前结构现算）',
+              onClick: () => {
+                try {
+                  void navigator.clipboard?.writeText(residuesSummaryMd(job.accession, job.savedTo, residues))?.catch(() => {})
+                } catch {}
+                setConclCopied(true)
+                setTimeout(() => setConclCopied(false), 1600)
+              },
+            },
+            conclCopied ? '已复制 ✓' : '复制结论',
+          ),
           h(
             'button',
             {
