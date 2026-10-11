@@ -58,6 +58,18 @@ Tests live in `../dev-tests` (shared with protein-predictor):
 Gotchas live in `~/.claude/projects/-Users-wanghanbao/memory/agh-web-ui-live-probes.md`
 (happy-dom event quirks, headless clipboard denial, α-blend pixel thresholds).
 
+## Responsive behavior
+
+The panel renders inside the host chat column, so breakpoints respond to the
+**panel's own width**, not the viewport: `.pv-root` is a CSS container
+(`container-type: inline-size`) and `.pv-grid` stacks to a single column under
+`@container pvpanel (max-width: 760px)` (a viewport media query remains as a
+fallback). Legend items (`.pv-legend-item`, `.pv-chain-chip`, `.pv-plddt-el`,
+`.pv-legend-note`) are `white-space: nowrap` so labels wrap as whole units.
+Two known-benign behaviors: host styles leak `select { width: 100% }`, capped
+by `.pv-toolbar-controls .pv-select`; toolbars flex-wrap buttons at narrow
+widths.
+
 ## Conventions
 
 - Flat output schemas only (nested objects are rejected by the protocol);
