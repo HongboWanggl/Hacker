@@ -1786,7 +1786,12 @@ function BatchCard({ report, services }) {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
                       setOpenAcc((prev) => (prev === j.accession ? null : j.accession))
-                    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+                    } else if (
+                      e.key === 'ArrowDown' ||
+                      e.key === 'ArrowUp' ||
+                      e.key === 'Home' ||
+                      e.key === 'End'
+                    ) {
                       e.preventDefault()
                       const r = [
                         ...e.currentTarget.closest('.pv-batch').querySelectorAll('.pv-batch-row--ok'),

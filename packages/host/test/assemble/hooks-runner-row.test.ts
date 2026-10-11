@@ -3,7 +3,7 @@ import type { HookEvent, HookReturnMap } from '@agnes/extension-api'
 import type { InferenceEvent } from '@agnes/protocol'
 import { describe, expect, it } from 'vitest'
 import { createTestHost } from '../../testkit/index.js'
-import { auditKinds, pluginRow, pluginSource, scratch, settle, targetOf } from './plugin-extension-fixture.js'
+import { auditKinds, pluginSource, scratch, settle } from './plugin-extension-fixture.js'
 
 const packageDirs = {
   '@agnes/base': fileURLToPath(new URL('../../../base', import.meta.url)),

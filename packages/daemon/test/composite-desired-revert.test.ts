@@ -85,8 +85,8 @@ describe('packageOfRow', () => {
 
 describe('revertTarget', () => {
   const loadable = new Map([
-    ['pkg-a@' + snapshot('1'), snapshot('1')],
-    ['pkg-b@' + snapshot('2'), snapshot('2')],
+    [`pkg-a@${snapshot('1')}`, snapshot('1')],
+    [`pkg-b@${snapshot('2')}`, snapshot('2')],
   ])
 
   it('gives back the previous target when a newly enabled package failed', () => {
