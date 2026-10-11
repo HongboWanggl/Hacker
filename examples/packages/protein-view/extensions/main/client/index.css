@@ -99,7 +99,7 @@
   border: 1px solid rgb(0 83 214 / 18%);
 }
 .pv-metric-label { color: var(--pv-muted); }
-.pv-metric-value { font-variant-numeric: tabular-nums; font-weight: 600; }
+.pv-metric-value { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
 .pv-legend-swatch { width: 9px; height: 9px; border-radius: 3px; }
 
 /* AlphaFold comparison card */
@@ -238,6 +238,15 @@ button.pv-delta-bar--neg:hover { background: #ff9d70; }
      exceed a phone-width toolbar — let them wrap instead of overflowing. Declared
      after the nowrap rule above so the override wins the cascade. */
   .pv-3d-toolbar .pv-section-title { white-space: normal; min-width: 0; }
+}
+@container pvpanel (max-width: 480px) {
+  /* Batch rows carry fixed-width parts (accession, mini bar, score badge, caret)
+     plus a nowrap meta string — past ~480px panels they can't all fit. The mini
+     bar is decorative (the drill-down renders the full curve), so drop it and let
+     the meta wrap. */
+  .pv-batch-bar { display: none; }
+  .pv-batch-acc { min-width: 0; white-space: nowrap; }
+  .pv-batch-meta { white-space: normal; }
 }
 .pv-toolbar-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .pv-toolbar-controls .pv-select { white-space: nowrap; width: auto; max-width: 240px; }
