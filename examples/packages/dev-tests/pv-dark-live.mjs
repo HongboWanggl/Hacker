@@ -55,9 +55,25 @@ try {
     await page.waitForTimeout(2000)
   }
 
-  const opened = await openSession(/预测蛋白结构并总结置信度|蛋白结构预测与置信度总结|p53蛋白/)
-  if (!opened) throw new Error('no confidence-panel session found in sidebar')
-  await expandTurns()
+  // Prefer a LONG panel (≥100 tiles) so the dark gallery shows the dense
+  // strip; short 40-aa panels read too sparse for the shot.
+  let opened = false
+  for (const re of [
+    /预测蛋白结构并总结置信度/,
+    /蛋白结构预测与置信度总结/,
+    /预测指定序列蛋白结构与置信度/,
+    /p53蛋白/,
+    /P61626/,
+    /预测蛋白质/,
+  ]) {
+    if (!(await openSession(re))) continue
+    await expandTurns()
+    if (await page.evaluate(() => document.querySelectorAll('.pv-seq-tile').length >= 100)) {
+      opened = true
+      break
+    }
+  }
+  if (!opened) throw new Error('no confidence-panel session with ≥100 tiles found in sidebar')
 
   const styles = () =>
     page.evaluate(() => {
@@ -114,6 +130,19 @@ try {
   }
 
   if (SHOTS) await shoot('.pv-root', 'main-panel-dark')
+
+  // Dark segment-focus shot: same money view as the light gallery (curve band
+  // + 3D fade), cleared afterwards so the compare assertions stay untouched.
+  const jump = page.locator('.pv-jump').first()
+  if (await jump.count()) {
+    await jump.fill('30-60')
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(1200)
+    await shoot('.pv-root:has(.pv-3d) .pv-grid', 'segment-focus-dark')
+    await jump.fill('30-60')
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(600)
+  }
 
   // Compare card: track surfaces must flip too.
   if (await openSession(/Compare p53|对比/)) {

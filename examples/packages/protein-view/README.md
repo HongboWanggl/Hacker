@@ -39,6 +39,8 @@ standalone in papers and slides.
 |---|---|
 | ![深色单蛋白面板](../docs/screenshots/main-panel-dark.png) | ![深色对比面板](../docs/screenshots/compare-panel-dark.png) |
 
+![深色区段聚焦](../docs/screenshots/segment-focus-dark.png)
+
 ## Layout
 
 ```
