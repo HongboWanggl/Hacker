@@ -85,6 +85,52 @@ function parseSeg(s) {
   return m ? { chain: m[1] || null, a: Number(m[2]), b: Number(m[3]) } : null
 }
 
+// Shared jump-box keydown handler (main panel + batch drill-down): a residue
+// RANGE ("36-42" / "B:1-5") drives the same segment focus the low-confidence
+// chips use (curve band + 3D fade) and toggles off on re-entry; a plain
+// residue number, "K101" (single chain) or "B:17" (chain:residue) jumps to
+// and selects that residue. onSeg receives the normalized range string or
+// null (caller owns the toggle/compare against its current value); onResidue
+// receives the matched residue index.
+function jumpBoxKeyDown(residues, { onSeg, onResidue }) {
+  return (e) => {
+    if (e.key !== 'Enter') return
+    if (!residues) return
+    const raw = e.currentTarget.value.trim()
+    const multi = isMultiChain(residues)
+    const seg = parseSeg(raw)
+    if (seg && !(multi && !seg.chain)) {
+      const norm = seg.chain ? `${seg.chain.toUpperCase()}:${seg.a}-${seg.b}` : raw
+      const inSeg = residues.some(
+        (r) =>
+          (!seg.chain || r.chain?.toUpperCase() === seg.chain.toUpperCase()) && r.i >= seg.a && r.i <= seg.b,
+      )
+      if (inSeg) {
+        onSeg(norm)
+        e.currentTarget.value = ''
+        return
+      }
+    }
+    const cm = /^([A-Za-z][A-Za-z0-9]{0,2}):(\d+)$/.exec(raw)
+    // single-chain panels also accept aa+number ("K101") — ambiguous
+    // with chain letters on complexes, so only offered there
+    const am = !multi ? /^([A-Za-z])(\d+)$/.exec(raw) : null
+    const idx = cm
+      ? residues.findIndex(
+          (r) => r.chain && r.chain.toUpperCase() === cm[1].toUpperCase() && r.i === Number(cm[2]),
+        )
+      : am
+        ? residues.findIndex(
+            (r) => r.i === Number(am[2]) && (r.aa ?? '')[0]?.toUpperCase() === am[1].toUpperCase(),
+          )
+        : residues.findIndex((r) => r.i === Number(raw))
+    if (idx >= 0) {
+      onResidue(idx)
+      e.currentTarget.value = ''
+    }
+  }
+}
+
 // Users who ask the OS for less motion shouldn't get a perpetually spinning
 // structure: auto-rotate defaults to off under "prefers-reduced-motion: reduce"
 // (the toolbar checkbox can still turn it back on). Init-time check is enough —
@@ -1363,6 +1409,20 @@ function BatchRowDetail({ job, services }) {
             },
             seqCopied ? '已复制 ✓' : '复制序列',
           ),
+          // Same jump box as the single-prediction panel: residue jumps and
+          // segment ranges (toggle off on re-entry) work inside drill-downs.
+          h('input', {
+            className: 'pv-jump',
+            placeholder: isMultiChain(residues) ? '残基号、B:17 或 B:1-5…' : '残基号 / K101 / 36-42…',
+            title: '输入残基号或区段（如 36-42）回车，3D 与曲线同步聚焦；再输一次取消',
+            onKeyDown: jumpBoxKeyDown(residues, {
+              onSeg: (norm) => setSeg((prev) => (prev === norm ? null : norm)),
+              onResidue: (idx) => {
+                setSelected(idx)
+                setHover(idx)
+              },
+            }),
+          }),
         ),
         h(Structure3D, {
           residues,
@@ -1390,6 +1450,13 @@ function BatchRowDetail({ job, services }) {
               ? `已选 ${resLabel(residues, residues[selected])} · pLDDT ${residues[selected].b.toFixed(1)}`
               : (job.verdict ?? ''),
         ),
+        segRange
+          ? h(
+              'div',
+              { className: 'pv-fmt' },
+              `聚焦区段 ${segRange.chain ? `${segRange.chain}:` : ''}${segRange.a}–${segRange.b}`,
+            )
+          : null,
       ),
       h(
         'div',
@@ -4281,51 +4348,13 @@ function ProteinToolView({ owner, services }) {
                   title: isMultiChain(residues)
                     ? '输入残基号、链:残基号（如 B:17）或链:区段（如 B:1-5）回车，3D 与曲线同步高亮'
                     : '输入残基号、氨基酸+编号（如 K101）或区段（如 36-42）回车，3D 与曲线同步高亮',
-                  onKeyDown: (e) => {
-                    if (e.key !== 'Enter') return
-                    if (!residues) return
-                    const raw = e.currentTarget.value.trim()
-                    // "36-42" / "B:1-5" — a residue RANGE drives the same segment
-                    // focus the low-confidence chips use (curve band + 3D). The
-                    // chain is normalized uppercase (the canvas compares exactly);
-                    // multi-chain panels need the prefix or the range is ambiguous.
-                    // Re-entering the same range clears it, like re-clicking a chip.
-                    const seg = parseSeg(raw)
-                    if (seg && !(isMultiChain(residues) && !seg.chain)) {
-                      const norm = seg.chain ? `${seg.chain.toUpperCase()}:${seg.a}-${seg.b}` : raw
-                      const inSeg = residues.some(
-                        (r) =>
-                          (!seg.chain || r.chain?.toUpperCase() === seg.chain.toUpperCase()) &&
-                          r.i >= seg.a &&
-                          r.i <= seg.b,
-                      )
-                      if (inSeg) {
-                        setHighlightSeg((prev) => (prev === norm ? null : norm))
-                        e.currentTarget.value = ''
-                        return
-                      }
-                    }
-                    const cm = /^([A-Za-z][A-Za-z0-9]{0,2}):(\d+)$/.exec(raw)
-                    // single-chain panels also accept aa+number ("K101") — ambiguous
-                    // with chain letters on complexes, so only offered there
-                    const am = !isMultiChain(residues) ? /^([A-Za-z])(\d+)$/.exec(raw) : null
-                    const idx = cm
-                      ? residues.findIndex(
-                          (r) =>
-                            r.chain && r.chain.toUpperCase() === cm[1].toUpperCase() && r.i === Number(cm[2]),
-                        )
-                      : am
-                        ? residues.findIndex(
-                            (r) =>
-                              r.i === Number(am[2]) && (r.aa ?? '')[0]?.toUpperCase() === am[1].toUpperCase(),
-                          )
-                        : residues.findIndex((r) => r.i === Number(raw))
-                    if (idx >= 0) {
+                  onKeyDown: jumpBoxKeyDown(residues, {
+                    onSeg: (norm) => setHighlightSeg((prev) => (prev === norm ? null : norm)),
+                    onResidue: (idx) => {
                       setSelected(idx)
                       setHover(idx)
-                      e.currentTarget.value = ''
-                    }
-                  },
+                    },
+                  }),
                 }),
               ),
             ),

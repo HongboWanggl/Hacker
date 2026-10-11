@@ -244,6 +244,27 @@ check(allStrokes().length > 0, `canvas still draws normally after clearing (${al
     brc.__strokes.some((s) => s && s !== DIM),
     'drill-down in-segment bonds keep their colors',
   )
+
+  // The drill-down jump box: a range drives the same focus (label + dim 3D),
+  // re-entering clears it, and a plain residue jump still selects.
+  const bjump = bcontainer.querySelector('.pv-jump')
+  check(!!bjump, 'drill-down exposes a jump box')
+  bjump.value = '3-6'
+  bjump.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+  await new Promise((r) => setTimeout(r, 300))
+  check(
+    (bcontainer.querySelector('.pv-fmt')?.textContent ?? '').includes('聚焦区段 3–6'),
+    `drill-down jump range shows 聚焦区段 3–6 (got "${bcontainer.querySelector('.pv-fmt')?.textContent}")`,
+  )
+  bjump.value = '3-6'
+  bjump.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+  await new Promise((r) => setTimeout(r, 300))
+  check(!bcontainer.querySelector('.pv-fmt'), 'drill-down re-entering the range clears the focus')
+  bjump.value = '9'
+  bjump.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+  await new Promise((r) => setTimeout(r, 300))
+  const bhover = bcontainer.querySelector('.pv-hoverline')?.textContent ?? ''
+  check(bhover.includes('A9'), `drill-down residue jump selects A9 (got "${bhover.slice(0, 40)}")`)
   bcontainer.remove()
 }
 
