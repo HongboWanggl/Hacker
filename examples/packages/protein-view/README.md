@@ -87,6 +87,19 @@ Two known-benign behaviors: host styles leak `select { width: 100% }`, capped
 by `.pv-toolbar-controls .pv-select`; toolbars flex-wrap buttons at narrow
 widths.
 
+## Dark theme
+
+The host applies a `.dark` class on `<html>` (system/light/dark setting). The
+panel's colors are token-driven (`--pv-text/--pv-muted/--pv-line/--pv-border`
+on `.pv-root`), and a `.dark .pv-root` override block at the end of
+`index.css` redefines those tokens plus the handful of hardcoded light
+surfaces (cards, tracks, brand-blue links/buttons, warm accent text). Canvas
+figures (confidence curve, PAE heatmap, 3D view) keep their own painted
+backgrounds on purpose: they read as paper-figure cards and exports stay
+byte-identical between themes. Light mode is untouched — the override block
+only matches under `.dark`. Verified live in both directions (computed
+surfaces flip and restore, screenshots reviewed).
+
 ## Conventions
 
 - Flat output schemas only (nested objects are rejected by the protocol);

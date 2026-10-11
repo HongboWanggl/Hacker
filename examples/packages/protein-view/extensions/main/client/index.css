@@ -1169,3 +1169,126 @@ button.pv-chain-chip:hover {
   color: var(--pv-muted, rgba(128, 128, 128, 0.9));
   padding: 4px 0;
 }
+
+/* ── Dark theme ─────────────────────────────────────────────────────────────
+   The host applies `.dark` on <html> (packages/web/src/theme-boot.ts). The
+   token block below re-skins every var()-driven rule at once; the literal
+   overrides after it cover the handful of hardcoded light values. Canvas
+   figures (curve / PAE / 3D) keep their own painted backgrounds by design:
+   they read as paper-figure cards and export byte-identical in both themes.
+   Light mode is untouched — this whole section only matches under .dark. */
+.dark .pv-root {
+  --pv-text: #d9e0ea;
+  --pv-muted: #8b95a8;
+  --pv-line: rgb(255 255 255 / 12%);
+  --pv-border: rgb(255 255 255 / 18%);
+  background: linear-gradient(180deg, #171e2b 0%, #121926 100%);
+  border-color: rgb(255 255 255 / 10%);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 35%);
+}
+/* White surfaces → dark equivalents */
+.dark .pv-delta-bars {
+  background: #1c2432;
+}
+.dark .pv-delta-bars::before {
+  border-top-color: rgb(139 149 168 / 45%);
+}
+.dark .pv-batch-row,
+.dark .pv-batch-detail,
+.dark .pv-select,
+.dark .pv-jump {
+  background: #1c2432;
+}
+.dark .pv-batch-row--open,
+.dark .pv-batch-row--ok:hover {
+  background: rgb(108 141 255 / 12%);
+}
+.dark .pv-batch-row--failed {
+  background: rgb(255 125 69 / 12%);
+}
+.dark .pv-batch-bar {
+  background: rgb(255 255 255 / 12%);
+}
+/* Grey tracks */
+.dark .pv-bandbar,
+.dark .pv-compare-bar {
+  background: #232c3c;
+}
+/* Brand-blue text & translucent fills get lighter counterparts */
+.dark .pv-export {
+  border-color: rgb(126 166 255 / 40%);
+  background: rgb(108 141 255 / 14%);
+  color: #9db8ff;
+}
+.dark .pv-export:hover {
+  background: rgb(108 141 255 / 24%);
+}
+.dark .pv-jump:focus {
+  border-color: rgb(126 166 255 / 55%);
+}
+.dark .pv-search-acc,
+.dark .pv-search-head-cell:hover,
+.dark .pv-search-head-cell--sorted,
+.dark .pv-batchbar-clear:hover,
+.dark .pv-search-link:hover {
+  color: #9db8ff;
+}
+.dark .pv-verdict .pv-search-link {
+  color: #98a4bb;
+}
+.dark .pv-metric-chip {
+  background: rgb(108 141 255 / 14%);
+  border-color: rgb(108 141 255 / 28%);
+}
+/* Warm (orange) accents: readable text on dark surfaces */
+.dark .pv-chip {
+  border-color: rgb(255 125 69 / 45%);
+  background: rgb(255 125 69 / 14%);
+  color: #ffb28c;
+}
+.dark .pv-chip:hover {
+  background: rgb(255 125 69 / 22%);
+}
+.dark .pv-chip--active {
+  color: #1c1210;
+}
+.dark .pv-batch-detail--err,
+.dark .pv-batch-error,
+.dark .pv-batchbar-count,
+.dark .pv-fmt {
+  color: #ffb28c;
+}
+.dark .pv-fmt {
+  background: rgb(255 125 69 / 14%);
+}
+.dark .pv-batchbar {
+  border-color: rgb(255 125 69 / 45%);
+  background: rgb(255 125 69 / 14%);
+}
+.dark .pv-search-row--sel {
+  background: rgb(255 125 69 / 14%);
+}
+/* Neutral greys keyed to light surfaces */
+.dark .pv-chain-chip {
+  background: rgb(255 255 255 / 6%);
+}
+.dark .pv-chain-chip:hover {
+  background: rgb(255 255 255 / 10%);
+}
+.dark .pv-search-head {
+  background: rgb(255 255 255 / 6%);
+}
+.dark .pv-search-check {
+  border-color: rgb(255 255 255 / 35%);
+  color: #121926;
+}
+.dark .pv-divlegend {
+  color: rgb(178 188 205 / 90%);
+}
+/* Sequence tile selection outlines: near-black on light → white on dark */
+.dark .pv-seq-tile--hover {
+  outline-color: rgb(235 240 248 / 90%);
+}
+.dark .pv-seq-tile--sel {
+  outline-color: #fff;
+}
