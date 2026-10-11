@@ -4,8 +4,7 @@
 // cover. Clicks both 3D and curve 导出 PNG and asserts two downloads.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
 
-const exe =
-  '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
+const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
 const errors = []

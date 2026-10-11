@@ -1,5 +1,5 @@
 // fetchRetry: 5xx once → retried; 4xx → no retry; network throw → retried; ok → single call.
-import { fetchRetry } from '/Users/wanghanbao/agnes-harness/examples/packages/protein-predictor/index.mjs'
+import { fetchRetry } from '../protein-predictor/index.mjs'
 
 const ok = (name: string, cond: boolean) => {
   console.log(cond ? 'ok ' : 'FAIL', name)

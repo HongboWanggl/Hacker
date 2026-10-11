@@ -173,9 +173,7 @@ function createFiberBoundRegistry(
       if (record.name !== name) continue
       const cellKey = (entry: { name?: string; options?: { key?: string; id?: string } }) =>
         `${entry.name ?? name}\u0000${entry.options?.key ?? ''}\u0000${entry.options?.id ?? ''}`
-      const exists = registry
-        .entries(name)
-        .some((entry) => cellKey(entry as never) === trackKey)
+      const exists = registry.entries(name).some((entry) => cellKey(entry as never) === trackKey)
       if (exists) continue
       record.off()
       const off = registry.register(record.registration as never, record.component)

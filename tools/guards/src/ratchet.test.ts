@@ -289,7 +289,10 @@ const INITIAL_CEILING: Record<string, number> = {
   // CU-ARTIFACT-RETENTION-GC-INDEX C8: measured 1714, exact, no spare (+9). ClientResourceReclaimedError
   // thrown on a 410 artifact_reclaimed read.
   // Locale catalogs on LocaleService. Measured 1745, exact, no spare (+31).
-  'packages/web-client/src': 1749,
+  // 2026-10-11 plugin slot re-assert after transcript remount (slot replay):
+  // re-declares client module slot entries when the host remounts the
+  // transcript. Measured 1797, exact, no spare (+48).
+  'packages/web-client/src': 1797,
   'packages/web-slots/src': 605,
   // Failed shell calls read as their exit code (+19 lines); measured 4891, exact cap.
   // Approval reasons: the approval card label reads the decision reason (+22). Measured 6651, exact cap.

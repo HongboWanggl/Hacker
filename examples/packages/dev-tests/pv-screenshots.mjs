@@ -3,9 +3,8 @@
 // run-all.sh — run manually: node pv-screenshots.mjs
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
 
-const exe =
-  '/Users/wanghanbao/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell'
-const OUT = '/Users/wanghanbao/agnes-harness/examples/packages/docs/screenshots'
+const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
+const OUT = new URL('../docs/screenshots/', import.meta.url).pathname
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 const page = await browser.newPage({ viewport: { width: 1280, height: 1400 }, deviceScaleFactor: 2 })
 await page.goto('http://127.0.0.1:4177/', { waitUntil: 'domcontentloaded', timeout: 60000 })

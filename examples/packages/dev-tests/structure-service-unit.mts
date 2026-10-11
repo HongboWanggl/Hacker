@@ -1,7 +1,7 @@
 // protein.structure service unit tests — chain-aware parsing. Boltz-2 complex
 // PDBs restart residue numbering at 1 per chain; the old resNum-only dedupe
 // dropped every colliding chain, and a flat i-sort interleaved them.
-import { runtime } from '/Users/wanghanbao/agnes-harness/examples/packages/protein-view/extensions/main/index.mjs'
+import { runtime } from '../protein-view/extensions/main/index.mjs'
 
 // Structural type for the registered service def (tsx strips this; it exists
 // so `biome check` passes without any-casts on the dev-test stub).

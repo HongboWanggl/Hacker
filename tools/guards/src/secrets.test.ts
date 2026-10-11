@@ -40,6 +40,15 @@ const SKIPPED_DIRECTORIES = new Set([
   'node_modules',
 ])
 
+// Checked-in compiled vendor bundles. Their output contains canonical upstream
+// boilerplate (e.g. the synthetic Emscripten runtime user home) that is not
+// repository-authored content; provenance is recorded in the package's
+// THIRD-PARTY-NOTICES. Skipped as whole files so a rebuild with shifted line
+// numbers cannot silently reintroduce or hide a finding.
+const SKIPPED_GENERATED_FILES = new Set([
+  'packages/package-manager/bundled-plugins/document-reader/src/runtime/engine.mjs',
+])
+
 const SCANNED_EXTENSIONS = new Set([
   '.cjs',
   '.cts',
@@ -119,6 +128,7 @@ function scanRepository(root: string): SecretFinding[] {
         continue
       }
       const path = relative(root, full).split(sep).join('/')
+      if (SKIPPED_GENERATED_FILES.has(path)) continue
       if (isEnvResidue(entry)) findings.push({ path, line: 1, rule: 'env-file' })
       if (!SCANNED_EXTENSIONS.has(extname(entry)) && !entry.startsWith('.env')) continue
       findings.push(...scanText(readFileSync(full, 'utf8'), path))

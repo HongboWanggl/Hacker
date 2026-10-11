@@ -1,5 +1,5 @@
 // Client-side render (effects run) for the predict_complex panel path.
-import { Window } from '/Users/wanghanbao/agnes-harness/node_modules/.pnpm/happy-dom@20.14.3/node_modules/happy-dom/lib/index.js'
+import { Window } from '../../../node_modules/.pnpm/happy-dom@20.14.3/node_modules/happy-dom/lib/index.js'
 
 const win = new Window()
 globalThis.window = win
@@ -20,11 +20,9 @@ const anyFn = new Proxy(() => {}, {
 })
 win.HTMLCanvasElement.prototype.getContext = () => anyFn
 
-const React = (
-  await import('/Users/wanghanbao/agnes-harness/node_modules/.pnpm/react@18.3.1/node_modules/react/index.js')
-).default
+const React = (await import('../../../node_modules/.pnpm/react@18.3.1/node_modules/react/index.js')).default
 const { createRoot } = await import(
-  '/Users/wanghanbao/agnes-harness/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/client.js'
+  '../../../node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom/client.js'
 )
 
 const mod = await import('/tmp/pv-client-test/index.js')

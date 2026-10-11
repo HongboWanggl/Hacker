@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { createClient, memoryJournal } from '/Users/wanghanbao/agnes-harness/packages/sdk/src/index.node.ts'
+import { createClient, memoryJournal } from '../../../packages/sdk/src/index.node.ts'
 
 // Structural typing for the packages admin surface — the SDK's generated types
 // are narrower than what the daemon accepts, and dev-tooling only needs these
@@ -10,7 +10,7 @@ type PkgAdmin = {
 type PkgOpResult = { state: string; error?: { code?: string } }
 
 const client = createClient({
-  transport: { kind: 'unix', path: '/Users/wanghanbao/agh-home/data/daemon/agnesd.sock' },
+  transport: { kind: 'unix', path: `${process.env.AGH_HOME}/data/daemon/agnesd.sock` },
   auth: { kind: 'local' },
   journal: memoryJournal(),
 })

@@ -13,9 +13,9 @@ zsh examples/packages/dev-tests/run-all.sh
 zsh examples/packages/dev-tests/run-all.sh --live
 ```
 
-前置：daemon 以 `AGH_HOME=/Users/wanghanbao/agh-home` 运行（回归/live 需要
+前置：daemon 以 `AGH_HOME` 指向 AGH home 目录运行（回归/live 需要
 web 127.0.0.1:4177）；`node --import tsx` 可用。chrome-headless-shell 位于
-`~/Library/Caches/ms-playwright/chromium_headless_shell-1234/...`（live E2E 用）。
+chrome-headless-shell（live E2E 用，位于 playwright 缓存目录）。
 
 ## 外部依赖（故意不入库）
 

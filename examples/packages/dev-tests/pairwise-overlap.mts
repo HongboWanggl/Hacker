@@ -1,5 +1,5 @@
 // Overlap-mismatch: same shape, residue numbering offset by 500 → must refuse.
-import { compareStructures } from '/Users/wanghanbao/agnes-harness/examples/packages/protein-predictor/pairwise.mjs'
+import { compareStructures } from '../protein-predictor/pairwise.mjs'
 
 // Structural types for the mocked tool surface (tsx strips these; they exist
 // so `biome check` passes without any-casts on dev-test stubs).

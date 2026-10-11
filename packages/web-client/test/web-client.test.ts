@@ -156,10 +156,7 @@ describe('clientModule fiber 绑定', () => {
     // for `tool.call.toolview`. Disposing it collapses the child and wipes module entries.
     const children = { 'host-child': { kind: 'keyed', scope: 'root' } } as const
     const mountHost = () =>
-      registry.register(
-        { name: 'workbench.panel', id: 'host-parent', owner: 'host', children },
-        () => null,
-      )
+      registry.register({ name: 'workbench.panel', id: 'host-parent', owner: 'host', children }, () => null)
     const removeHost = mountHost()
     const mod = {
       apply(cctx: ClientContext) {

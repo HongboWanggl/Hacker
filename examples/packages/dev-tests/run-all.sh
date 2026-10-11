@@ -2,12 +2,12 @@
 # Unified test entry for the protein packages. Run from anywhere:
 #   zsh examples/packages/dev-tests/run-all.sh          # fast suite (no network, ~1 min)
 #   zsh examples/packages/dev-tests/run-all.sh --live   # + live E2E against 127.0.0.1:4177 (network, ~10 min)
-# Prerequisites: daemon running with AGH_HOME=/Users/wanghanbao/agh-home (web on :4177
+# Prerequisites: daemon running with AGH_HOME pointing at the AGH home (web on :4177
 # for regression/live), node + tsx available via `node --import tsx`.
 set -e
 cd "$(dirname "$0")"
-ROOT=/Users/wanghanbao/agnes-harness
-VIEW_CLIENT=$ROOT/examples/packages/protein-view/extensions/main/client/index.js
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+VIEW_CLIENT="$ROOT/examples/packages/protein-view/extensions/main/client/index.js"
 
 # Self-heal dependencies that live outside the repo.
 if [ ! -d /tmp/pv-client-test ]; then mkdir -p /tmp/pv-client-test; fi

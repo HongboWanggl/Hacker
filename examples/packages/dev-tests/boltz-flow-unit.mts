@@ -4,7 +4,7 @@
 // success parsing (metrics scaled to 0-100, verdict), failed-job surfacing,
 // and the "complexes only" guard.
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { predictComplex } from '/Users/wanghanbao/agnes-harness/examples/packages/protein-predictor/boltz.mjs'
+import { predictComplex } from '../protein-predictor/boltz.mjs'
 
 // Structural types for the mocked tool surface (tsx strips these; they exist
 // so `biome check` passes without any-casts on dev-test stubs).

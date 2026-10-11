@@ -2,7 +2,7 @@
 // resNum alone (dropping colliding chains of Boltz-2 complex PDBs) and sort
 // flat, interleaving chains. Segments must not span a chain break and get a
 // chain prefix in multi-chain files; single-chain output is unchanged.
-import { analyzeConfidence } from '/Users/wanghanbao/agnes-harness/examples/packages/protein-predictor/index.mjs'
+import { analyzeConfidence } from '../protein-predictor/index.mjs'
 
 type Segment = { residues: string; chain?: string; length?: number }
 type Structured = {

@@ -3,9 +3,7 @@
 // and checks the quantized output, error paths, and zip64 refusal.
 import { deflateRawSync } from 'node:zlib'
 
-const mod = await import(
-  '/Users/wanghanbao/agnes-harness/examples/packages/protein-view/extensions/main/index.mjs'
-)
+const mod = await import('../protein-view/extensions/main/index.mjs')
 const registered = []
 mod.runtime.apply({ services: { register: (def) => registered.push(def) } })
 const pae = registered.find((s) => s.name === 'protein.pae')
