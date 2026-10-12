@@ -1140,6 +1140,10 @@ button.pv-chain-chip:hover {
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+  /* Flex basis is max-content, and the caption note would happily lay out on
+     one enormous line — on a maximized (fixed inset) module that steals the
+     whole row and starves the heatmap. Bound it; text wraps inside. */
+  max-width: 380px;
 }
 .pv-legend-note {
   font-size: 11px;
