@@ -504,6 +504,12 @@ button.pv-delta-bar--neg:hover {
     white-space: normal;
     min-width: 0;
   }
+  /* Touch targets: batch rows are the tap-to-expand control on phones — lift
+     them from 36px to the 44px HIG/Material floor (controls elsewhere in the
+     panel already measure ≥44px; see pv-touch-live.mjs). */
+  .pv-batch-row {
+    min-height: 44px;
+  }
 }
 @container pvpanel (max-width: 480px) {
   /* Batch rows carry fixed-width parts (accession, mini bar, score badge, caret)
