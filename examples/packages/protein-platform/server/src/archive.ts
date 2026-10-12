@@ -115,7 +115,35 @@ export function listArchive(): ArchiveEntry[] {
     const metaPath = join(root, id, 'meta.json')
     if (!existsSync(metaPath)) continue
     try {
-      out.push(JSON.parse(readFileSync(metaPath, 'utf8')) as ArchiveEntry)
+      const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as ArchiveEntry
+      // Archives written before mean-pLDDT backfill carry no score (complex
+      // reports never had one). Derive it from the stored model's B-factors —
+      // same number the client would have computed at archive time.
+      if (meta.meanPlddt === undefined) {
+        try {
+          const pdb = readFileSync(join(root, id, 'model.pdb'), 'utf8')
+          const residues = parsePdbStructure(pdb).residues as Array<{ b?: number }>
+          const bs = residues.map((r) => r.b).filter((v) => Number.isFinite(v))
+          if (bs.length > 0) {
+            meta.meanPlddt = Math.round((bs.reduce((s, v) => s + v, 0) / bs.length) * 10) / 10
+            if (!meta.verdict) {
+              for (const [floor, label] of [
+                [90, '高置信结构'],
+                [70, '骨架可靠 · 局部待验证'],
+                [50, '置信偏低 · 谨慎解读'],
+              ] as Array<[number, string]>)
+                if (meta.meanPlddt >= floor) {
+                  meta.verdict = label
+                  break
+                }
+              meta.verdict ??= '低置信 · 大概率含无序区'
+            }
+          }
+        } catch {
+          /* no model.pdb or unparsable — card stays scoreless */
+        }
+      }
+      out.push(meta)
     } catch {
       /* skip corrupt entries */
     }

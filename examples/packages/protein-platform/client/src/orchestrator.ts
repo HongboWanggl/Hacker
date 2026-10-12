@@ -137,7 +137,21 @@ async function archiveTask(id: string): Promise<void> {
         /* heatmap is optional — archive without it */
       }
     }
-    const mean = typeof report.meanPlddt === 'number' ? report.meanPlddt : undefined
+    let mean = typeof report.meanPlddt === 'number' ? report.meanPlddt : undefined
+    // Complex reports carry ipTM-family scores but no mean pLDDT. The archived
+    // PDB has it in the B-factor column (already normalized to 0-100 by the
+    // shared parser) — one extra read fills the wall card's score slot.
+    if (mean === undefined) {
+      try {
+        const st = (await bffCall(t.sessionId, 'protein.structure', { path: pdbPath })) as {
+          residues?: Array<{ b?: number }>
+        }
+        const bs = (st.residues ?? []).map((r) => r.b).filter((v): v is number => Number.isFinite(v))
+        if (bs.length > 0) mean = Math.round((bs.reduce((s, v) => s + v, 0) / bs.length) * 10) / 10
+      } catch {
+        /* score chip stays empty — archive proceeds */
+      }
+    }
     const base = location.href.split('#')[0]
     const r = await fetch(new URL('api/archive', base.endsWith('/') ? base : `${base}/`), {
       method: 'POST',
