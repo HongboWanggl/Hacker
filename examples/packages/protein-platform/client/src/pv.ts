@@ -31,7 +31,13 @@ export function bindProteinToolViews(services: PvServices): Map<string, any> {
 // JSON must stay unparseable (parseReport → null) or the component treats it
 // as the full report, skips the protein.report re-fetch, and — since savedTo
 // here is a report path, not a .pdb — never recovers the structure path.
-export function ownerProps(toolName: string, savedTo: string, services: PvServices, preview?: string) {
+export function ownerProps(
+  toolName: string,
+  savedTo: string,
+  services: PvServices,
+  preview?: string,
+  onPredict?: (accessions: string[]) => void,
+) {
   return {
     owner: {
       callId: 'platform',
@@ -42,6 +48,9 @@ export function ownerProps(toolName: string, savedTo: string, services: PvServic
         // with an extractable savedTo → self-serve via protein.report.
         resultPreview: preview ?? `{"savedTo":"${savedTo}","clip":`,
       },
+      // SearchCard's one-click predict hand-off (hit row ▶ / batch bar). Only
+      // the platform builds owners, so the AGH transcript host never sees it.
+      ...(onPredict ? { onPredict } : {}),
     },
     // ProteinToolView destructures { owner, services } — without this the
     // BFF fetch throws immediately and its silent .catch hides the failure.

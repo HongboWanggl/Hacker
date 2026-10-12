@@ -88,6 +88,22 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
     return () => setServicesSession(null)
   }, [task?.sessionId])
 
+  // SearchCard hand-off: 检索结果 → 一键预测（单个 = 单体任务，多个 = 批量任务）。
+  // Defined before the archived branch so archived search pages get it too.
+  const handlePredict = (accs: string[]) => {
+    if (!cfg || !sdk || accs.length === 0) return
+    void (async () => {
+      try {
+        const { runTask } = await import('../orchestrator.ts')
+        if (accs.length === 1) await runTask(cfg, sdk, 'single', { accession: accs[0] })
+        else await runTask(cfg, sdk, 'batch', { accessions: accs })
+        location.hash = '#/tasks'
+      } catch (e) {
+        console.warn('[platform] predict hand-off failed:', (e as Error)?.message)
+      }
+    })()
+  }
+
   if (!task) {
     if (!archivedChecked) return <main className="pl-result" />
     if (!archived || !archived.reportPath) {
@@ -146,6 +162,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
           toolName={archivedToolName(archived.type)}
           savedTo={archived.reportPath}
           services={archivedServices(taskId)}
+          onPredict={handlePredict}
         />
         {canCompareArchived && (
           <div style={{ marginTop: 14, textAlign: 'center' }}>
@@ -303,6 +320,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
           savedTo="batch"
           preview={task.resultJson}
           services={getServices()}
+          onPredict={handlePredict}
         />
       )}
       {!running && task.type === 'complex' && task.resultJson && (
@@ -311,10 +329,11 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
           savedTo="complex"
           preview={task.resultJson}
           services={getServices()}
+          onPredict={handlePredict}
         />
       )}
       {!running && task.type !== 'batch' && task.type !== 'complex' && savedTo && (
-        <ToolViewStage toolName={viewTool} savedTo={savedTo} services={getServices()} />
+        <ToolViewStage toolName={viewTool} savedTo={savedTo} services={getServices()} onPredict={handlePredict} />
       )}
       {canCompare && (
         <div style={{ marginTop: 14, textAlign: 'center' }}>
@@ -338,11 +357,13 @@ function ToolViewStage({
   savedTo,
   services,
   preview,
+  onPredict,
 }: {
   toolName: string
   savedTo: string
   services: PvServices
   preview?: string
+  onPredict?: (accessions: string[]) => void
 }) {
   const [comp, setComp] = useState<any>(null)
   useEffect(() => {
@@ -351,12 +372,15 @@ function ToolViewStage({
     import('../pv.ts').then(({ bindProteinToolViews, ownerProps }) => {
       if (!alive) return
       const map = bindProteinToolViews(services)
-      setComp({ comp: map.get(toolName), props: ownerProps(toolName, savedTo, services, preview) })
+      setComp({
+        comp: map.get(toolName),
+        props: ownerProps(toolName, savedTo, services, preview, onPredict),
+      })
     })
     return () => {
       alive = false
     }
-  }, [toolName, savedTo, services])
+  }, [toolName, savedTo, services, onPredict])
   if (!comp?.comp) return <div className="pl-empty">加载视图组件…</div>
   return <div className="pl-stage-wrap">{h(comp.comp, comp.props)}</div>
 }

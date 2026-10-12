@@ -1655,7 +1655,11 @@ function BatchRowDetail({ job, services }) {
 
 // uniprot_search results: structured hit table. Clicking a row copies the
 // accession so the researcher can paste it into the next prompt.
-function SearchCard({ report }) {
+function SearchCard({ report, owner }) {
+  // Optional hand-off into a host that can actually start tasks (the platform
+  // result page injects onPredict; the AGH transcript host never does, so every
+  // predict affordance below stays invisible there — pure copy flows as before).
+  const onPredict = typeof owner?.onPredict === 'function' ? owner.onPredict : null
   const [copied, setCopied] = useState(null)
   // Column sort: null = UniProt relevance order; clicking a header toggles
   // asc → desc → back to relevance.
@@ -1849,6 +1853,22 @@ function SearchCard({ report }) {
                       '↗',
                     )
                   : null,
+                // One-click prediction of this hit — only when the host can run
+                // tasks (platform); stopPropagation keeps the row-copy quiet.
+                onPredict && hit.accession
+                  ? h(
+                      'span',
+                      {
+                        className: 'pv-search-predict',
+                        title: `预测 ${hit.accession}`,
+                        onClick: (e) => {
+                          e.stopPropagation()
+                          onPredict([hit.accession])
+                        },
+                      },
+                      '▶',
+                    )
+                  : null,
               ),
               h('span', { className: 'pv-search-name' }, hit.proteinName ?? hit.id ?? '—'),
               h('span', { className: 'pv-search-org' }, hit.organism ?? '—'),
@@ -1862,6 +1882,18 @@ function SearchCard({ report }) {
           'div',
           { className: 'pv-batchbar' },
           h('span', { className: 'pv-batchbar-count' }, `已选 ${sel.size} 个`),
+          onPredict
+            ? h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'pv-chip pv-chip--active',
+                  title: `立即${sel.size > 1 ? '批量' : ''}预测所选 ${sel.size} 个蛋白`,
+                  onClick: () => onPredict([...sel]),
+                },
+                sel.size > 1 ? `▶ 批量预测所选（${sel.size}）` : '▶ 预测所选',
+              )
+            : null,
           h(
             'button',
             {
@@ -4517,7 +4549,7 @@ function ProteinToolView({ owner, services }) {
   // uniprot_search results render as a structured hit table (click to copy
   // the accession) instead of falling into the confidence panel.
   if (report?.hits) {
-    return h('div', { className: 'pv-root' }, h(SearchCard, { report }))
+    return h('div', { className: 'pv-root' }, h(SearchCard, { report, owner }))
   }
 
   // compare_alphafold results have a different shape (no meanPlddt at top level);

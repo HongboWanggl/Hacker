@@ -67,6 +67,23 @@ await page2
 const body2 = (await page2.textContent('.pl-result').catch(() => '')) ?? ''
 if (!/P6\d{4}|HBB|HBA/.test(body2)) fail.push('archived search page missing accessions')
 if (!/历史归档/.test(body2)) fail.push('archived search page lacks archive badge')
+// One-click predict hand-off (platform host only): hit-row ▶ starts a single
+// task verbatim from the accession. Assert on the archived page — proves the
+// hand-off works without the live task, like a researcher on another device.
+const predBtn = page2.locator('.pv-search-predict').first()
+await predBtn.waitFor({ timeout: 15000, state: 'visible' }).catch(() => fail.push('predict ▶ missing on search card'))
+if (fail.length === 0) {
+  await predBtn.click()
+  await page2
+    .waitForFunction(
+      () => {
+        const t = JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]')
+        return t.length >= 1 && t[0].type === 'single' && t[0].status === 'running'
+      },
+      { timeout: 30000 },
+    )
+    .catch(() => fail.push('predict ▶ click did not start a single task'))
+}
 await browser.close()
 if (fail.length) {
   console.error('FAIL:', fail.join(' | '))
