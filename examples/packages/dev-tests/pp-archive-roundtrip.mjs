@@ -80,7 +80,6 @@ await p2
   )
   .catch(() => fail.push('archived compare click did not start a compare task'))
 await ctx2.close()
-await browser.close()
 
 // --- Pass 3: archive API direct (context-bound request so remote basic-auth rides along).
 const api = (await browser.newContext({ ...(httpCreds ? { httpCredentials: httpCreds } : {}) })).request
@@ -103,6 +102,8 @@ else console.log('archived structure residues:', nRes)
 
 if (fail.length) {
   console.error('FAIL:', fail.join(' | '))
+  await browser.close()
   process.exit(1)
 }
 console.log('archive roundtrip: PASS')
+await browser.close()
