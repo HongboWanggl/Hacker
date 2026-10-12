@@ -1,0 +1,23 @@
+{
+  "name": "@aghes/protein-platform",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Standalone protein prediction platform UI, mounted at /platform via an AGH Surface",
+  "agnes": {
+    "surfaces": [
+      {
+        "id": "platform",
+        "apiRange": "^1.0",
+        "artifact": {
+          "kind": "node",
+          "entry": "./dist/server.mjs"
+        },
+        "healthPath": "/health",
+        "requires": {
+          "services": []
+        }
+      }
+    ]
+  }
+}

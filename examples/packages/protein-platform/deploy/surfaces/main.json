@@ -1,0 +1,9 @@
+{
+  "package": "@aghes/protein-platform",
+  "surfaceId": "platform",
+  "mount": "/platform",
+  "sourceId": "local",
+  "config": {},
+  "secrets": {},
+  "grants": []
+}

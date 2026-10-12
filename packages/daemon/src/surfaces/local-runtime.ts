@@ -69,6 +69,10 @@ export function createLocalNodeRuntime(options: LocalNodeRuntimeOptions = {}): S
         AGNES_SURFACE_MOUNT: input.surface.instance.mount,
         AGNES_SURFACE_CONFIG: JSON.stringify(input.surface.instance.config),
         AGNES_SURFACE_SECRETS: JSON.stringify(input.secrets),
+        // Local node surfaces are daemon children on this machine; they may need the
+        // daemon's home (e.g. to read data/daemon/discovery.json for the live WS URL).
+        ...(process.env.AGH_HOME ? { AGH_HOME: process.env.AGH_HOME } : {}),
+        ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
       })
       let child: SpawnedSurfaceProcess
       const windows = process.platform === 'win32' // guards-allow-platform: owned default Windows Surface process tree.

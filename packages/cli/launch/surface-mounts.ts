@@ -117,5 +117,11 @@ export async function fetchSurfaceMountProxy(
   options: Readonly<{ intervalMs?: number }> = {},
 ): Promise<Readonly<{ proxy: ReturnType<typeof createMountProxy>; close(): Promise<void> }>> {
   const feed = await fetchSurfaceMountLookup(backend, options)
-  return Object.freeze({ proxy: createMountProxy({ lookup: feed.lookup }), close: feed.close })
+  // Surface pages may open the daemon WebSocket (their only backend channel), so the proxied
+  // response CSP needs the WS origin, exactly like the web server's own startup-built CSP.
+  const wsOrigin = /^wss?:\/\//.test(backend.web.url) ? backend.web.url : undefined
+  return Object.freeze({
+    proxy: createMountProxy({ lookup: feed.lookup, wsOrigin }),
+    close: feed.close,
+  })
 }

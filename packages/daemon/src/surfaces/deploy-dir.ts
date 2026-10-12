@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { verifyWorkspace } from '@agnes/package-manager'
+import { lockPath, verifyWorkspace } from '@agnes/package-manager'
 
 /** Recovers the customer deploy directory a profile has signed off on. The lockfile is the only
  * durable record of it: `agnes profile trust <dir>` pins both the relative path and a tree hash,
@@ -9,7 +9,8 @@ import { verifyWorkspace } from '@agnes/package-manager'
  * is a normal state, not a failure. verifyWorkspace's ok branch already hands back the resolved,
  * contained absolute path (its `deployDir`), so it is used as-is rather than re-joined here. */
 export function resolveDeployDir(profileDir: string): string | undefined {
-  const lockFile = join(profileDir, 'agnes.lock')
+  // The durable lockfile is agnes-lock.json (lockPath); agnes.lock never exists on disk.
+  const lockFile = lockPath(profileDir)
   if (!existsSync(lockFile)) return undefined
   let lock: unknown
   try {

@@ -5,7 +5,7 @@ import {
   type ServerResponse,
 } from 'node:http'
 import { FORGED_IDENTITY_KEYS, normalizeKey } from './routes.js'
-import { surfaceSecurityHeaders } from './security-headers.js'
+import { DEFAULT_SURFACE_CSP, surfaceSecurityHeaders } from './security-headers.js'
 import { mountMatches } from './types.js'
 
 /** The narrow slice of a mount-table row `createMountProxy` actually reads: a loopback host/port and
@@ -46,6 +46,18 @@ function normalizeUpstreamHeaders(headers: IncomingHttpHeaders): Record<string, 
   return output
 }
 
+/** The daemon's own WS origin (ws://host:port) if it looks like one, else undefined. A mounted
+ * Surface SPA legitimately opens the daemon WebSocket (its only backend channel), so the proxied
+ * response's CSP must allow it -- the web server's own pages get the same relaxation via a
+ * startup-built CSP that embeds the WS origin (web-server/src/server.ts). */
+export function surfaceCspFor(wsOrigin: string | undefined): string {
+  if (!wsOrigin || !/^wss?:\/\/[A-Za-z0-9._-]+:\d{1,5}$/.test(wsOrigin)) return DEFAULT_SURFACE_CSP
+  return DEFAULT_SURFACE_CSP.replace(
+    "connect-src 'self'",
+    `connect-src 'self' ${wsOrigin}`,
+  )
+}
+
 /**
  * Forwards browser traffic for a mounted Surface to that Surface's loopback port. This is the only
  * production path by which a browser reaches a Surface at all -- routes.ts solves the opposite
@@ -59,7 +71,10 @@ function normalizeUpstreamHeaders(headers: IncomingHttpHeaders): Record<string, 
  */
 export function createMountProxy(deps: {
   lookup(pathname: string): MountProxyMatch | undefined
+  /** Daemon WS origin; when present, the surface page's CSP may open the daemon WebSocket. */
+  wsOrigin?: string
 }): (req: IncomingMessage, res: ServerResponse) => boolean {
+  const csp = surfaceCspFor(deps.wsOrigin)
   return (req, res) => {
     const rawUrl = req.url ?? '/'
     let pathname: string
@@ -103,7 +118,7 @@ export function createMountProxy(deps: {
         try {
           res.writeHead(
             upstreamRes.statusCode ?? 502,
-            surfaceSecurityHeaders(normalizeUpstreamHeaders(upstreamRes.headers)),
+            { ...surfaceSecurityHeaders(normalizeUpstreamHeaders(upstreamRes.headers)), 'content-security-policy': csp },
           )
         } catch {
           upstreamRes.destroy()

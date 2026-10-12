@@ -1,0 +1,10 @@
+{
+  "id": "protein-platform",
+  "version": "0.1.0",
+  "harnessRange": "*",
+  "extensions": [],
+  "profileFragment": "profile/fragment.yaml",
+  "presets": [],
+  "fixtures": "fixtures/out",
+  "surfaces": ["surfaces/main.json"]
+}
