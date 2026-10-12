@@ -36,13 +36,21 @@ export function BatchView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: 
           }}
         />
         <div className="pl-composer-foot">
-          <span className="pl-card-sub">识别到 {accessions.length} 个 ID{accessions.length > 8 ? '（取前 8 个）' : ''}</span>
-          <button className="pl-submit" disabled={!ready || busy || accessions.length === 0} onClick={() => void submit()}>
+          <span className="pl-card-sub">
+            识别到 {accessions.length} 个 ID{accessions.length > 8 ? '（取前 8 个）' : ''}
+          </span>
+          <button
+            className="pl-submit"
+            disabled={!ready || busy || accessions.length === 0}
+            onClick={() => void submit()}
+          >
             {busy ? '提交中…' : '批量预测 →'}
           </button>
         </div>
       </div>
-      <p className="pl-hint">批量任务完成后在<a href="#/tasks">任务页</a>打开汇总卡片，点击任意成功行查看该目标 3D 结构</p>
+      <p className="pl-hint">
+        批量任务完成后在<a href="#/tasks">任务页</a>打开汇总卡片，点击任意成功行查看该目标 3D 结构
+      </p>
     </main>
   )
 }

@@ -1,7 +1,7 @@
-import { build } from '../../../../node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js'
 import { cpSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { build } from '../../../../node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const pkg = join(here, '..')
@@ -52,10 +52,7 @@ await build({
 
 // index.html (with a CSP that matches the AGH web posture) + css path wiring.
 const css = readFileSync(join(dist, 'app.css'), 'utf8')
-const pvCss = readFileSync(
-  join(pkg, '../protein-view/extensions/main/client/index.css'),
-  'utf8',
-)
+const pvCss = readFileSync(join(pkg, '../protein-view/extensions/main/client/index.css'), 'utf8')
 writeFileSync(join(dist, 'app.css'), `${pvCss}\n${css}\n`)
 cpSync(join(pkg, 'client/index.html'), join(dist, 'index.html'))
 renameSync(join(dist, 'server.js'), join(dist, 'server.mjs'))

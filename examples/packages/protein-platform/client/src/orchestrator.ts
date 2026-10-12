@@ -1,5 +1,5 @@
 import { bffCall } from './bff.ts'
-import { STAGE_LABEL, TASK_TYPE_LABEL, buildPrompt, type TaskInput, type TaskType } from './prompts.ts'
+import { buildPrompt, STAGE_LABEL, TASK_TYPE_LABEL, type TaskInput, type TaskType } from './prompts.ts'
 
 // Task = one agent session. Progress is a ledger reduction: tool/call opens a
 // stage, tool/result closes it (savedTo captured), turn/end finishes the task.
@@ -141,6 +141,7 @@ async function archiveTask(id: string): Promise<void> {
         jobs?: Array<{ status?: string; savedTo?: string }>
       }
       const files: Record<string, string> = { 'report.json': b64of(t.resultJson) }
+      const jobPdbs: string[] = []
       let totalBytes = 0
       for (const j of parsed.jobs ?? []) {
         if (j.status !== 'ok' || typeof j.savedTo !== 'string') continue
@@ -149,7 +150,9 @@ async function archiveTask(id: string): Promise<void> {
           const bytes = Math.floor((f.b64.length * 3) / 4)
           if (totalBytes + bytes > 1_400_000) break
           totalBytes += bytes
-          files[`pdb-${j.savedTo.split('/').pop()}`] = f.b64
+          const base = j.savedTo.split('/').pop()!
+          files[`pdb-${base}`] = f.b64
+          jobPdbs.push(base)
         } catch {
           /* one missing PDB degrades that row only */
         }
@@ -157,6 +160,7 @@ async function archiveTask(id: string): Promise<void> {
       const mean = typeof parsed.summary?.meanPlddt === 'number' ? parsed.summary.meanPlddt : undefined
       await post(files, {
         ...(mean !== undefined ? { meanPlddt: mean } : {}),
+        ...(jobPdbs.length > 0 ? { jobPdbs } : {}),
         verdict: `${parsed.summary?.ok ?? '?'}/${parsed.summary?.total ?? '?'} 目标成功`,
       })
       return
@@ -287,7 +291,13 @@ export async function runTask(
         // approvals.mode remains the primary gate.
         const options = req?.options ?? req?.payload?.options ?? []
         const allow = options.find((o: any) => /allow|proceed|approve/i.test(o?.kind ?? o?.optionId ?? ''))
-        if (allow) void session.answer({ requestId: req.requestId ?? req.id, response: { optionId: allow.optionId ?? allow.kind } }).catch(() => {})
+        if (allow)
+          void session
+            .answer({
+              requestId: req.requestId ?? req.id,
+              response: { optionId: allow.optionId ?? allow.kind },
+            })
+            .catch(() => {})
       })
 
       void (async () => {
@@ -310,7 +320,12 @@ export async function runTask(
             if (kind === 'tool/call') {
               patch(id, (t) => {
                 const existing = t.stages.find((s) => s.tool === ev.name && s.status === 'running')
-                if (!existing) t.stages.push({ tool: ev.name!, label: STAGE_LABEL[ev.name!] ?? ev.name!, status: 'running' })
+                if (!existing)
+                  t.stages.push({
+                    tool: ev.name!,
+                    label: STAGE_LABEL[ev.name!] ?? ev.name!,
+                    status: 'running',
+                  })
               })
             } else if (kind === 'tool/result') {
               const text = typeof ev?.content?.[0]?.text === 'string' ? ev.content[0].text : ''
@@ -320,7 +335,12 @@ export async function runTask(
               // the pv components a parseable resultPreview directly. Complex runs
               // in two shapes — API mode carries predictionId, local boltz carries
               // engine:"boltz2-local" — match either.
-              if (text.startsWith('{') && (text.includes('"jobs"') || text.includes('"predictionId"') || text.includes('"boltz2-local"'))) {
+              if (
+                text.startsWith('{') &&
+                (text.includes('"jobs"') ||
+                  text.includes('"predictionId"') ||
+                  text.includes('"boltz2-local"'))
+              ) {
                 patch(id, (t) => {
                   t.resultJson = text.slice(0, 32_000)
                 })
@@ -328,9 +348,9 @@ export async function runTask(
               // Artifact paths appear under either key ("savedTo" on fetch/predict outputs,
               // "file" inside the confidence report body), and report previews interleave
               // line-number prefixes — the path itself is always a plain quoted string.
-              const paths = [...text.matchAll(/"(?:savedTo|file|pdbPath|reportPath)"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map(
-                (m) => m[1].replace(/\\(.)/g, '$1'),
-              )
+              const paths = [
+                ...text.matchAll(/"(?:savedTo|file|pdbPath|reportPath)"\s*:\s*"((?:[^"\\]|\\.)*)"/g),
+              ].map((m) => m[1].replace(/\\(.)/g, '$1'))
               const savedTo = paths.find((p) => /\.(pdb|fasta|json)$/.test(p))
               const confidence = paths.find((p) => /confidence\.json$/.test(p))
               patch(id, (t) => {
@@ -410,7 +430,12 @@ export async function runTask(
     // One fresh-session retry turns that from a failed task into a slower success.
     await new Promise((r) => setTimeout(r, 3000))
     const t = getTask(id)
-    if (t?.status === 'failed' && /STALL_WATCHDOG|TRANSPORT|TURN_ERROR|turn (abort|blocked)|status=\?|事件流中断|ECONN|EAI_AGAIN|socket hang up|fetch failed|reset/i.test(t.error ?? '')) {
+    if (
+      t?.status === 'failed' &&
+      /STALL_WATCHDOG|TRANSPORT|TURN_ERROR|turn (abort|blocked)|status=\?|事件流中断|ECONN|EAI_AGAIN|socket hang up|fetch failed|reset/i.test(
+        t.error ?? '',
+      )
+    ) {
       patch(id, (t2) => {
         t2.status = 'running'
         t2.error = undefined

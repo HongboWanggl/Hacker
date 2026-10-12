@@ -30,7 +30,9 @@ ${seq}
 ${input.sequence ? `\n序列：\n${input.sequence.trim()}\n` : ''}`
   }
   if (type === 'complex') {
-    const chains = (input.sequences ?? []).map((s, i) => `链 ${String.fromCharCode(65 + i)}: ${s.trim()}`).join('\n')
+    const chains = (input.sequences ?? [])
+      .map((s, i) => `链 ${String.fromCharCode(65 + i)}: ${s.trim()}`)
+      .join('\n')
     return `预测蛋白质复合物结构。严格按步骤执行，不要询问任何问题：
 1) 调用 predict_complex，chains 参数为各链序列（逗号分隔，按顺序对应 A、B…链）${input.ligandSmiles ? `，ligand_smiles 参数为 "${input.ligandSmiles.trim()}"` : ''}，name 参数为 ${name}
 2) 完成后简要给出界面置信度结论。

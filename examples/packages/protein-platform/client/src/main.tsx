@@ -1,14 +1,14 @@
 import { createElement as h } from 'react'
 import { createRoot } from 'react-dom/client'
+import { connectDaemon } from './agnes.ts'
 import { initServices } from './bff.ts'
 import { Shell } from './components/chrome.tsx'
-import { connectDaemon } from './agnes.ts'
 import { loadConfig, type PlatformConfig } from './config.ts'
+import { BatchView } from './views/batch.tsx'
 import { HomeView } from './views/home.tsx'
 import { ResultView } from './views/result.tsx'
-import { TasksView } from './views/tasks.tsx'
-import { BatchView } from './views/batch.tsx'
 import { SearchView } from './views/search.tsx'
+import { TasksView } from './views/tasks.tsx'
 import './styles/platform.css'
 
 async function boot() {

@@ -34,12 +34,18 @@ export function SearchView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk:
               if (e.key === 'Enter') void submit()
             }}
           />
-          <button className="pl-submit" disabled={!ready || busy || !query.trim()} onClick={() => void submit()}>
+          <button
+            className="pl-submit"
+            disabled={!ready || busy || !query.trim()}
+            onClick={() => void submit()}
+          >
             {busy ? '检索中…' : '检索 →'}
           </button>
         </div>
       </div>
-      <p className="pl-hint">检索完成后到<a href="#/tasks">任务页</a>打开结果卡片；复制 accession 即可回首页发起预测</p>
+      <p className="pl-hint">
+        检索完成后到<a href="#/tasks">任务页</a>打开结果卡片；复制 accession 即可回首页发起预测
+      </p>
     </main>
   )
 }

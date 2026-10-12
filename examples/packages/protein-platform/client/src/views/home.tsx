@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getServices, listArchive, type ArchiveMeta } from '../bff.ts'
+import { type ArchiveMeta, getServices, listArchive } from '../bff.ts'
 import { StructureThumb } from '../components/thumb.tsx'
 import { getTasks, runTask, subscribeTasks } from '../orchestrator.ts'
 import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
@@ -68,9 +68,22 @@ function ReportSnapshot({ task }: { task: any }) {
 // which lazily pulls the archived structure and turns the card into a mini figure.
 function ArchiveCard({ m }: { m: ArchiveMeta }) {
   const hasStructure = m.type === 'single' || m.type === 'complex'
+  // Batch cards show up to three per-target mini traces instead of one figure —
+  // an at-a-glance quality read across the whole run.
+  const batchJobs = m.type === 'batch' ? (m.jobPdbs ?? []).slice(0, 3) : []
   return (
     <a className="pl-card pl-card-fig" href={`#/task/${m.taskId}`}>
       {hasStructure && <StructureThumb taskId={m.taskId} />}
+      {batchJobs.length > 0 && (
+        <div className="pl-thumb-grid">
+          {batchJobs.map((p) => (
+            <figure key={p} className="pl-thumb-cell">
+              <StructureThumb taskId={m.taskId} path={p} small />
+              <figcaption>{p.split('_')[0].replace(/\.pdb$/, '')}</figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
       <div className="pl-card-top">
         <span className="pl-card-type">{TASK_TYPE_LABEL[(m.type as TaskType) ?? 'single']}</span>
       </div>
@@ -155,7 +168,12 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
         // One chain per line, in A/B/C… order; ligand SMILES optional.
         const seqs = trimmed
           .split('\n')
-          .map((l) => l.replace(/^>.*$/, '').replace(/[^A-Za-z]/g, '').toUpperCase())
+          .map((l) =>
+            l
+              .replace(/^>.*$/, '')
+              .replace(/[^A-Za-z]/g, '')
+              .toUpperCase(),
+          )
           .filter((s) => s.length >= 5)
         if (seqs.length === 0) return
         await runTask(cfg, sdk, 'complex', {
@@ -190,9 +208,15 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
             .toUpperCase()
         : null
       const isAccession =
-        !isSequence && /^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9][A-Z][A-Z0-9]{2}[0-9])(?:-\d+)?$/i.test(trimmed.replace(/\s/g, ''))
+        !isSequence &&
+        /^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9][A-Z][A-Z0-9]{2}[0-9])(?:-\d+)?$/i.test(
+          trimmed.replace(/\s/g, ''),
+        )
       const input = isFasta
-        ? { sequence: seqOnly, name: name.trim() || trimmed.split('\n')[0].slice(1).split('|')[0].trim() || undefined }
+        ? {
+            sequence: seqOnly,
+            name: name.trim() || trimmed.split('\n')[0].slice(1).split('|')[0].trim() || undefined,
+          }
         : isAccession
           ? { accession: trimmed.toUpperCase(), name: name.trim() || trimmed.toUpperCase() }
           : isSequence
@@ -230,11 +254,7 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
         <div className="pl-composer-foot">
           <div className="pl-type-tabs">
             {(['single', 'complex', 'batch'] as TaskType[]).map((t) => (
-              <button
-                key={t}
-                className={`pl-type-tab ${type === t ? 'on' : ''}`}
-                onClick={() => setType(t)}
-              >
+              <button key={t} className={`pl-type-tab ${type === t ? 'on' : ''}`} onClick={() => setType(t)}>
                 {TASK_TYPE_LABEL[t]}
               </button>
             ))}
@@ -247,18 +267,26 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
               onChange={(e) => setLigand(e.target.value)}
             />
           )}
-          <input className="pl-input-name" placeholder="名称（可选）" value={name} onChange={(e) => setName(e.target.value)} />
+          <input
+            className="pl-input-name"
+            placeholder="名称（可选）"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
           <button
             className="pl-submit"
             disabled={
               !ready ||
               busy ||
               !text.trim() ||
-              (type === 'complex' && text.split('\n').filter((l) => l.replace(/[^A-Za-z]/g, '').length >= 5).length === 0) ||
+              (type === 'complex' &&
+                text.split('\n').filter((l) => l.replace(/[^A-Za-z]/g, '').length >= 5).length === 0) ||
               (type === 'batch' &&
                 text
                   .split(/[\n,;\s]+/)
-                  .filter((s) => /^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9][A-Z][A-Z0-9]{2}[0-9])$/i.test(s.trim())).length === 0)
+                  .filter((s) =>
+                    /^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9][A-Z][A-Z0-9]{2}[0-9])$/i.test(s.trim()),
+                  ).length === 0)
             }
             onClick={() => void submit()}
           >

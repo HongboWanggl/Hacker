@@ -48,7 +48,11 @@ export function getServices(): PvServices {
 
 /** Explicit-session dispatch for non-UI callers (the orchestrator's archive write
  *  runs outside the result page, so the "current session" ref is meaningless). */
-export async function bffCall(sessionId: string, service: string, input: Record<string, unknown>): Promise<any> {
+export async function bffCall(
+  sessionId: string,
+  service: string,
+  input: Record<string, unknown>,
+): Promise<any> {
   const r = await fetch(cfgRef!.bffPath, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -69,6 +73,8 @@ export type ArchiveMeta = {
   verdict?: string
   reportPath?: string
   pdbPath?: string
+  /** Batch: per-target PDB basenames (pdb-<basename> files in the archive). */
+  jobPdbs?: string[]
 }
 
 /** Archive list for history views; fails soft to [] (surface unreachable). */
@@ -76,7 +82,7 @@ export async function listArchive(): Promise<ArchiveMeta[]> {
   try {
     const r = await fetch(new URL('api/archive', baseHref()))
     if (!r.ok) return []
-    return ((await r.json()) as unknown) as ArchiveMeta[]
+    return (await r.json()) as unknown as ArchiveMeta[]
   } catch {
     return []
   }
@@ -97,7 +103,10 @@ export function archivedServices(taskId: string): PvServices {
     // protein.structure / protein.file to a per-target PDB inside a batch
     // archive (server falls back to model.pdb for single/complex).
     async call(service, input) {
-      const path = typeof (input as { path?: unknown })?.path === 'string' ? encodeURIComponent((input as { path: string }).path) : ''
+      const path =
+        typeof (input as { path?: unknown })?.path === 'string'
+          ? encodeURIComponent((input as { path: string }).path)
+          : ''
       const q = path ? `?path=${path}` : ''
       if (service === 'protein.report') return get(`api/archive/${taskId}/report`)
       if (service === 'protein.structure') return get(`api/archive/${taskId}/structure${q}`)

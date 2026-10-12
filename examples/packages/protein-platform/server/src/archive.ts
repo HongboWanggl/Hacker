@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parsePdbStructure } from '../../../protein-view/extensions/main/pdb-parse.mjs'
 
@@ -21,11 +21,16 @@ export type ArchiveEntry = {
   /** Workspace-relative artifact paths (report / pdb) for the result page. */
   reportPath?: string
   pdbPath?: string
+  /** Batch archives: basenames of the per-target PDBs stored as pdb-<basename>,
+   *  so wall cards can render mini structure thumbnails per job. */
+  jobPdbs?: string[]
 }
 
 function archiveRoot(): string {
-  return process.env.PROTEIN_PLATFORM_ARCHIVE_DIR
-    ?? join(process.env.HOME ?? '/tmp', 'protein-platform', 'archive')
+  return (
+    process.env.PROTEIN_PLATFORM_ARCHIVE_DIR ??
+    join(process.env.HOME ?? '/tmp', 'protein-platform', 'archive')
+  )
 }
 
 function taskDir(taskId: string): string {
@@ -42,6 +47,7 @@ export function putArchive(body: {
   verdict?: string
   reportPath?: string
   pdbPath?: string
+  jobPdbs?: string[]
   files: Record<string, string> // name -> base64
 }): ArchiveEntry {
   const dir = taskDir(body.taskId)
@@ -58,6 +64,7 @@ export function putArchive(body: {
     ...(body.verdict ? { verdict: body.verdict } : {}),
     ...(body.reportPath ? { reportPath: body.reportPath } : {}),
     ...(body.pdbPath ? { pdbPath: body.pdbPath } : {}),
+    ...(Array.isArray(body.jobPdbs) && body.jobPdbs.length > 0 ? { jobPdbs: body.jobPdbs.slice(0, 8) } : {}),
   }
   writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta))
   for (const [name, b64] of Object.entries(body.files ?? {})) {
@@ -141,6 +148,18 @@ export function listArchive(): ArchiveEntry[] {
     if (!existsSync(metaPath)) continue
     try {
       const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as ArchiveEntry
+      let dirty = false
+      // Batch archives from before jobPdbs existed: derive the per-target PDB
+      // basenames from the directory so wall cards can render mini thumbnails.
+      if (meta.type === 'batch' && !meta.jobPdbs) {
+        const jobs = readdirSync(join(root, id))
+          .filter((n) => n.startsWith('pdb-'))
+          .map((n) => n.slice(4))
+        if (jobs.length > 0) {
+          meta.jobPdbs = jobs.slice(0, 8)
+          dirty = true
+        }
+      }
       // Archives written before mean-pLDDT backfill carry no score (complex
       // reports never had one). Derive it from the stored model's B-factors —
       // same number the client would have computed at archive time.
@@ -163,9 +182,19 @@ export function listArchive(): ArchiveEntry[] {
                 }
               meta.verdict ??= '低置信 · 大概率含无序区'
             }
+            dirty = true
           }
         } catch {
           /* no model.pdb or unparsable — card stays scoreless */
+        }
+      }
+      // Persist enrichment once — list runs on every wall load; re-parsing
+      // every scoreless PDB each time is wasted work (write-back, not cache).
+      if (dirty) {
+        try {
+          writeFileSync(metaPath, JSON.stringify(meta))
+        } catch {
+          /* read-only fs — enrichment stays per-request */
         }
       }
       out.push(meta)

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { listArchive, type ArchiveMeta } from '../bff.ts'
+import { type MouseEvent, useEffect, useState } from 'react'
+import { type ArchiveMeta, listArchive } from '../bff.ts'
 import { StructureThumb } from '../components/thumb.tsx'
 import { getTasks, subscribeTasks } from '../orchestrator.ts'
 import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
@@ -13,8 +13,29 @@ const STATUS_BADGE: Record<string, string> = {
 
 // History rows from the surface archive: tasks completed on this machine whose
 // record outlived this browser's localStorage (or another device's tasks).
-function ArchivedRow({ m }: { m: ArchiveMeta }) {
+function ArchivedRow({ m, onDeleted }: { m: ArchiveMeta; onDeleted: (taskId: string) => void }) {
+  const [confirming, setConfirming] = useState(false)
   const hasStructure = m.type === 'single' || m.type === 'complex'
+  const remove = async (e: MouseEvent) => {
+    // Two-click confirm: the first click arms the row's ✕ into a red 确认 for
+    // 4s — no modal, no accidental wipes, and the whole row stays a link.
+    e.preventDefault()
+    e.stopPropagation()
+    if (!confirming) {
+      setConfirming(true)
+      setTimeout(() => setConfirming(false), 4000)
+      return
+    }
+    try {
+      const base = location.href.split('#')[0]
+      const r = await fetch(new URL(`api/archive/${m.taskId}`, base.endsWith('/') ? base : `${base}/`), {
+        method: 'DELETE',
+      })
+      if (r.ok) onDeleted(m.taskId)
+    } catch {
+      /* row stays — the user can retry */
+    }
+  }
   return (
     <a className="pl-taskrow" href={`#/task/${m.taskId}`}>
       {hasStructure ? (
@@ -25,7 +46,8 @@ function ArchivedRow({ m }: { m: ArchiveMeta }) {
       <div className="pl-taskrow-main">
         <div className="pl-taskrow-title">{m.title ?? m.taskId}</div>
         <div className="pl-taskrow-meta">
-          {TASK_TYPE_LABEL[(m.type as TaskType) ?? 'single']} · {new Date(m.savedAt).toLocaleString('zh-CN')} · 历史归档
+          {TASK_TYPE_LABEL[(m.type as TaskType) ?? 'single']} · {new Date(m.savedAt).toLocaleString('zh-CN')}{' '}
+          · 历史归档
         </div>
       </div>
       {typeof m.meanPlddt === 'number' && (
@@ -34,6 +56,9 @@ function ArchivedRow({ m }: { m: ArchiveMeta }) {
           <span className="pl-taskrow-unit">pLDDT</span>
         </div>
       )}
+      <button className={`pl-row-del${confirming ? ' armed' : ''}`} onClick={remove} title="删除归档">
+        {confirming ? '确认删除' : '✕'}
+      </button>
     </a>
   )
 }
@@ -84,7 +109,11 @@ export function TasksView() {
             </a>
           ))}
           {history.map((m) => (
-            <ArchivedRow key={m.taskId} m={m} />
+            <ArchivedRow
+              key={m.taskId}
+              m={m}
+              onDeleted={(id) => setArchived((list) => (list ?? []).filter((x) => x.taskId !== id))}
+            />
           ))}
         </div>
       )}

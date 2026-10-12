@@ -48,7 +48,10 @@ function projectThumb(output: any): Thumb {
   if (!Array.isArray(residues) || residues.length < 2) return null
   const pts = residues.map((r) => [r.x, r.y, r.z])
   const [v1, v2] = pca2(pts)
-  const flat = pts.map((p) => [p[0] * v1[0] + p[1] * v1[1] + p[2] * v1[2], p[0] * v2[0] + p[1] * v2[1] + p[2] * v2[2]])
+  const flat = pts.map((p) => [
+    p[0] * v1[0] + p[1] * v1[1] + p[2] * v1[2],
+    p[0] * v2[0] + p[1] * v2[1] + p[2] * v2[2],
+  ])
   const xs = flat.map((p) => p[0])
   const ys = flat.map((p) => p[1])
   const minX = Math.min(...xs)
@@ -58,7 +61,7 @@ function projectThumb(output: any): Thumb {
   const span = Math.max(maxX - minX, maxY - minY, 0.001)
   // Scale into a 100×100 viewBox with a small margin; Y flips (screen coords).
   const px = (p: number[]) => +(((p[0] - minX) / span) * 96 + 2).toFixed(1)
-  const py = (p: number[]) => +((98 - ((p[1] - minY) / span) * 96)).toFixed(1)
+  const py = (p: number[]) => +(98 - ((p[1] - minY) / span) * 96).toFixed(1)
   // Per chain, per band color: one path of "M..L.." segment commands.
   const chains: string[] = []
   const colors: string[][] = []
@@ -84,36 +87,47 @@ function projectThumb(output: any): Thumb {
   return { chains, colors, viewBox: '0 0 100 100' }
 }
 
-export function StructureThumb({ taskId, small }: { taskId: string; small?: boolean }) {
-  const [thumb, setThumb] = useState<Thumb | undefined>(cache.get(taskId))
+export function StructureThumb({ taskId, path, small }: { taskId: string; path?: string; small?: boolean }) {
+  // Batch archives hold one PDB per target (pdb-<basename>); `path` deep-links
+  // to one of them via the server's ?path= resolution (model.pdb otherwise).
+  const key = path ? `${taskId}::${path}` : taskId
+  const [thumb, setThumb] = useState<Thumb | undefined>(cache.get(key))
   useEffect(() => {
-    const hit = cache.get(taskId)
+    const hit = cache.get(key)
     if (hit !== undefined) {
       setThumb(hit)
       return
     }
     let alive = true
     const base = location.href.split('#')[0]
-    fetch(new URL(`api/archive/${taskId}/structure`, base.endsWith('/') ? base : `${base}/`))
+    const q = path ? `?path=${encodeURIComponent(path)}` : ''
+    fetch(new URL(`api/archive/${taskId}/structure${q}`, base.endsWith('/') ? base : `${base}/`))
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j) => {
         const t = projectThumb((j as { output?: unknown })?.output)
-        cache.set(taskId, t)
+        cache.set(key, t)
         if (alive) setThumb(t)
       })
       .catch(() => {
-        cache.set(taskId, null)
+        cache.set(key, null)
         if (alive) setThumb(null)
       })
     return () => {
       alive = false
     }
-  }, [taskId])
+  }, [key, taskId, path])
   if (!thumb) return null
   return (
     <svg className={`pl-thumb${small ? ' pl-thumb-sm' : ''}`} viewBox={thumb.viewBox} aria-hidden>
       {thumb.chains.map((d, i) => (
-        <path key={i} d={d} stroke={thumb.colors[i]} strokeWidth={small ? 3.6 : 2.4} strokeLinecap="round" fill="none" />
+        <path
+          key={i}
+          d={d}
+          stroke={thumb.colors[i]}
+          strokeWidth={small ? 3.6 : 2.4}
+          strokeLinecap="round"
+          fill="none"
+        />
       ))}
     </svg>
   )

@@ -1,9 +1,18 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { readFile, stat } from 'node:fs/promises'
 import { existsSync, readFileSync } from 'node:fs'
+import { readFile, stat } from 'node:fs/promises'
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { archiveFileFor, archivePae, archiveReport, archiveStructureFor, getArchive, listArchive, putArchive } from './archive.ts'
+import {
+  archiveFileFor,
+  archivePae,
+  archiveReport,
+  archiveStructureFor,
+  deleteArchive,
+  getArchive,
+  listArchive,
+  putArchive,
+} from './archive.ts'
 
 // AGH Surface: serves the platform SPA + archive API under the mount prefix
 // (default /platform). The daemon allocates the loopback PORT and passes the
@@ -69,10 +78,7 @@ function configJson(): string {
     cfgWsUrl = undefined
   }
   return JSON.stringify({
-    wsUrl:
-      (typeof cfgWsUrl === 'string' && cfgWsUrl) ||
-      process.env.PROTEIN_PLATFORM_WS_URL ||
-      daemonWsUrl(),
+    wsUrl: (typeof cfgWsUrl === 'string' && cfgWsUrl) || process.env.PROTEIN_PLATFORM_WS_URL || daemonWsUrl(),
     profile: process.env.AGNES_PROFILE ?? 'local-dev',
     rowId: 'web:@aghes/protein-view',
     bffPath: '/api/client-modules/service',
@@ -112,8 +118,9 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       }
       if (!taskId || !/^[A-Za-z0-9_-]{1,80}$/.test(taskId)) throw new Error('bad taskId')
       const { mkdirSync, writeFileSync } = await import('node:fs')
-      const root = process.env.PROTEIN_PLATFORM_TASKS_ROOT
-        ?? join(process.env.AGH_HOME ?? process.env.HOME ?? '/tmp', 'protein-platform', 'tasks')
+      const root =
+        process.env.PROTEIN_PLATFORM_TASKS_ROOT ??
+        join(process.env.AGH_HOME ?? process.env.HOME ?? '/tmp', 'protein-platform', 'tasks')
       mkdirSync(join(root, taskId), { recursive: true })
       for (const [relPath, b64] of Object.entries(files ?? {})) {
         const clean = normalize(relPath).replace(/^(\.\.[/\\])+/, '')
@@ -173,15 +180,29 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       }
       if (req.method === 'GET' && taskId) {
         const { meta, files } = getArchive(taskId)
-        send(res, 200, JSON.stringify({
-          ...meta,
-          files: Object.fromEntries(Object.entries(files).map(([k, v]) => [k, v.toString('base64')])),
-        }))
+        send(
+          res,
+          200,
+          JSON.stringify({
+            ...meta,
+            files: Object.fromEntries(Object.entries(files).map(([k, v]) => [k, v.toString('base64')])),
+          }),
+        )
+        return
+      }
+      if (req.method === 'DELETE' && taskId) {
+        // History management: the UI offers a two-click confirm before calling.
+        deleteArchive(taskId)
+        send(res, 200, JSON.stringify({ ok: true }))
         return
       }
       send(res, 405, JSON.stringify({ error: 'method not allowed' }))
     } catch (e) {
-      send(res, (e as Error).message === 'not found' ? 404 : 400, JSON.stringify({ error: (e as Error).message }))
+      send(
+        res,
+        (e as Error).message === 'not found' ? 404 : 400,
+        JSON.stringify({ error: (e as Error).message }),
+      )
     }
     return
   }

@@ -1,5 +1,5 @@
 import { createElement as h, useEffect, useState } from 'react'
-import { archivedServices, getServices, setServicesSession, type PvServices } from '../bff.ts'
+import { archivedServices, getServices, type PvServices, setServicesSession } from '../bff.ts'
 import { getTask, subscribeTasks } from '../orchestrator.ts'
 import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
 
@@ -29,7 +29,7 @@ async function fetchArchiveMeta(taskId: string): Promise<ArchivedMeta | null> {
     const base = location.href.split('#')[0]
     const r = await fetch(new URL(`api/archive/${taskId}/meta`, base.endsWith('/') ? base : `${base}/`))
     if (!r.ok) return null
-    return ((await r.json()) as unknown) as ArchivedMeta
+    return (await r.json()) as unknown as ArchivedMeta
   } catch {
     return null
   }
@@ -82,7 +82,9 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
     if (!archived || !archived.reportPath) {
       return (
         <main className="pl-result">
-          <div className="pl-empty">任务不存在或已被清除 — 回<a href="#/">首页</a></div>
+          <div className="pl-empty">
+            任务不存在或已被清除 — 回<a href="#/">首页</a>
+          </div>
         </main>
       )
     }
@@ -96,8 +98,8 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
           <div>
             <div className="pl-result-title">{archived.title ?? archived.taskId}</div>
             <div className="pl-result-sub">
-              {TASK_TYPE_LABEL[archived.type ?? 'single']} · {new Date(archived.savedAt).toLocaleString('zh-CN')} ·
-              历史归档
+              {TASK_TYPE_LABEL[archived.type ?? 'single']} ·{' '}
+              {new Date(archived.savedAt).toLocaleString('zh-CN')} · 历史归档
             </div>
           </div>
         </div>
@@ -126,11 +128,12 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
   // ledger clip — so the savedTo regex can miss it. Fall back to the deterministic path.
   const savedTo =
     task.type === 'compare' && task.input.accession
-      ? task.resultSavedTo ?? `reports/${task.input.accession.toUpperCase()}.vs-alphafold.json`
+      ? (task.resultSavedTo ?? `reports/${task.input.accession.toUpperCase()}.vs-alphafold.json`)
       : task.resultSavedTo
   // 对比入口：单体任务按 accession 提交且已有预测 PDB 时，可一键与 AlphaFold DB 参考模型对比。
   const pdbPath = Object.values(task.savedTo).find((p) => p.endsWith('.pdb'))
-  const canCompare = cfg && sdk && task.type === 'single' && task.status === 'done' && !!task.input.accession && !!pdbPath
+  const canCompare =
+    cfg && sdk && task.type === 'single' && task.status === 'done' && !!task.input.accession && !!pdbPath
   const [comparing, setComparing] = useState(false)
   const runCompare = async () => {
     if (!cfg || !sdk || comparing) return
@@ -140,9 +143,15 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
       // compare task runs in a fresh cwd, so seed the predicted PDB into it first.
       const pdb = (await getServices().call('protein.file', { path: pdbPath })) as { b64: string }
       const { runTask } = await import('../orchestrator.ts')
-      await runTask(cfg, sdk, 'compare', { accession: task.input.accession, predictionPath: pdbPath }, {
-        seedFiles: { [pdbPath!]: pdb.b64 },
-      })
+      await runTask(
+        cfg,
+        sdk,
+        'compare',
+        { accession: task.input.accession, predictionPath: pdbPath },
+        {
+          seedFiles: { [pdbPath!]: pdb.b64 },
+        },
+      )
     } catch (e) {
       console.warn('[platform] compare seed failed:', (e as Error)?.message)
     } finally {
@@ -179,12 +188,23 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
               task.stages.map((s, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0' }}>
                   <span className={`pl-stage-dot ${s.status}`} />
-                  <span style={{ fontSize: 14, color: s.status === 'running' ? 'var(--pl-ink)' : 'var(--pl-muted)' }}>
+                  <span
+                    style={{
+                      fontSize: 14,
+                      color: s.status === 'running' ? 'var(--pl-ink)' : 'var(--pl-muted)',
+                    }}
+                  >
                     {s.label}
                   </span>
-                  {s.status === 'running' && <span className="pl-spinner" style={{ marginLeft: 'auto', width: 14, height: 14 }} />}
-                  {s.status === 'done' && <span style={{ marginLeft: 'auto', color: 'var(--pl-ok)', fontSize: 13 }}>✓</span>}
-                  {s.status === 'error' && <span style={{ marginLeft: 'auto', color: 'var(--pl-err)', fontSize: 13 }}>✕</span>}
+                  {s.status === 'running' && (
+                    <span className="pl-spinner" style={{ marginLeft: 'auto', width: 14, height: 14 }} />
+                  )}
+                  {s.status === 'done' && (
+                    <span style={{ marginLeft: 'auto', color: 'var(--pl-ok)', fontSize: 13 }}>✓</span>
+                  )}
+                  {s.status === 'error' && (
+                    <span style={{ marginLeft: 'auto', color: 'var(--pl-err)', fontSize: 13 }}>✕</span>
+                  )}
                 </div>
               ))
             )}
@@ -194,10 +214,20 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
       )}
 
       {!running && task.type === 'batch' && task.resultJson && (
-        <ToolViewStage toolName="batch_predict" savedTo="batch" preview={task.resultJson} services={getServices()} />
+        <ToolViewStage
+          toolName="batch_predict"
+          savedTo="batch"
+          preview={task.resultJson}
+          services={getServices()}
+        />
       )}
       {!running && task.type === 'complex' && task.resultJson && (
-        <ToolViewStage toolName="predict_complex" savedTo="complex" preview={task.resultJson} services={getServices()} />
+        <ToolViewStage
+          toolName="predict_complex"
+          savedTo="complex"
+          preview={task.resultJson}
+          services={getServices()}
+        />
       )}
       {!running && task.type !== 'batch' && task.type !== 'complex' && savedTo && (
         <ToolViewStage toolName={viewTool} savedTo={savedTo} services={getServices()} />
@@ -210,13 +240,26 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
         </div>
       )}
       {!running && task.type !== 'batch' && !savedTo && (
-        <div className="pl-empty">没有可展示的结果{task.status === 'failed' ? '（任务未完成）' : ''} — 可回到<a href="#/">首页</a>重新提交</div>
+        <div className="pl-empty">
+          没有可展示的结果{task.status === 'failed' ? '（任务未完成）' : ''} — 可回到<a href="#/">首页</a>
+          重新提交
+        </div>
       )}
     </main>
   )
 }
 
-function ToolViewStage({ toolName, savedTo, services, preview }: { toolName: string; savedTo: string; services: PvServices; preview?: string }) {
+function ToolViewStage({
+  toolName,
+  savedTo,
+  services,
+  preview,
+}: {
+  toolName: string
+  savedTo: string
+  services: PvServices
+  preview?: string
+}) {
   const [comp, setComp] = useState<any>(null)
   useEffect(() => {
     let alive = true
@@ -231,9 +274,5 @@ function ToolViewStage({ toolName, savedTo, services, preview }: { toolName: str
     }
   }, [toolName, savedTo, services])
   if (!comp?.comp) return <div className="pl-empty">加载视图组件…</div>
-  return (
-    <div className="pl-stage-wrap">
-      {h(comp.comp, comp.props)}
-    </div>
-  )
+  return <div className="pl-stage-wrap">{h(comp.comp, comp.props)}</div>
 }
