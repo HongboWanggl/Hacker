@@ -2993,7 +2993,7 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
         role: 'img',
         'aria-label': '逐残基 pLDDT 置信度曲线',
         style: { width: '100%', height: size.h },
-        onMouseMove: (ev) => {
+        onPointerMove: (ev) => {
           const idx = pick(ev)
           if (idx != null) onHover(idx)
           if (tooltipRef.current && ev.nativeEvent) {
@@ -3001,7 +3001,7 @@ function Curve({ residues, hover, onHover, selected, onSelect, highlight, noTitl
             tooltipRef.current.style.left = `${Math.min(Math.max(ev.clientX - r.left, 56), r.width - 56)}px`
           }
         },
-        onMouseLeave: () => onHover(null),
+        onPointerLeave: () => onHover(null),
         onClick: (ev) => {
           const idx = pick(ev)
           if (idx != null) onSelect?.(idx)
@@ -3091,6 +3091,9 @@ function Structure3D({
   // tablets/phones); a single pointer keeps the drag-rotate path below.
   const pointersRef = useRef(new Map())
   const pinchRef = useRef(null)
+  // Double-tap reset: dblclick doesn't fire reliably on touch, so taps are
+  // timed here and two quick taps (<350ms, <30px apart) replay the reset.
+  const lastTapRef = useRef({ t: 0, x: 0, y: 0 })
   // Maximized mode: the wrap goes fixed over the whole viewport (works inside
   // the toolview iframe where the fullscreen API is unavailable).
   const [maxed, setMaxed] = useState(false)
@@ -3501,7 +3504,7 @@ function Structure3D({
       ref: canvasRef,
       className: 'pv-3d',
       role: 'img',
-      'aria-label': '蛋白质 3D 结构视图（可拖拽旋转、滚轮缩放）',
+      'aria-label': '蛋白质 3D 结构视图（可拖拽旋转、滚轮/双指缩放、双击复位）',
       style: { width: '100%', height: size.h },
       onPointerDown: (ev) => {
         ev.currentTarget.setPointerCapture(ev.pointerId)
@@ -3587,10 +3590,20 @@ function Structure3D({
         // A click (pointer barely moved) picks the residue under the cursor —
         // same selection model as clicking the curve.
         const moved = Math.hypot(ev.clientX - (v.downX ?? ev.clientX), ev.clientY - (v.downY ?? ev.clientY))
-        if (moved < 5 && onSelect) {
-          const k = pick(ev)
-          // negative picks are ligand atoms — hover-only, never selectable
-          if (k != null && k >= 0) onSelect(k)
+        if (moved < 5) {
+          const now = performance.now()
+          const last = lastTapRef.current
+          if (now - last.t < 350 && Math.hypot(ev.clientX - last.x, ev.clientY - last.y) < 30) {
+            // Double-tap: same as the desktop double-click reset. The second
+            // tap still toggles the selection off, matching two clicks.
+            Object.assign(v, { yaw: -0.6, pitch: 0.35, zoom: 1, vx: 0, vy: 0 })
+            lastTapRef.current = { t: 0, x: 0, y: 0 }
+          } else lastTapRef.current = { t: now, x: ev.clientX, y: ev.clientY }
+          if (onSelect) {
+            const k = pick(ev)
+            // negative picks are ligand atoms — hover-only, never selectable
+            if (k != null && k >= 0) onSelect(k)
+          }
         }
       },
       onPointerLeave: (ev) => {

@@ -704,6 +704,9 @@ button.pv-fmt--clear:hover {
   background: #fff;
   border: 1px solid var(--pv-line);
   cursor: crosshair;
+  /* Touch: horizontal drags scrub the crosshair, vertical gestures keep
+     scrolling the transcript. */
+  touch-action: pan-y;
 }
 .pv-curve-tip {
   position: absolute;

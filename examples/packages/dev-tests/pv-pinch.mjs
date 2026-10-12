@@ -263,5 +263,67 @@ check(
 )
 await hoverOff()
 
+// Phase 6 — double-tap reset: two quick taps replay the desktop double-click
+// reset (zoom back to 1). Selection state entering this phase is whatever
+// earlier phases left (phase 4 selects residue 11), so the tag check is an
+// invariant: the unhovered-frame tag count must FLIP across one extra tap —
+// proving selection still toggles through the gesture path (no stuck state).
+reset()
+cv.dispatchEvent(pointer(1, 'pointerdown', P.x, P.y))
+cv.dispatchEvent(pointer(1, 'pointerup', P.x, P.y))
+cv.dispatchEvent(pointer(1, 'pointerdown', P.x + 2, P.y + 1))
+cv.dispatchEvent(pointer(1, 'pointerup', P.x + 2, P.y + 1))
+await wait(400)
+// Unhovered-frame tag count: rehover guarantees fresh frames, the final
+// hoverOff frame paints nothing but a selection tag (hover labels live on
+// the hoverOn frame only).
+const tagCount = async () => {
+  await rehover()
+  reset()
+  await hoverOff()
+  return texts().length
+}
+const tagsBefore = await tagCount()
+cv.dispatchEvent(pointer(1, 'pointerdown', P.x, P.y))
+cv.dispatchEvent(pointer(1, 'pointerup', P.x, P.y))
+await wait(400)
+const tagsAfter = await tagCount()
+check(
+  tagsBefore !== tagsAfter,
+  `selection still toggles after double-tap — no stuck tag (${tagsBefore} → ${tagsAfter})`,
+)
+await hoverOn()
+const afterTap = extent(pts())
+check(
+  afterTap < zoomed - 50 && Math.abs(afterTap - base) < 40,
+  `double-tap resets the zoom (got ${afterTap.toFixed(1)} ≈ base ${base.toFixed(1)})`,
+)
+await hoverOff()
+
+// Phase 7 — confidence curve scrubs with pointer events (touch drag): the
+// tooltip follows the horizontal position across the residues.
+const curve = container.querySelector('canvas.pv-curve')
+check(!!curve, 'confidence curve mounted')
+if (curve) {
+  curve.getBoundingClientRect = () => ({ left: 0, top: 0, width: 300, height: 120 })
+  const tipText = () => container.querySelector('.pv-curve-tip')?.textContent ?? ''
+  const scrub = async (x) => {
+    curve.dispatchEvent(pointer(4, 'pointermove', x, 60))
+    await wait(300)
+  }
+  await scrub(30)
+  const left = tipText()
+  await scrub(150)
+  const mid = tipText()
+  await scrub(285)
+  const right = tipText()
+  check(
+    left.includes('A3') && mid.includes('A11') && right.includes('A19'),
+    `curve pointer-scrub moves the readout ("${left}" → "${mid}" → "${right}")`,
+  )
+  curve.dispatchEvent(pointer(4, 'pointermove', 5, 60))
+  await wait(200)
+}
+
 console.log(failed ? 'PV PINCH FAIL' : 'PV PINCH OK')
 process.exit(failed ? 1 : 0)
