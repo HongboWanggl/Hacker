@@ -9,7 +9,7 @@ const httpCreds = process.env.PP_USER
   : undefined
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } })
+const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
 await page.goto(`${base}#/search`, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForSelector('.pl-input-name', { timeout: 15000 })
 await page.fill('.pl-input-name', 'hemoglobin human')
