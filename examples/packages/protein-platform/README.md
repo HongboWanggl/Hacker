@@ -28,7 +28,7 @@ AGH_HOME=$HOME/agh-home AGNES_PROFILE=local-dev \
 | 检索 | UniProt 关键词检索 → SearchCard hits 列表 |
 | 任务页 | 全部任务列表（运行中/已完成/失败徽标），自动合并 surface 归档历史 |
 | 结果页 | 3D 骨架画布（按 pLDDT 着色、自动旋转、全屏）+ 置信度曲线 + 序列条 + 分段统计 + PNG/CSV/PDB 导出；单体任务可一键发起 AlphaFold DB 对比；复合物任务附 PAE 误差热图（链边界 + 悬停读数） |
-| 历史归档 | 单体/复合物任务完成时报告 JSON + PDB(+PAE) 落盘到 surface archive；换浏览器/清存储/重启 daemon 后结果页仍完整可交互 |
+| 历史归档 | 全部五类任务完成时落盘到 surface archive（单体/复合物：报告+模型+PAE；批量：汇总+逐目标 PDB；检索/对比：报告；对比还存参考模型供覆盖渲染）；换浏览器/清存储/重启 daemon 后结果页仍完整可交互；任务页归档行可两键删除（✕ → 确认删除） |
 
 ## 使用示例
 
@@ -58,8 +58,10 @@ AGH_HOME=$HOME/agh-home AGNES_PROFILE=local-dev \
   `ownerProps` 伪 owner——resultPreview 必须是**截断 JSON**，可解析 JSON 会使组件跳过 report
   重取）。解析器共享自 `protein-view/extensions/main/pdb-parse.mjs`（B-factor = pLDDT）。
 - **归档**（`server/src/archive.ts`）：`~/protein-platform/archive/<taskId>/`（meta.json +
-  report.json + model.pdb，≤2MiB）。meta 冗余 meanPlddt/verdict 供报告墙免取数渲染。
-  PDB 结构解析在 server 侧复用同一 parser，返回与活 BFF 完全同形的 protein.structure 输出。
+  report.json + model.pdb，批量另存逐目标 `pdb-<basename>`，≤2MiB）。meta 冗余 meanPlddt/verdict/
+  jobPdbs 供报告墙免取数渲染（list 时推导并写回 meta.json，之后零解析开销）。
+  PDB 结构解析在 server 侧复用同一 parser，返回与活 BFF 完全同形的 protein.structure 输出；
+  `/structure?path=` `/file?path=` 按 basename 深链批内/对比参考 PDB（回退 model.pdb）。
 
 ## 验证
 
@@ -69,10 +71,15 @@ dev-tests 下的 live 探针（按链路全覆盖；需要本机 daemon + 已发
 node ../../dev-tests/pp-platform-live.mjs --shots   # 单体全流程：提交→阶段→3D/曲线→截图
 node ../../dev-tests/pp-archive-roundtrip.mjs       # 归档往返：完成→archived→无 localStorage 新上下文→API 直查
 node ../../dev-tests/pp-complex-full.mjs            # 复合物全流程：双链→内联报告渲染→归档（含 PAE）→新上下文
-node ../../dev-tests/pp-batch-smoke.mjs             # 批量：2 个 accession→BatchCard 汇总
-node ../../dev-tests/pp-search-smoke.mjs            # 检索：uniprot_search→SearchCard hits
-node ../../dev-tests/pp-compare-smoke.mjs           # AlphaFold 对比：一键发起→CompareCard（RMSD/差值轮廓）
+node ../../dev-tests/pp-batch-smoke.mjs             # 批量：2 个 accession→BatchCard→归档→新上下文重建
+node ../../dev-tests/pp-search-smoke.mjs            # 检索：uniprot_search→SearchCard→归档→新上下文重建
+node ../../dev-tests/pp-compare-smoke.mjs           # AlphaFold 对比：一键发起→CompareCard→归档→新上下文重建
+node ../../dev-tests/pp-archive-delete.mjs          # 归档删除：POST 造档→任务页两键删除→服务端 404
+node ../../dev-tests/pp-thumb-wall.mjs --shots      # 报告墙缩略图（批量卡=逐目标迷你迹线网格）
 ```
+
+除 platform-live 外均支持远端模式：`PP_BASE`/`PP_USER`/`PP_PASS`（httpCredentials 注入，
+针对公网部署回归）。
 
 ## 公网部署要点（WSL 服务器）
 

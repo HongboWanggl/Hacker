@@ -67,7 +67,8 @@ function ReportSnapshot({ task }: { task: any }) {
 // Meta carries the headline score, so no fetch is needed — except the Cα thumbnail,
 // which lazily pulls the archived structure and turns the card into a mini figure.
 function ArchiveCard({ m }: { m: ArchiveMeta }) {
-  const hasStructure = m.type === 'single' || m.type === 'complex'
+  // compare archives store the prediction as model.pdb — the trace thumb works.
+  const hasStructure = m.type === 'single' || m.type === 'complex' || m.type === 'compare'
   // Batch cards show up to three per-target mini traces instead of one figure —
   // an at-a-glance quality read across the whole run.
   const batchJobs = m.type === 'batch' ? (m.jobPdbs ?? []).slice(0, 3) : []

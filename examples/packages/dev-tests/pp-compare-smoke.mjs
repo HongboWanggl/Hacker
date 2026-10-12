@@ -38,6 +38,22 @@ if (fail.length === 0) {
   ).catch(() => {})
   const t = (await page.evaluate(() => JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]')))[0]
   if (t?.status !== 'done') fail.push(`compare outcome: ${t?.status} ${t?.error ?? ''}`)
+  // Compare archives too: hold the tab open until the archive lands, then
+  // rebuild the page from a fresh context (report + both models, overlay ready).
+  await page
+    .waitForFunction(
+      async (id) => {
+        try {
+          return (await fetch(`api/archive/${id}/meta`)).ok
+        } catch {
+          return false
+        }
+      },
+      t.id,
+      { timeout: 45000 },
+    )
+    .then(() => console.log('archive: landed'))
+    .catch(() => fail.push('compare archive did not land within 45s'))
   await page.goto(`${base}#/task/${t.id}`, { timeout: 15000 })
   await page.waitForSelector('.pv-root', { timeout: 60000 }).catch(() => fail.push('no .pv-root'))
   await page
@@ -46,6 +62,16 @@ if (fail.length === 0) {
   const body = (await page.textContent('.pl-result').catch(() => '')) ?? ''
   if (!/RMSD|一致性/i.test(body)) fail.push(`CompareCard missing metrics: ${body.slice(0, 200)}`)
   await page.screenshot({ path: '/tmp/pp-compare-smoke.png' })
+  // Fresh context: archived compare page must rebuild from the archive alone.
+  const page2 = await browser.newPage({ viewport: { width: 1400, height: 1000 } })
+  await page2.goto(`${base}#/task/${t.id}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
+  await page2.waitForSelector('.pv-root', { timeout: 60000 }).catch(() => fail.push('archived page2: no .pv-root'))
+  await page2
+    .waitForFunction(() => /RMSD|一致性/i.test(document.querySelector('.pl-result')?.innerText ?? ''), { timeout: 30000 })
+    .catch(() => {})
+  const body2 = (await page2.textContent('.pl-result').catch(() => '')) ?? ''
+  if (!/RMSD|一致性/i.test(body2)) fail.push('archived compare page missing metrics')
+  if (!/历史归档/.test(body2)) fail.push('archived compare page lacks archive badge')
 }
 await browser.close()
 if (fail.length) {

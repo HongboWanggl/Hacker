@@ -173,6 +173,50 @@ async function archiveTask(id: string): Promise<void> {
       await post({ 'report.json': b64of(JSON.stringify(report)) })
       return
     }
+    if (t.type === 'compare') {
+      // Compare reports live on disk ({compared, prediction, alphafold} shape);
+      // also persist both models so the archived Compare3D overlay works: the
+      // prediction as model.pdb (default /structure target) and the AlphaFold
+      // reference as pdb-<basename> (deep-linked via its savedTo path).
+      const reportPath =
+        t.resultSavedTo ??
+        (t.input.accession ? `reports/${t.input.accession.toUpperCase()}.vs-alphafold.json` : undefined)
+      if (!reportPath) return
+      const report = (await bffCall(t.sessionId, 'protein.report', { path: reportPath })) as {
+        compared?: { verdict?: string }
+        prediction?: { path?: string; meanPlddt?: number }
+        alphafold?: { savedTo?: string }
+      }
+      const files: Record<string, string> = { 'report.json': b64of(JSON.stringify(report)) }
+      if (typeof report.prediction?.path === 'string') {
+        try {
+          const pdb = (await bffCall(t.sessionId, 'protein.file', { path: report.prediction.path })) as {
+            b64: string
+          }
+          files['model.pdb'] = pdb.b64
+        } catch {
+          /* overlay degrades to metrics-only */
+        }
+      }
+      if (typeof report.alphafold?.savedTo === 'string') {
+        try {
+          const ref = (await bffCall(t.sessionId, 'protein.file', { path: report.alphafold.savedTo })) as {
+            b64: string
+          }
+          files[`pdb-${report.alphafold.savedTo.split('/').pop()}`] = ref.b64
+        } catch {
+          /* overlay degrades to metrics-only */
+        }
+      }
+      await post(files, {
+        ...(typeof report.prediction?.meanPlddt === 'number'
+          ? { meanPlddt: report.prediction.meanPlddt }
+          : {}),
+        ...(report.compared?.verdict ? { verdict: report.compared.verdict } : {}),
+        ...(typeof report.prediction?.path === 'string' ? { pdbPath: report.prediction.path } : {}),
+      })
+      return
+    }
 
     // single / complex: confidence report + model PDB (+ optional PAE matrix).
     let report: { file?: string; savedTo?: string; meanPlddt?: number; paePath?: string }

@@ -15,7 +15,7 @@ const STATUS_BADGE: Record<string, string> = {
 // record outlived this browser's localStorage (or another device's tasks).
 function ArchivedRow({ m, onDeleted }: { m: ArchiveMeta; onDeleted: (taskId: string) => void }) {
   const [confirming, setConfirming] = useState(false)
-  const hasStructure = m.type === 'single' || m.type === 'complex'
+  const hasStructure = m.type === 'single' || m.type === 'complex' || m.type === 'compare'
   const remove = async (e: MouseEvent) => {
     // Two-click confirm: the first click arms the row's ✕ into a red 确认 for
     // 4s — no modal, no accidental wipes, and the whole row stays a link.

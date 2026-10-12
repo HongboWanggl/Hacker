@@ -24,15 +24,21 @@ type ArchivedMeta = {
   savedAt: string
 }
 
-async function fetchArchiveMeta(taskId: string): Promise<ArchivedMeta | null> {
-  try {
-    const base = location.href.split('#')[0]
-    const r = await fetch(new URL(`api/archive/${taskId}/meta`, base.endsWith('/') ? base : `${base}/`))
-    if (!r.ok) return null
-    return (await r.json()) as unknown as ArchivedMeta
-  } catch {
-    return null
+async function fetchArchiveMeta(taskId: string, tries = 3): Promise<ArchivedMeta | null> {
+  // The mount table flaps for a few seconds when the surface misses a health
+  // probe (proxy answers 404 not_found mid-refresh) — so even a 404 gets
+  // retried before we believe it; a false「任务不存在」reads as data loss.
+  for (let i = 0; i < tries; i++) {
+    try {
+      const base = location.href.split('#')[0]
+      const r = await fetch(new URL(`api/archive/${taskId}/meta`, base.endsWith('/') ? base : `${base}/`))
+      if (r.ok) return (await r.json()) as unknown as ArchivedMeta
+    } catch {
+      /* transient — retry */
+    }
+    if (i < tries - 1) await new Promise((resolve) => setTimeout(resolve, 1500))
   }
+  return null
 }
 
 // Archived pages hand the report to the pv toolview whose parseReport dispatch is

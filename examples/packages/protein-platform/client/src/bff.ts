@@ -77,15 +77,19 @@ export type ArchiveMeta = {
   jobPdbs?: string[]
 }
 
-/** Archive list for history views; fails soft to [] (surface unreachable). */
+/** Archive list for history views; fails soft to [] (surface unreachable). One
+ *  retry rides out the mount-table flap window (surface health-probe blip). */
 export async function listArchive(): Promise<ArchiveMeta[]> {
-  try {
-    const r = await fetch(new URL('api/archive', baseHref()))
-    if (!r.ok) return []
-    return (await r.json()) as unknown as ArchiveMeta[]
-  } catch {
-    return []
+  for (let i = 0; i < 2; i++) {
+    try {
+      const r = await fetch(new URL('api/archive', baseHref()))
+      if (r.ok) return (await r.json()) as unknown as ArchiveMeta[]
+    } catch {
+      /* transient — retry */
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500))
   }
+  return []
 }
 
 /** Services shim backed by the completed-task archive instead of a live session:
