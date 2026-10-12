@@ -2,10 +2,14 @@
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
-const base = 'http://127.0.0.1:4177/platform/'
+// PP_BASE/PP_USER/PP_PASS: drive a remote deployment (see pp-complex-full.mjs).
+const base = process.env.PP_BASE ?? 'http://127.0.0.1:4177/platform/'
+const httpCreds = process.env.PP_USER
+  ? { username: process.env.PP_USER, password: process.env.PP_PASS ?? '' }
+  : undefined
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } })
+const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
 await page.goto(`${base}#/batch`, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForSelector('.pl-composer textarea', { timeout: 15000 })
 await page.fill('.pl-composer textarea', 'P69905\nP68871')
@@ -55,7 +59,7 @@ if (!/P68871/.test(body ?? '')) fail.push('BatchCard missing P68871 row')
 await page.screenshot({ path: '/tmp/pp-batch-smoke.png' })
 // Fresh context (no localStorage) → the archived page must rebuild the whole
 // result from the archive API alone: report.json feeds the BatchCard.
-const page2 = await browser.newPage({ viewport: { width: 1400, height: 1000 } })
+const page2 = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
 await page2.goto(`${base}#/task/${taskId}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page2.waitForSelector('.pv-root', { timeout: 60000 })
 await page2
