@@ -67,7 +67,10 @@ if (fail.length === 0) {
   if (!/RMSD|一致性/i.test(body)) fail.push(`CompareCard missing metrics: ${body.slice(0, 200)}`)
   await page.screenshot({ path: '/tmp/pp-compare-smoke.png' })
   // Fresh context: archived compare page must rebuild from the archive alone.
-  const page2 = await browser.newPage({ viewport: { width: 1400, height: 1000 } })
+  // Fresh context = fresh localStorage; on remote deployments it also needs the
+  // basic-auth credentials (a bare browser.newPage() 401s on every archive fetch).
+  const ctx2 = await browser.newContext({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+  const page2 = await ctx2.newPage()
   // One reload retry: the mount-table flap can outlast the app's own retries.
   for (let attempt = 0; attempt < 2; attempt++) {
     await page2.goto(`${base}#/task/${t.id}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
