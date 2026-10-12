@@ -170,6 +170,45 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
   // too is harmless — the closure is never invoked there.
   const archivedSvc = useMemo(() => archivedServices(taskId), [taskId])
 
+  // BatchCard drill-down hand-off: one target of a batch run → AlphaFold DB
+  // compare. The job's PDB is fetched through whichever services back the stage
+  // (live session or archive shim) and seeded into the fresh compare session.
+  // Same identity rule as handlePredict (stage remount on unstable props).
+  const makeBatchCompare =
+    (fetchFile: (path: string) => Promise<{ b64: string }>) =>
+    async (job: { accession: string; savedTo?: string }) => {
+      if (!cfg || !sdk || !job.savedTo) return
+      try {
+        const base = job.savedTo.split('/').pop() ?? job.savedTo
+        const pdb = await fetchFile(job.savedTo)
+        const { runTask } = await import('../orchestrator.ts')
+        await runTask(
+          cfg,
+          sdk,
+          'compare',
+          { accession: job.accession, predictionPath: base },
+          { seedFiles: { [base]: pdb.b64 } },
+        )
+        location.hash = '#/tasks'
+      } catch (e) {
+        console.warn('[platform] batch compare seed failed:', (e as Error)?.message)
+      }
+    }
+  const runBatchCompare = useCallback(
+    (job: { accession: string; savedTo?: string }) => {
+      void makeBatchCompare((path) => getServices().call('protein.file', { path }) as never)(job)
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cfg, sdk],
+  )
+  const runArchivedBatchCompare = useCallback(
+    (job: { accession: string; savedTo?: string }) => {
+      void makeBatchCompare((path) => archivedSvc.call('protein.file', { path }) as never)(job)
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cfg, sdk, archivedSvc],
+  )
+
   if (!task) {
     if (!archivedChecked) return <main className="pl-result" />
     if (!archived || !archived.reportPath) {
@@ -229,6 +268,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
           savedTo={archived.reportPath}
           services={archivedSvc}
           onPredict={handlePredict}
+          onCompare={archived.type === 'batch' ? runArchivedBatchCompare : undefined}
         />
         {canCompareArchived && (
           <div style={{ marginTop: 14, textAlign: 'center' }}>
@@ -423,6 +463,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
           preview={task.resultJson}
           services={getServices()}
           onPredict={handlePredict}
+          onCompare={runBatchCompare}
         />
       )}
       {!running && task.type === 'complex' && task.resultJson && (
@@ -471,12 +512,14 @@ function ToolViewStage({
   services,
   preview,
   onPredict,
+  onCompare,
 }: {
   toolName: string
   savedTo: string
   services: PvServices
   preview?: string
   onPredict?: (accessions: string[]) => void
+  onCompare?: (job: { accession: string; savedTo?: string }) => void
 }) {
   const [comp, setComp] = useState<any>(null)
   useEffect(() => {
@@ -487,13 +530,13 @@ function ToolViewStage({
       const map = bindProteinToolViews(services)
       setComp({
         comp: map.get(toolName),
-        props: ownerProps(toolName, savedTo, services, preview, onPredict),
+        props: ownerProps(toolName, savedTo, services, preview, onPredict, onCompare),
       })
     })
     return () => {
       alive = false
     }
-  }, [toolName, savedTo, services, onPredict])
+  }, [toolName, savedTo, services, onPredict, onCompare])
   if (!comp?.comp) return <div className="pl-empty">加载视图组件…</div>
   return <div className="pl-stage-wrap">{h(comp.comp, comp.props)}</div>
 }

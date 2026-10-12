@@ -1362,7 +1362,7 @@ function residuesSummaryMd(name, savedTo, residues) {
   return lines.join('\n')
 }
 
-function BatchRowDetail({ job, services }) {
+function BatchRowDetail({ job, services, onCompare }) {
   const [structure, setStructure] = useState(null)
   const [loadError, setLoadError] = useState(null)
   const [hover, setHover] = useState(null)
@@ -1431,6 +1431,21 @@ function BatchRowDetail({ job, services }) {
           'div',
           { className: 'pv-3d-toolbar' },
           h('div', { className: 'pv-section-title' }, `${job.accession} 3D 结构`),
+          // One-click AlphaFold DB comparison for this target — the platform host
+          // injects onCompare (seeds this job's PDB into a fresh compare session);
+          // the AGH transcript host never does, so the button stays absent there.
+          onCompare && job.savedTo
+            ? h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'pv-export',
+                  title: '与 AlphaFold DB 参考模型对比（RMSD / 差值轮廓）',
+                  onClick: () => onCompare(job),
+                },
+                '⇄ 对比',
+              )
+            : null,
           h(
             'button',
             {
@@ -1940,7 +1955,7 @@ function batchSummaryMd(jobs, s) {
   return lines.join('\n')
 }
 
-function BatchCard({ report, services }) {
+function BatchCard({ report, services, onCompare }) {
   const jobs = Array.isArray(report.jobs) ? report.jobs : []
   const s = report.summary ?? {}
   const okJobs = jobs.filter((j) => j.status === 'ok')
@@ -2112,7 +2127,7 @@ function BatchCard({ report, services }) {
                 h('span', { className: 'pv-batch-caret' }, openAcc === j.accession ? '▾' : '▸'),
               ),
               openAcc === j.accession && j.savedTo
-                ? h(BatchRowDetail, { key: `${j.accession}-detail`, job: j, services })
+                ? h(BatchRowDetail, { key: `${j.accession}-detail`, job: j, services, onCompare })
                 : null,
             ]
           : h(
@@ -4560,7 +4575,10 @@ function ProteinToolView({ owner, services }) {
 
   // batch_predict results render as a per-accession table.
   if (report?.jobs) {
-    return h('div', { className: 'pv-root' }, h(BatchCard, { report, services }))
+    // onCompare (platform-only, like SearchCard's onPredict): per-target
+    // AlphaFold DB comparison from an expanded batch drill-down.
+    const onCompare = typeof owner?.onCompare === 'function' ? owner.onCompare : null
+    return h('div', { className: 'pv-root' }, h(BatchCard, { report, services, onCompare }))
   }
 
   if (!report) {

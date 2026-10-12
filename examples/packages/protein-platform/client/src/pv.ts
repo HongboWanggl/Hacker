@@ -37,6 +37,7 @@ export function ownerProps(
   services: PvServices,
   preview?: string,
   onPredict?: (accessions: string[]) => void,
+  onCompare?: (job: { accession: string; savedTo?: string }) => void,
 ) {
   return {
     owner: {
@@ -51,6 +52,9 @@ export function ownerProps(
       // SearchCard's one-click predict hand-off (hit row ▶ / batch bar). Only
       // the platform builds owners, so the AGH transcript host never sees it.
       ...(onPredict ? { onPredict } : {}),
+      // BatchCard drill-down's per-target AlphaFold compare hand-off (same
+      // platform-only rule as onPredict).
+      ...(onCompare ? { onCompare } : {}),
     },
     // ProteinToolView destructures { owner, services } — without this the
     // BFF fetch throws immediately and its silent .catch hides the failure.
