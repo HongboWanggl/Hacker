@@ -1,6 +1,7 @@
-import { createElement as h, useEffect, useState } from 'react'
+import { createElement as h, useCallback, useEffect, useMemo, useState } from 'react'
 import { archivedServices, getServices, type PvServices, setServicesSession } from '../bff.ts'
 import { getTask, subscribeTasks } from '../orchestrator.ts'
+import { downloadShareReport, snapshotStageFigures } from '../report.ts'
 import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
 
 const STATUS_BADGE: Record<string, string> = {
@@ -68,6 +69,58 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
   // only after archivedChecked flips, and a hook added between renders is React #310.
   const [archivedComparing, setArchivedComparing] = useState(false)
   const [retrying, setRetrying] = useState(false)
+  const [sharing, setSharing] = useState(false)
+
+  // Shareable report: headline numbers live in the task's report JSON (shapes
+  // differ per tool), the figures are the rendered stage canvases — snapshotted
+  // inside the click handler while the WebGL frames are fresh.
+  const shareReport = async (
+    id: string,
+    title: string,
+    type: TaskType,
+    savedAt: string | number,
+    opts?: { savedTo?: string; resultJson?: string; archived?: boolean },
+  ) => {
+    if (sharing) return
+    setSharing(true)
+    try {
+      // Figures FIRST, synchronously in the click tick — before any await can
+      // trigger the rerender/remount dance or clear the WebGL buffers.
+      const figs = snapshotStageFigures()
+      let report: any
+      try {
+        if (opts?.resultJson) report = JSON.parse(opts.resultJson)
+        else if (opts?.savedTo) report = await getServices().call('protein.report', { path: opts.savedTo })
+        else if (opts?.archived) report = await archivedServices(id).call('protein.report', {})
+      } catch {
+        /* figures + header still make a useful report */
+      }
+      const mean =
+        typeof report?.meanPlddt === 'number'
+          ? report.meanPlddt
+          : typeof report?.summary?.meanPlddt === 'number'
+            ? report.summary.meanPlddt
+            : typeof report?.prediction?.meanPlddt === 'number'
+              ? report.prediction.meanPlddt
+              : undefined
+      const verdict =
+        report?.verdict ??
+        report?.compared?.verdict ??
+        (report?.summary?.ok != null ? `${report.summary.ok}/${report.summary.total} 目标成功` : undefined)
+      downloadShareReport({
+        taskId: id,
+        title,
+        typeLabel: TASK_TYPE_LABEL[type] ?? type,
+        savedAt,
+        meanPlddt: mean,
+        verdict,
+        report,
+        figs,
+      })
+    } finally {
+      setSharing(false)
+    }
+  }
   useEffect(() => {
     if (task) return
     let alive = true
@@ -90,19 +143,29 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
 
   // SearchCard hand-off: 检索结果 → 一键预测（单个 = 单体任务，多个 = 批量任务）。
   // Defined before the archived branch so archived search pages get it too.
-  const handlePredict = (accs: string[]) => {
-    if (!cfg || !sdk || accs.length === 0) return
-    void (async () => {
-      try {
-        const { runTask } = await import('../orchestrator.ts')
-        if (accs.length === 1) await runTask(cfg, sdk, 'single', { accession: accs[0] })
-        else await runTask(cfg, sdk, 'batch', { accessions: accs })
-        location.hash = '#/tasks'
-      } catch (e) {
-        console.warn('[platform] predict hand-off failed:', (e as Error)?.message)
-      }
-    })()
-  }
+  // useCallback matters: ToolViewStage remounts the whole pv stage (fresh 3D
+  // canvas) whenever its effect deps change identity, so every prop handed to
+  // it must be render-stable.
+  const handlePredict = useCallback(
+    (accs: string[]) => {
+      if (!cfg || !sdk || accs.length === 0) return
+      void (async () => {
+        try {
+          const { runTask } = await import('../orchestrator.ts')
+          if (accs.length === 1) await runTask(cfg, sdk, 'single', { accession: accs[0] })
+          else await runTask(cfg, sdk, 'batch', { accessions: accs })
+          location.hash = '#/tasks'
+        } catch (e) {
+          console.warn('[platform] predict hand-off failed:', (e as Error)?.message)
+        }
+      })()
+    },
+    [cfg, sdk],
+  )
+  // Same identity rule: archivedServices(taskId) built fresh each render would
+  // remount the archived stage on every store tick. Building it for live tasks
+  // too is harmless — the closure is never invoked there.
+  const archivedSvc = useMemo(() => archivedServices(taskId), [taskId])
 
   if (!task) {
     if (!archivedChecked) return <main className="pl-result" />
@@ -161,13 +224,28 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
         <ToolViewStage
           toolName={archivedToolName(archived.type)}
           savedTo={archived.reportPath}
-          services={archivedServices(taskId)}
+          services={archivedSvc}
           onPredict={handlePredict}
         />
         {canCompareArchived && (
           <div style={{ marginTop: 14, textAlign: 'center' }}>
             <button className="pl-back" onClick={() => void runArchivedCompare()} disabled={archivedComparing}>
               {archivedComparing ? '发起对比中…' : `⇄ 与 AlphaFold DB（${archived.accession}）对比 →`}
+            </button>
+          </div>
+        )}
+        {archived && (
+          <div style={{ marginTop: 14, textAlign: 'center' }}>
+            <button
+              className="pl-back"
+              disabled={sharing}
+              onClick={() =>
+                void shareReport(taskId, archived.title ?? archived.taskId, archived.type ?? 'single', archived.savedAt, {
+                  archived: true,
+                })
+              }
+            >
+              {sharing ? '生成报告中…' : '⇩ 分享报告（HTML）'}
             </button>
           </div>
         )}
@@ -339,6 +417,17 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
         <div style={{ marginTop: 14, textAlign: 'center' }}>
           <button className="pl-back" onClick={() => void runCompare()} disabled={comparing}>
             {comparing ? '发起对比中…' : `⇄ 与 AlphaFold DB（${task.input.accession}）对比 →`}
+          </button>
+        </div>
+      )}
+      {!running && (
+        <div style={{ marginTop: 14, textAlign: 'center' }}>
+          <button
+            className="pl-back"
+            disabled={sharing}
+            onClick={() => void shareReport(task.id, task.title, task.type, task.createdAt, { savedTo, resultJson: task.resultJson })}
+          >
+            {sharing ? '生成报告中…' : '⇩ 分享报告（HTML）'}
           </button>
         </div>
       )}
