@@ -118,7 +118,8 @@ async function runLocalBoltz({ proteins, smiles }) {
           'predict',
           join(work, 'input.yaml'),
           '--accelerator',
-          'mps',
+          // macOS → Metal MPS; Linux servers → CUDA via the generic "gpu".
+          process.platform === 'darwin' ? 'mps' : 'gpu',
           '--use_msa_server',
           '--output_format',
           'pdb',

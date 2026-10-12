@@ -6,12 +6,21 @@ import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
 
 const SHOTS = process.argv.includes('--shots')
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
+// PP_BASE/PP_USER/PP_PASS: drive a remote deployment (see pp-complex-full.mjs).
+const base = process.env.PP_BASE ?? 'http://127.0.0.1:4177/platform/'
+const httpCreds = process.env.PP_USER
+  ? { username: process.env.PP_USER, password: process.env.PP_PASS ?? '' }
+  : undefined
 const fail = []
 
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, deviceScaleFactor: 2 })
+const page = await browser.newPage({
+  viewport: { width: 1400, height: 1000 },
+  deviceScaleFactor: 2,
+  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
+})
 try {
-  await page.goto('http://127.0.0.1:4177/platform/', { waitUntil: 'domcontentloaded', timeout: 60000 })
+  await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
   await page.waitForSelector('.pl-composer textarea', { timeout: 15000 })
   const status = await page.textContent('.pl-status')
   if (!/已连接|connected|服务正常/i.test(status ?? '')) fail.push(`status dot: ${status}`)
@@ -23,7 +32,7 @@ try {
 
   // Badges live on the #/tasks list (home cards show score/verdict instead), so go
   // there and wait for the run to finish (ESMFold on 142aa takes tens of seconds).
-  await page.goto('http://127.0.0.1:4177/platform/#/tasks', { timeout: 15000 })
+  await page.goto(`${base}#/tasks`, { timeout: 15000 })
   const outcome = await page
     .waitForSelector('.pl-tasklist a.pl-taskrow:first-child .pl-badge.done, .pl-tasklist a.pl-taskrow:first-child .pl-badge.failed, .pl-tasklist a.pl-taskrow:first-child .pl-badge.cancelled', {
       timeout: 420000,

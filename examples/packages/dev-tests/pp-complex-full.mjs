@@ -3,12 +3,20 @@
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
-const base = 'http://127.0.0.1:4177/platform/'
+// PP_BASE lets the probe drive a remote deployment (e.g. the public platform);
+// PP_USER/PP_PASS supply its basic-auth credentials (read via ssh, never logged).
+const base = process.env.PP_BASE ?? 'http://127.0.0.1:4177/platform/'
+const httpCreds = process.env.PP_USER
+  ? { username: process.env.PP_USER, password: process.env.PP_PASS ?? '' }
+  : undefined
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 
+const newCtx = () =>
+  browser.newContext({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+
 // Pass 1: run the task.
-const ctx1 = await browser.newContext({ viewport: { width: 1400, height: 1000 } })
+const ctx1 = await newCtx()
 const p1 = await ctx1.newPage()
 p1.on('console', (m) => {
   if (m.type() === 'error' || m.type() === 'warning') console.log(`[console.${m.type()}]`, m.text().slice(0, 200))
@@ -41,11 +49,13 @@ await ctx1.close()
 
 // Pass 2: fresh context → archive-backed complex result (canvas + PAE endpoint).
 if (taskId) {
-  const ctx2 = await browser.newContext({ viewport: { width: 1400, height: 1000 } })
+  const ctx2 = await newCtx()
   const p2 = await ctx2.newPage()
   await p2.goto(`${base}#/task/${taskId}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
   await p2.waitForSelector('.pv-root canvas', { timeout: 90000 }).catch(() => fail.push('no canvas from complex archive'))
-  const pae = await fetch(new URL(`api/archive/${taskId}/pae`, base)).then((r) => r.json()).catch(() => null)
+  const pae = await fetch(new URL(`api/archive/${taskId}/pae`, base), {
+    headers: httpCreds ? { authorization: 'Basic ' + Buffer.from(`${httpCreds.username}:${httpCreds.password}`).toString('base64') } : {},
+  }).then((r) => r.json()).catch(() => null)
   console.log('pae endpoint:', pae?.output ? `n=${pae.output.n ?? '?'}` : JSON.stringify(pae).slice(0, 80))
   await p2.screenshot({ path: '/tmp/pp-complex-archive.png' })
   await ctx2.close()
