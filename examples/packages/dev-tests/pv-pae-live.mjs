@@ -143,13 +143,17 @@ const ligLabel =
 check(`ligand toggle counts atoms (got "${ligLabel}")`, ligLabel === '配体 (2)')
 
 // side profile strip: one bar per row = mean PAE against other residues.
-// Tested before the heatmap hover (no mouseleave in happy-dom → hoverCell
-// would otherwise stick and win the readout priority).
+// Tested before the heatmap hover (hoverCell would otherwise stick and win
+// the readout priority; a synthetic 'pointerout' clears it — see below).
 const strip = container.querySelector('canvas.pv-pae-strip')
 check('strip canvas present, sized to heatmap', !!strip && strip.width === 28 && strip.height === 32)
 strip.getBoundingClientRect = () => ({ left: 0, top: 0, width: 28, height: 100 })
 // row 1 = A:A2; bytes [90,0,120,200] minus self → (90+120+200)/3 = 136.67 → 17.15 Å
-strip.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: 10, clientY: 30 }))
+const pid = (ev) => {
+  Object.defineProperty(ev, 'pointerId', { value: 1 })
+  return ev
+}
+strip.dispatchEvent(pid(new win.MouseEvent('pointermove', { bubbles: true, clientX: 10, clientY: 30 })))
 await new Promise((r) => setTimeout(r, 200))
 const stripReadout = container.querySelector('.pv-pae-side .pv-hoverline')?.textContent ?? ''
 check(`strip hover mean readout (got "${stripReadout}")`, stripReadout === 'A:A2 · 平均 17.15 Å')
@@ -159,7 +163,7 @@ check(`strip hover mean readout (got "${stripReadout}")`, stripReadout === 'A:A2
 // The pair readout takes priority over the strip mean once the heatmap is hovered.
 const canvas = container.querySelector('canvas.pv-pae-canvas')
 canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 })
-canvas.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: 37.5, clientY: 62.5 }))
+canvas.dispatchEvent(pid(new win.MouseEvent('pointermove', { bubbles: true, clientX: 37.5, clientY: 62.5 })))
 await new Promise((r) => setTimeout(r, 200))
 const readout = container.querySelector('.pv-pae-side .pv-hoverline')?.textContent ?? ''
 check(`hover readout cell(1,2) (got "${readout}")`, readout === 'A:A2 → B:A1 · 15.06 Å')
@@ -168,7 +172,9 @@ check(`hover readout cell(1,2) (got "${readout}")`, readout === 'A:A2 → B:A1 �
 // readout cell (same signals as the mouse: readout + cross-view linkage) ---
 // happy-dom never fires mouseleave (known probe trap) — clear the sticky
 // hoverCell first so the keyboard cursor owns the readout.
-canvas.dispatchEvent(new win.MouseEvent('mouseout', { bubbles: true, relatedTarget: win.document.body }))
+canvas.dispatchEvent(
+  pid(new win.MouseEvent('pointerout', { bubbles: true, relatedTarget: win.document.body })),
+)
 await new Promise((r) => setTimeout(r, 150))
 const kbdChecks = []
 kbdChecks.push([
@@ -231,8 +237,10 @@ pinChecks.push([
   `click pins the cell readout (got "${await kbReadout()}")`,
   (await kbReadout()) === 'A:A2 → B:A1 · 15.06 Å',
 ])
-// Mouse leaves (hover cleared) — the pin must keep the pair on the readout.
-canvas.dispatchEvent(new win.MouseEvent('mouseout', { bubbles: true, relatedTarget: win.document.body }))
+// Pointer leaves (hover cleared) — the pin must keep the pair on the readout.
+canvas.dispatchEvent(
+  pid(new win.MouseEvent('pointerout', { bubbles: true, relatedTarget: win.document.body })),
+)
 pinChecks.push([
   `pinned readout survives mouse-leave (got "${await kbReadout()}")`,
   (await kbReadout()) === 'A:A2 → B:A1 · 15.06 Å',
@@ -302,14 +310,14 @@ check('pooled canvas 2×2 native (upscaled 16×16)', canvas2?.width === 16)
 const strip2 = container2.querySelector('canvas.pv-pae-strip')
 check('pooled strip present', !!strip2 && strip2.height === 16)
 strip2.getBoundingClientRect = () => ({ left: 0, top: 0, width: 28, height: 100 })
-strip2.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: 10, clientY: 20 }))
+strip2.dispatchEvent(pid(new win.MouseEvent('pointermove', { bubbles: true, clientX: 10, clientY: 20 })))
 await new Promise((r) => setTimeout(r, 200))
 const stripReadout2 = container2.querySelector('.pv-pae-side .pv-hoverline')?.textContent ?? ''
 check(`pooled strip range readout (got "${stripReadout2}")`, stripReadout2 === 'A:A1–A:A2 · 平均 32.00 Å')
 canvas2.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 })
 // cell (1,0): n=2 → 50px cells; clientX 62.5 → i=1, clientY 12.5 → j=0.
 // cell(1) covers residues[2..3] = B:A1–B:A2; byte pooled[2]=64 → 8.03 Å.
-canvas2.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: 62.5, clientY: 12.5 }))
+canvas2.dispatchEvent(pid(new win.MouseEvent('pointermove', { bubbles: true, clientX: 62.5, clientY: 12.5 })))
 await new Promise((r) => setTimeout(r, 200))
 const readout2 = container2.querySelector('.pv-pae-side .pv-hoverline')?.textContent ?? ''
 check(`pooled hover readout ranges (got "${readout2}")`, readout2 === 'B:A1–B:A2 → A:A1–A:A2 · 8.03 Å')

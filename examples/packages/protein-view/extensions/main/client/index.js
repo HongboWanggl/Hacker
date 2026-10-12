@@ -4241,7 +4241,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
             const r = ni * scale
             if (residues?.[r] && onHover) onHover(r)
           },
-          onMouseMove: (e) => {
+          onPointerMove: (e) => {
             const rect = e.currentTarget.getBoundingClientRect()
             const i = Math.floor((e.clientX - rect.left) / (rect.width / n))
             const j = Math.floor((e.clientY - rect.top) / (rect.height / n))
@@ -4252,7 +4252,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
             const r = i * scale
             if (residues?.[r] && onHover) onHover(r)
           },
-          onMouseLeave: () => setHoverCell(null),
+          onPointerLeave: () => setHoverCell(null),
           onClick: (e) => {
             const rect = e.currentTarget.getBoundingClientRect()
             const i = Math.floor((e.clientX - rect.left) / (rect.width / n))
@@ -4273,7 +4273,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
           width: 28,
           height: px,
           style: { width: '28px', height: `${dispPx}px` },
-          onMouseMove: (e) => {
+          onPointerMove: (e) => {
             const rect = e.currentTarget.getBoundingClientRect()
             const i = Math.floor((e.clientY - rect.top) / (rect.height / n))
             if (i < 0 || i >= n) return
@@ -4281,7 +4281,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
             const r = i * scale
             if (residues?.[r] && onHover) onHover(r)
           },
-          onMouseLeave: () => setStripRow(null),
+          onPointerLeave: () => setStripRow(null),
         }),
       ),
       h(

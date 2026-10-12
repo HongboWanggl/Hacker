@@ -48,8 +48,8 @@ standalone in papers and slides.
 3D 视图用 Pointer Events 驱动：桌面拖拽旋转 / 滚轮缩放 / 双击复位，触屏上
 单指拖转、双指捏合缩放、双击复位（第二根手指按下即切换到手势缩放，松开后
 需重新触摸才会旋转；异常释放的触摸会被安全复位，不会卡死手势）。置信度曲线
-同样走 Pointer Events：触屏横向滑动即可 scrub 十字线读数（`touch-action: pan-y`
-保留纵向页面滚动）。
+与 PAE 热图/误差条同样走 Pointer Events：曲线触屏横向滑动 scrub 十字线读数
+（`touch-action: pan-y` 保留纵向页面滚动），热图双轴拖动 scrub、点按固定读数。
 3D 自动旋转可用工具栏开关暂停，且默认尊重系统「减少动态」（prefers-reduced-motion）
 设置——要求减少动态的环境下结构不自转，手动勾选可恢复。
 

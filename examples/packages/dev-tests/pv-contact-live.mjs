@@ -216,7 +216,11 @@ check(`contact segments drawn beneath atoms (windows: ${windows.join(',')})`, wi
 const strip = container.querySelector('canvas.pv-pae-strip')
 check('strip canvas present for hover test', !!strip)
 strip.getBoundingClientRect = () => ({ left: 0, top: 0, width: 28, height: 100 })
-strip.dispatchEvent(new win.MouseEvent('mousemove', { bubbles: true, clientX: 10, clientY: 30 }))
+const pidEv = (ev) => {
+  Object.defineProperty(ev, 'pointerId', { value: 1 })
+  return ev
+}
+strip.dispatchEvent(pidEv(new win.MouseEvent('pointermove', { bubbles: true, clientX: 10, clientY: 30 })))
 await new Promise((r) => setTimeout(r, 200))
 const readout =
   [...container.querySelectorAll('.pv-hoverline')]
