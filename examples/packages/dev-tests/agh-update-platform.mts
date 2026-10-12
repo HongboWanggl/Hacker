@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { createClient, memoryJournal } from '../../../packages/sdk/src/index.node.ts'
 
 // Publish the protein-platform Surface package:
@@ -23,6 +24,13 @@ const home = process.env.AGH_HOME!
 const profile = process.env.AGNES_PROFILE ?? 'local-dev'
 const target = join(home, 'profiles', profile, 'deploy', 'protein-platform')
 const repoDeploy = new URL('../protein-platform/deploy/', import.meta.url).pathname
+
+// The file source packages the repo dir INCLUDING dist/ — a stale dist silently
+// publishes an old frontend (2026-10-12: server served yesterday's bundle while
+// update+trust all reported success). Always build first.
+const pkgRoot = new URL('../protein-platform', import.meta.url).pathname
+const build = spawnSync('node', ['tools/build.mjs'], { cwd: pkgRoot, stdio: 'inherit' })
+if (build.status !== 0) throw new Error(`build failed (${build.status})`)
 
 const client = createClient({
   transport: { kind: 'unix', path: `${home}/data/daemon/agnesd.sock` },
