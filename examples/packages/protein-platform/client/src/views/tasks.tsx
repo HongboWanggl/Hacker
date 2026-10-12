@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { listArchive, type ArchiveMeta } from '../bff.ts'
+import { StructureThumb } from '../components/thumb.tsx'
 import { getTasks, subscribeTasks } from '../orchestrator.ts'
 import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
 
@@ -13,9 +14,14 @@ const STATUS_BADGE: Record<string, string> = {
 // History rows from the surface archive: tasks completed on this machine whose
 // record outlived this browser's localStorage (or another device's tasks).
 function ArchivedRow({ m }: { m: ArchiveMeta }) {
+  const hasStructure = m.type === 'single' || m.type === 'complex'
   return (
     <a className="pl-taskrow" href={`#/task/${m.taskId}`}>
-      <span className="pl-badge done">已完成</span>
+      {hasStructure ? (
+        <StructureThumb taskId={m.taskId} small />
+      ) : (
+        <span className="pl-badge done">已完成</span>
+      )}
       <div className="pl-taskrow-main">
         <div className="pl-taskrow-title">{m.title ?? m.taskId}</div>
         <div className="pl-taskrow-meta">

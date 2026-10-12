@@ -84,7 +84,7 @@ function projectThumb(output: any): Thumb {
   return { chains, colors, viewBox: '0 0 100 100' }
 }
 
-export function StructureThumb({ taskId }: { taskId: string }) {
+export function StructureThumb({ taskId, small }: { taskId: string; small?: boolean }) {
   const [thumb, setThumb] = useState<Thumb | undefined>(cache.get(taskId))
   useEffect(() => {
     const hit = cache.get(taskId)
@@ -111,9 +111,9 @@ export function StructureThumb({ taskId }: { taskId: string }) {
   }, [taskId])
   if (!thumb) return null
   return (
-    <svg className="pl-thumb" viewBox={thumb.viewBox} aria-hidden>
+    <svg className={`pl-thumb${small ? ' pl-thumb-sm' : ''}`} viewBox={thumb.viewBox} aria-hidden>
       {thumb.chains.map((d, i) => (
-        <path key={i} d={d} stroke={thumb.colors[i]} strokeWidth={2.4} strokeLinecap="round" fill="none" />
+        <path key={i} d={d} stroke={thumb.colors[i]} strokeWidth={small ? 3.6 : 2.4} strokeLinecap="round" fill="none" />
       ))}
     </svg>
   )

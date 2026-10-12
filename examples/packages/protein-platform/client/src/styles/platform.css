@@ -139,6 +139,11 @@ body {
   display: block; width: calc(100% + 32px); margin: 0 -16px 10px; height: 110px;
   background: radial-gradient(ellipse at 50% 42%, #f2f7ff 0%, #e9f0fc 70%, transparent 100%);
 }
+/* Inline variant for task-list rows: a compact round figure instead of a badge. */
+.pl-thumb-sm {
+  width: 40px; height: 40px; margin: 0; flex-shrink: 0;
+  border: 1px solid var(--pl-line); border-radius: 10px; padding: 3px; box-sizing: border-box;
+}
 
 /* One-time consent explainer under the composer: what the automated session does. */
 .pl-consent {

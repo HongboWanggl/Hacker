@@ -4,10 +4,17 @@ import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
 
 const SHOTS = process.argv.includes('--shots')
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
-const base = 'http://127.0.0.1:4177/platform/'
+// PP_BASE/PP_USER/PP_PASS: drive a remote deployment (see pp-complex-full.mjs).
+const base = process.env.PP_BASE ?? 'http://127.0.0.1:4177/platform/'
+const httpCreds = process.env.PP_USER
+  ? { username: process.env.PP_USER, password: process.env.PP_PASS ?? '' }
+  : undefined
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const page = await browser.newPage({ viewport: { width: 1400, height: 1100 } })
+const page = await browser.newPage({
+  viewport: { width: 1400, height: 1100 },
+  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
+})
 await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForSelector('.pl-wall', { timeout: 20000 })
 // Thumbnails mount after the archive list lands; wait for at least one SVG.
