@@ -3,7 +3,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { archivePae, archiveReport, archiveStructure, getArchive, listArchive, putArchive } from './archive.ts'
+import { archiveFileFor, archivePae, archiveReport, archiveStructureFor, getArchive, listArchive, putArchive } from './archive.ts'
 
 // AGH Surface: serves the platform SPA + archive API under the mount prefix
 // (default /platform). The daemon allocates the loopback PORT and passes the
@@ -155,7 +155,15 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       }
       if (req.method === 'GET' && taskId && rel.endsWith('/structure')) {
         // protein.structure shape parsed from the archived PDB (shared parser).
-        send(res, 200, JSON.stringify({ output: archiveStructure(taskId) }))
+        // ?path= selects a per-target PDB within a batch archive.
+        const path = new URL(req.url ?? '/', 'http://x').searchParams.get('path') ?? undefined
+        send(res, 200, JSON.stringify({ output: archiveStructureFor(taskId, path) }))
+        return
+      }
+      if (req.method === 'GET' && taskId && rel.endsWith('/file')) {
+        // protein.file shape ({b64, name}) — PDB downloads for archived batch rows.
+        const path = new URL(req.url ?? '/', 'http://x').searchParams.get('path') ?? undefined
+        send(res, 200, JSON.stringify({ output: archiveFileFor(taskId, path) }))
         return
       }
       if (req.method === 'GET' && taskId && rel.endsWith('/pae')) {

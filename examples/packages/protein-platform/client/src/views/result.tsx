@@ -35,6 +35,17 @@ async function fetchArchiveMeta(taskId: string): Promise<ArchivedMeta | null> {
   }
 }
 
+// Archived pages hand the report to the pv toolview whose parseReport dispatch is
+// keyed by toolName — batch reports carry jobs, search reports carry hits, so the
+// archived type must map to the tool that produces that report shape.
+function archivedToolName(type?: TaskType): string {
+  if (type === 'complex') return 'predict_complex'
+  if (type === 'batch') return 'batch_predict'
+  if (type === 'search') return 'uniprot_search'
+  if (type === 'compare') return 'compare_alphafold'
+  return 'predict_structure'
+}
+
 // The workbench result page: the battle-tested protein-view toolview component
 // (captured via the apply() shim) renders inside a clean platform stage. It
 // self-serves report + structure + PAE through the BFF once we hand it the
@@ -91,7 +102,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
           </div>
         </div>
         <ToolViewStage
-          toolName={archived.type === 'complex' ? 'predict_complex' : 'predict_structure'}
+          toolName={archivedToolName(archived.type)}
           savedTo={archived.reportPath}
           services={archivedServices(taskId)}
         />

@@ -85,7 +85,9 @@ function ArchiveCard({ m }: { m: ArchiveMeta }) {
           {m.verdict ? <div className="pl-card-verdict">{m.verdict}</div> : null}
         </>
       ) : (
-        <div className="pl-card-verdict">已完成 · 点击查看</div>
+        // Scoreless types still have a story: batch carries 「N/N 目标成功」,
+        // search/compare fall back to the neutral prompt.
+        <div className="pl-card-verdict">{m.verdict ?? '已完成 · 点击查看'}</div>
       )}
     </a>
   )

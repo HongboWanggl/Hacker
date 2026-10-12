@@ -98,6 +98,31 @@ export function archiveStructure(taskId: string): unknown {
   return parsePdbStructure(pdb.toString('utf8'))
 }
 
+// Batch archives store each successful target as `pdb-<basename>` (the batch
+// report carries no single model.pdb). `path` is the workspace-relative path
+// the client asks for; only the basename matters for lookup.
+function pickPdb(files: Record<string, Buffer>, path?: string): Buffer {
+  const base = (path ?? '').split('/').pop() ?? ''
+  const pdb = (base && files[`pdb-${base}`]) || files['model.pdb']
+  if (!pdb) throw new Error('no PDB in archive')
+  return pdb
+}
+
+/** protein.structure for a batch target (or the single model.pdb fallback). */
+export function archiveStructureFor(taskId: string, path?: string): unknown {
+  const { files } = getArchive(taskId)
+  return parsePdbStructure(pickPdb(files, path).toString('utf8'))
+}
+
+/** protein.file-shaped ({b64, name}) read from any archived PDB — powers the
+ *  PDB download button on archived batch rows. */
+export function archiveFileFor(taskId: string, path?: string): { b64: string; name: string } {
+  const { files } = getArchive(taskId)
+  const base = (path ?? '').split('/').pop() ?? ''
+  const key = base && files[`pdb-${base}`] ? `pdb-${base}` : 'model.pdb'
+  return { b64: pickPdb(files, path).toString('base64'), name: key.replace(/^pdb-/, '') }
+}
+
 /** Archived PAE heatmap (quantized matrix persisted at archive time), same shape
  *  the live protein.pae service returns. */
 export function archivePae(taskId: string): unknown {

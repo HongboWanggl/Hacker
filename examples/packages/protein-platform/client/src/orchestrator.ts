@@ -79,6 +79,10 @@ function patch(id: string, fn: (t: Task) => void) {
 
 export function defaultTitle(type: TaskType, input: TaskInput): string {
   if (type === 'compare') return `对比：${input.accession ?? '?'} vs AlphaFold`
+  if (type === 'batch' && input.accessions?.length) {
+    const shown = input.accessions.slice(0, 2).join(' · ')
+    return `批量：${shown}${input.accessions.length > 2 ? ` 等 ${input.accessions.length} 个` : ''}`
+  }
   if (input.query) return `检索：${input.query}`
   if (input.accession) return input.accession
   if (input.name) return input.name
@@ -104,10 +108,69 @@ function verdictOf(mean: number): string {
 // failed write logs and leaves the task unarchived (retryable by re-render).
 async function archiveTask(id: string): Promise<void> {
   const t = getTask(id)
-  // Batch jobs embed per-target PDB paths inside a result that has no summary
-  // file; search reports live in the session workspace only. Neither archives.
-  if (!t?.sessionId || (t.type !== 'single' && t.type !== 'complex')) return
+  if (!t?.sessionId) return
+  const b64of = (s: string) => btoa(unescape(encodeURIComponent(s)))
+  const post = async (files: Record<string, string>, extra: Record<string, unknown> = {}) => {
+    const base = location.href.split('#')[0]
+    const r = await fetch(new URL('api/archive', base.endsWith('/') ? base : `${base}/`), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        taskId: id,
+        sessionId: t!.sessionId,
+        type: t!.type,
+        title: t!.title,
+        reportPath: 'report.json',
+        ...extra,
+        files,
+      }),
+    })
+    if (!r.ok) throw new Error(`archive: HTTP ${r.status}`)
+    patch(id, (t2) => {
+      t2.archived = true
+    })
+  }
   try {
+    if (t.type === 'batch') {
+      // No on-disk summary: the inline ledger result IS the report. Persist it
+      // plus each successful target's PDB (budget-capped — the server rejects
+      // archives beyond 2 MiB) so the archived page can render rows in 3D.
+      if (!t.resultJson) return
+      const parsed = JSON.parse(t.resultJson) as {
+        summary?: { total?: number; ok?: number; meanPlddt?: number }
+        jobs?: Array<{ status?: string; savedTo?: string }>
+      }
+      const files: Record<string, string> = { 'report.json': b64of(t.resultJson) }
+      let totalBytes = 0
+      for (const j of parsed.jobs ?? []) {
+        if (j.status !== 'ok' || typeof j.savedTo !== 'string') continue
+        try {
+          const f = (await bffCall(t.sessionId, 'protein.file', { path: j.savedTo })) as { b64: string }
+          const bytes = Math.floor((f.b64.length * 3) / 4)
+          if (totalBytes + bytes > 1_400_000) break
+          totalBytes += bytes
+          files[`pdb-${j.savedTo.split('/').pop()}`] = f.b64
+        } catch {
+          /* one missing PDB degrades that row only */
+        }
+      }
+      const mean = typeof parsed.summary?.meanPlddt === 'number' ? parsed.summary.meanPlddt : undefined
+      await post(files, {
+        ...(mean !== undefined ? { meanPlddt: mean } : {}),
+        verdict: `${parsed.summary?.ok ?? '?'}/${parsed.summary?.total ?? '?'} 目标成功`,
+      })
+      return
+    }
+    if (t.type === 'search') {
+      // The hits report is a workspace file — archive it verbatim for offline
+      // SearchCard re-renders.
+      if (!t.resultSavedTo) return
+      const report = await bffCall(t.sessionId, 'protein.report', { path: t.resultSavedTo })
+      await post({ 'report.json': b64of(JSON.stringify(report)) })
+      return
+    }
+
+    // single / complex: confidence report + model PDB (+ optional PAE matrix).
     let report: { file?: string; savedTo?: string; meanPlddt?: number; paePath?: string }
     let reportJson: string
     if (t.type === 'complex') {
@@ -125,7 +188,6 @@ async function archiveTask(id: string): Promise<void> {
       Object.values(t.savedTo).find((p) => p.endsWith('.pdb'))
     if (!pdbPath) throw new Error('no PDB path in report')
     const pdb = (await bffCall(t.sessionId, 'protein.file', { path: pdbPath })) as { b64: string }
-    const b64of = (s: string) => btoa(unescape(encodeURIComponent(s)))
     const files: Record<string, string> = { 'report.json': b64of(reportJson), 'model.pdb': pdb.b64 }
     // Persist the PAE heatmap alongside the model when the report carries one —
     // the quantized matrix is tiny and lets the archived page render the full panel.
@@ -152,24 +214,9 @@ async function archiveTask(id: string): Promise<void> {
         /* score chip stays empty — archive proceeds */
       }
     }
-    const base = location.href.split('#')[0]
-    const r = await fetch(new URL('api/archive', base.endsWith('/') ? base : `${base}/`), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        taskId: id,
-        sessionId: t.sessionId,
-        type: t.type,
-        title: t.title,
-        ...(mean !== undefined ? { meanPlddt: mean, verdict: verdictOf(mean) } : {}),
-        reportPath: 'report.json',
-        pdbPath,
-        files,
-      }),
-    })
-    if (!r.ok) throw new Error(`archive: HTTP ${r.status}`)
-    patch(id, (t2) => {
-      t2.archived = true
+    await post(files, {
+      ...(mean !== undefined ? { meanPlddt: mean, verdict: verdictOf(mean) } : {}),
+      pdbPath,
     })
   } catch (e) {
     console.warn('[platform] archive write failed:', (e as Error)?.message)

@@ -92,9 +92,16 @@ export function archivedServices(taskId: string): PvServices {
     return ((await r.json()) as { output?: unknown }).output
   }
   return {
-    async call(service) {
+    // Archived runs have no live session: every pv service call resolves
+    // against the archive API instead of the daemon. ?path= routes
+    // protein.structure / protein.file to a per-target PDB inside a batch
+    // archive (server falls back to model.pdb for single/complex).
+    async call(service, input) {
+      const path = typeof (input as { path?: unknown })?.path === 'string' ? encodeURIComponent((input as { path: string }).path) : ''
+      const q = path ? `?path=${path}` : ''
       if (service === 'protein.report') return get(`api/archive/${taskId}/report`)
-      if (service === 'protein.structure') return get(`api/archive/${taskId}/structure`)
+      if (service === 'protein.structure') return get(`api/archive/${taskId}/structure${q}`)
+      if (service === 'protein.file') return get(`api/archive/${taskId}/file${q}`)
       if (service === 'protein.pae') return get(`api/archive/${taskId}/pae`)
       throw new Error(`${service}: not available for archived tasks`)
     },
