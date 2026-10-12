@@ -132,6 +132,27 @@ body {
 .pl-card:nth-child(4) { animation-delay: 0.12s; } .pl-card:nth-child(5) { animation-delay: 0.16s; }
 @keyframes pl-in { from { opacity: 0; transform: translateY(8px); } }
 
+/* Archive cards with a Cα-trace figure: the thumbnail sits as a full-bleed band
+   on top of the card, softly inset so it reads as the "preview" of the result. */
+.pl-card-fig { padding-top: 0; overflow: hidden; }
+.pl-thumb {
+  display: block; width: calc(100% + 32px); margin: 0 -16px 10px; height: 110px;
+  background: radial-gradient(ellipse at 50% 42%, #f2f7ff 0%, #e9f0fc 70%, transparent 100%);
+}
+
+/* One-time consent explainer under the composer: what the automated session does. */
+.pl-consent {
+  display: flex; align-items: center; gap: 18px; max-width: 720px; margin: 14px auto 0;
+  padding: 13px 16px; font-size: 13px; line-height: 1.65; color: var(--pl-muted);
+  background: var(--pl-card); border: 1px solid var(--pl-line); border-radius: var(--pl-radius);
+}
+.pl-consent strong { color: var(--pl-ink); }
+.pl-consent-ok {
+  flex-shrink: 0; border: 1px solid var(--pl-line); background: transparent; color: var(--pl-ink);
+  border-radius: 999px; padding: 6px 14px; font-size: 13px; cursor: pointer;
+}
+.pl-consent-ok:hover { border-color: #c9d8f5; background: #f6f9ff; }
+
 .pl-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .pl-card-type { font-size: 11px; font-weight: 600; color: var(--pl-accent); background: var(--pl-accent-soft); border-radius: 6px; padding: 2px 8px; }
 .pl-card-title { font-size: 14.5px; font-weight: 650; margin: 0 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

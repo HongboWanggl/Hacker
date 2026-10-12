@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getServices, listArchive, type ArchiveMeta } from '../bff.ts'
+import { StructureThumb } from '../components/thumb.tsx'
 import { getTasks, runTask, subscribeTasks } from '../orchestrator.ts'
 import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
 
@@ -63,10 +64,13 @@ function ReportSnapshot({ task }: { task: any }) {
 }
 
 // History card from the surface archive (task not in this browser's localStorage).
-// Meta carries the headline score, so no fetch is needed.
+// Meta carries the headline score, so no fetch is needed — except the Cα thumbnail,
+// which lazily pulls the archived structure and turns the card into a mini figure.
 function ArchiveCard({ m }: { m: ArchiveMeta }) {
+  const hasStructure = m.type === 'single' || m.type === 'complex'
   return (
-    <a className="pl-card" href={`#/task/${m.taskId}`}>
+    <a className="pl-card pl-card-fig" href={`#/task/${m.taskId}`}>
+      {hasStructure && <StructureThumb taskId={m.taskId} />}
       <div className="pl-card-top">
         <span className="pl-card-type">{TASK_TYPE_LABEL[(m.type as TaskType) ?? 'single']}</span>
       </div>
@@ -117,6 +121,14 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
   const [name, setName] = useState('')
   const [ligand, setLigand] = useState('')
   const [busy, setBusy] = useState(false)
+  // One-time consent explainer: what the automated session will (and won't) do.
+  const [consent, setConsent] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('pp-consent-v1') === '1'
+    } catch {
+      return true // storage unavailable — don't nag
+    }
+  })
   const tasks = getTasks()
   const latest = tasks[0]
   // History from the surface archive (tasks completed elsewhere / storage lost).
@@ -263,6 +275,29 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
           </>
         )}
       </p>
+
+      {!consent && (
+        <div className="pl-consent" role="note">
+          <div>
+            <strong>提交后会发生什么？</strong> 平台为每个任务启动一个独立的自动化会话，按需调用只读科学工具
+            （UniProt 检索 · 结构预测 · 置信度分析 · AlphaFold 对比）。工具仅访问该任务的独立工作区，
+            不会触碰你的其他文件；全程无需审批，完成即在报告墙出结果。
+          </div>
+          <button
+            className="pl-consent-ok"
+            onClick={() => {
+              try {
+                localStorage.setItem('pp-consent-v1', '1')
+              } catch {
+                /* private mode — dismiss for this visit only */
+              }
+              setConsent(true)
+            }}
+          >
+            知道了
+          </button>
+        </div>
+      )}
 
       {(tasks.length > 0 || archived.length > 0) && (
         <>

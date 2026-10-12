@@ -22,13 +22,25 @@ AGH_HOME=$HOME/agh-home AGNES_PROFILE=local-dev \
 
 | 入口 | 说明 |
 | --- | --- |
-| 首页 | 极简输入框（FASTA / UniProt ID / 原始序列自动识别）+ 类型选择（单体 / 复合物 / 批量）+ 最近预测报告墙 |
+| 首页 | 极简输入框（FASTA / UniProt ID / 原始序列自动识别）+ 类型选择（单体 / 复合物 / 批量）+ 最近预测报告墙（归档卡带 Cα 主链缩略图，按 pLDDT 着色）+ 首次提交前的一次性自动化说明卡 |
 | 复合物 | 每行一条链 + 可选配体 SMILES → predict_complex（Boltz-2）→ 界面置信度结果页 |
 | 批量 | 每行一个 UniProt ID（≤8）→ batch_predict → BatchCard 汇总，成功行可展开逐目标 3D 详情 |
 | 检索 | UniProt 关键词检索 → SearchCard hits 列表 |
 | 任务页 | 全部任务列表（运行中/已完成/失败徽标），自动合并 surface 归档历史 |
-| 结果页 | 3D 骨架画布（按 pLDDT 着色、自动旋转、全屏）+ 置信度曲线 + 序列条 + 分段统计 + PNG/CSV/PDB 导出；单体任务可一键发起 AlphaFold DB 对比 |
-| 历史归档 | 单体/复合物任务完成时报告 JSON + PDB 落盘到 surface archive；换浏览器/清存储/重启 daemon 后结果页仍完整可交互 |
+| 结果页 | 3D 骨架画布（按 pLDDT 着色、自动旋转、全屏）+ 置信度曲线 + 序列条 + 分段统计 + PNG/CSV/PDB 导出；单体任务可一键发起 AlphaFold DB 对比；复合物任务附 PAE 误差热图（链边界 + 悬停读数） |
+| 历史归档 | 单体/复合物任务完成时报告 JSON + PDB(+PAE) 落盘到 surface archive；换浏览器/清存储/重启 daemon 后结果页仍完整可交互 |
+
+## 使用示例
+
+| 想做什么 | 在首页怎么输 |
+| --- | --- |
+| 预测血红蛋白 α 链 | 切到「单体结构预测」，输入 `P69905` → 开始预测。几分钟后报告墙出卡片：94.7 平均 pLDDT、分段质量条、点开即 3D |
+| 自定义突变序列 | 粘贴原始序列（纯氨基酸字母，≥10 个），如 `MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHF` |
+| FASTA 多条记录 | 直接粘贴 FASTA，取首条序列；标题行作任务名 |
+| 两链复合物 + 配体 | 切到「复合物预测」，每行一条链序列，配体 SMILES 填进输入框（如 `CC(=O)OC1=CC=CC=C1C(=O)O` 阿司匹林）→ ipTM/配体结合置信度 + PAE 热图 |
+| 一批同源蛋白 | 切到「批量预测」，每行一个 UniProt ID（≤8），完成后逐行展开 3D 详情 |
+| 查蛋白再预测 | 「检索」页搜 `hemoglobin` → SearchCard 里挑 hit → 复制 accession 到首页提交 |
+| 验证预测质量 | 单体结果页点「⇄ 与 AlphaFold DB 对比」→ 参考结构 RMSD / 差值轮廓，核心区 ~0.3 Å 即高度一致 |
 
 ## 架构
 

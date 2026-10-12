@@ -349,7 +349,7 @@ export async function runTask(
     // One fresh-session retry turns that from a failed task into a slower success.
     await new Promise((r) => setTimeout(r, 3000))
     const t = getTask(id)
-    if (t?.status === 'failed' && /STALL_WATCHDOG|TRANSPORT|TURN_ERROR|turn abort|status=\?|事件流中断|ECONN|EAI_AGAIN|socket hang up|fetch failed|reset/i.test(t.error ?? '')) {
+    if (t?.status === 'failed' && /STALL_WATCHDOG|TRANSPORT|TURN_ERROR|turn (abort|blocked)|status=\?|事件流中断|ECONN|EAI_AGAIN|socket hang up|fetch failed|reset/i.test(t.error ?? '')) {
       patch(id, (t2) => {
         t2.status = 'running'
         t2.error = undefined
