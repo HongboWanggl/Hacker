@@ -470,6 +470,11 @@ export async function runTask(
         }
       })
 
+      // The UI cancels via an AbortController on a task that reads "running" from
+      // the moment runTask is called — the click can beat the turn start (remote
+      // chains add RPC latency before prompt). An aborted signal must abort here,
+      // not silently start an un-cancellable turn; AbortError settles as 已取消.
+      if (controller.signal.aborted) throw new DOMException('cancelled', 'AbortError')
       await session.prompt(buildPrompt(type, input), { signal: controller.signal })
       patch(id, (t) => {
         // An aborted turn can also RESOLVE here (stopReason=aborted) instead of

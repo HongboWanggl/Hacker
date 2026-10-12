@@ -641,6 +641,11 @@ export class Session {
     input: ContentBlock[] | string,
     opts: { signal?: AbortSignal; titleLocale?: 'en' | 'zh-CN' } = {},
   ): Promise<TurnResult> {
+    // A cancel can land BEFORE this call (UI sets its state optimistically while
+    // session/new / attach round-trips are still in flight). Aborted-then-listened
+    // is not a thing: addEventListener on an already-aborted signal never fires, so
+    // without this check the turn would start and run to completion un-cancellable.
+    opts.signal?.throwIfAborted()
     // Captured by identity: the outcome of *this* turn is only the record that was
     // installed while the request was in flight, never one left over from a past turn.
     const before = this.lastTurnEnd
