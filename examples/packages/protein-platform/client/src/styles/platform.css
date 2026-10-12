@@ -757,3 +757,115 @@ body {
     margin: 8px 0 0;
   }
 }
+
+/* Usage guide (#/help): static explainer sections in the platform design
+   language — cards on the shared tokens, pLDDT swatches from the pv palette. */
+.pl-help {
+  max-width: 880px;
+  margin: 0 auto;
+  padding-top: 28px;
+  padding-bottom: 64px;
+}
+.pl-help-sec {
+  margin-top: 26px;
+}
+.pl-help-sec h2 {
+  font-size: 17px;
+  margin: 0 0 12px;
+  color: var(--pl-ink);
+}
+.pl-help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+.pl-help-card {
+  background: var(--pl-card);
+  border: 1px solid var(--pl-line);
+  border-radius: var(--pl-radius);
+  padding: 14px 16px;
+  box-shadow: var(--pl-shadow);
+}
+.pl-help-wide {
+  margin-bottom: 12px;
+}
+.pl-help-card h3 {
+  font-size: 14px;
+  margin: 0 0 6px;
+  color: var(--pl-ink);
+}
+.pl-help-card p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--pl-muted);
+  margin: 0;
+}
+.pl-help-card code {
+  font-size: 12px;
+  background: var(--pl-accent-soft);
+  color: var(--pl-accent);
+  border-radius: 6px;
+  padding: 1px 5px;
+}
+.pl-help-bands {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 8px 18px;
+}
+.pl-help-bands li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--pl-muted);
+  line-height: 1.6;
+}
+.pl-help-bands b {
+  color: var(--pl-ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pl-help-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transform: translateY(1px);
+}
+.pl-help-list {
+  margin: 0;
+  padding: 0 0 0 2px;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+.pl-help-list li {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--pl-muted);
+}
+.pl-help-list b {
+  color: var(--pl-ink);
+}
+.pl-help-foot {
+  margin-top: 30px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--pl-muted);
+}
+.pl-help-foot a {
+  color: var(--pl-accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+.pl-hint-link {
+  color: var(--pl-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.pl-hint-link:hover {
+  text-decoration: underline;
+}

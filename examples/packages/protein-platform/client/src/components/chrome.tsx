@@ -18,6 +18,7 @@ export function TopBar({ connected }: { connected: boolean }) {
     { href: '#/tasks', label: '任务', match: (h: string) => h.startsWith('#/task') },
     { href: '#/batch', label: '批量', match: (h: string) => h.startsWith('#/batch') },
     { href: '#/search', label: '检索', match: (h: string) => h.startsWith('#/search') },
+    { href: '#/help', label: '指南', match: (h: string) => h.startsWith('#/help') },
   ]
   return (
     <header className="pl-topbar">

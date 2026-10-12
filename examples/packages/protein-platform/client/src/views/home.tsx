@@ -305,6 +305,8 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
             支持 <code>FASTA</code> · <code>UniProt ID</code> · <code>原始序列</code>，⌘/Ctrl + Enter 快速提交
           </>
         )}
+        {' · '}
+        <a href="#/help" className="pl-hint-link">使用指南</a>
       </p>
 
       {!consent && (
