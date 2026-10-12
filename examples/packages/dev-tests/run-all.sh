@@ -2,6 +2,7 @@
 # Unified test entry for the protein packages. Run from anywhere:
 #   zsh examples/packages/dev-tests/run-all.sh          # fast suite (no network, ~1 min)
 #   zsh examples/packages/dev-tests/run-all.sh --live   # + live E2E against 127.0.0.1:4177 (network, ~10 min)
+#   zsh examples/packages/dev-tests/run-all.sh --live --long  # + 842 aa MPS ceiling probe (~26 min)
 # Prerequisites: daemon running with AGH_HOME pointing at the AGH home (web on :4177
 # for regression/live), node + tsx available via `node --import tsx`.
 set -e
@@ -77,6 +78,9 @@ if [ "${1:-}" = "--live" ]; then
   live pv-pae-kbd-live2.mjs     # fresh predict_complex + PAE keyboard E2E
   live af-e2e-live2.mjs         # compare_alphafold live run
   live pv-mobile-e2e.mjs        # fresh-session full loop at 400px phone width
+  if [ "${2:-}" = "--long" ]; then
+    live pv-long-live.mjs        # 842 aa local-ceiling probe (~20-26 min on MPS; opt-in)
+  fi
 fi
 
 echo "ALL SUITES PASSED"

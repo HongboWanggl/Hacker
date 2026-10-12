@@ -11,7 +11,6 @@ import { accessSync, constants as fsConstants, readdirSync, readFileSync } from 
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { promisify } from 'node:util'
 
 const Kind = Symbol.for('TypeBox.Kind')
 
@@ -90,7 +89,6 @@ function resolveLocalBoltz() {
 async function runLocalBoltz({ proteins, smiles }) {
   const bin = resolveLocalBoltz()
   if (!bin) return { missing: true }
-  const exec = promisify(execFile)
   const work = await mkdtemp(join(tmpdir(), 'boltz-local-'))
   await mkdir(join(work, 'out'), { recursive: true })
   const yaml = ['sequences:']
@@ -106,31 +104,51 @@ async function runLocalBoltz({ proteins, smiles }) {
   }
   await writeFile(join(work, 'input.yaml'), `${yaml.join('\n')}\n`, 'utf8')
   // Local mode is synchronous — no job id exists, so `wait` is advisory only.
+  // The CLI runs as a detached process-group leader: node's execFile timeout
+  // only signals the direct child, and boltz (PyTorch/MPS compute) survives
+  // SIGTERM — an orphan kept hogging the GPU 30+ minutes past a timed-out run
+  // (observed 2026-10-12). A group-wide SIGKILL shortly after the cap reclaims
+  // the whole tree.
   let stdout = ''
   try {
-    ;({ stdout } = await exec(
-      bin,
-      [
-        'predict',
-        join(work, 'input.yaml'),
-        '--accelerator',
-        'mps',
-        '--use_msa_server',
-        '--output_format',
-        'pdb',
-        '--out_dir',
-        join(work, 'out'),
-      ],
-      {
-        timeout: 20 * 60_000,
-        maxBuffer: 64 * 1024 * 1024,
-      },
-    ))
+    stdout = await new Promise((resolve, reject) => {
+      const child = execFile(
+        bin,
+        [
+          'predict',
+          join(work, 'input.yaml'),
+          '--accelerator',
+          'mps',
+          '--use_msa_server',
+          '--output_format',
+          'pdb',
+          '--out_dir',
+          join(work, 'out'),
+        ],
+        {
+          timeout: 20 * 60_000,
+          maxBuffer: 64 * 1024 * 1024,
+          detached: true,
+        },
+        (error, out) => (error ? reject(error) : resolve(out)),
+      )
+      const reap = setTimeout(
+        () => {
+          try {
+            process.kill(-child.pid, 'SIGKILL')
+          } catch {
+            // Already gone — node's own timeout won the race.
+          }
+        },
+        20 * 60_000 + 5_000,
+      )
+      child.once('close', () => clearTimeout(reap))
+    })
   } catch (error) {
     const msg = String(error?.message ?? error)
     if (killed(error))
       return {
-        error: `Local Boltz-2 timed out after 20 min (${msg.slice(0, 120)}). Try smaller targets or the API.`,
+        error: `Local Boltz-2 timed out after 20 min (${msg.slice(0, 120)}). This target exceeds what the local weights finish on this machine within the cap — DO NOT retry with the same input, it will time out again. Either split the target into domain-sized pieces (≤ ~600 aa each) and predict those, or configure a Boltz API key (BOLTZ_API_KEY / secret store) for the hosted engine.`,
       }
     // The tail of the message carries the actual exception; the head is the exec line + progress bars.
     return { error: `Local Boltz-2 failed: ${msg.slice(-400)}` }
