@@ -79,6 +79,7 @@ if [ "${1:-}" = "--live" ]; then
   live af-e2e-live2.mjs         # compare_alphafold live run
   live pv-mobile-e2e.mjs        # fresh-session full loop at 400px phone width
   live pv-pae-mobile.mjs        # PAE heatmap fits 400px card + hover readout
+  live pv-pae-max-live.mjs      # PAE maximize: canvas doubles, fits, Esc exits
   if [ "${2:-}" = "--long" ]; then
     live pv-long-live.mjs        # 842 aa local-ceiling probe (~20-26 min on MPS; opt-in)
   fi
