@@ -459,10 +459,18 @@ button.pv-delta-bar--neg:hover {
   .pv-grid {
     grid-template-columns: 1fr;
   }
+  .pv-pae-body {
+    flex-direction: column;
+  }
 }
 @container pvpanel (max-width: 760px) {
   .pv-grid {
     grid-template-columns: 1fr;
+  }
+  /* PAE body stacks on narrow panels: a row would either squeeze the side
+     profile to 0 or overflow the card (the heatmap canvas can't shrink). */
+  .pv-pae-body {
+    flex-direction: column;
   }
 }
 

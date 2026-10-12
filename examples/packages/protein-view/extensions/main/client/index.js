@@ -3665,9 +3665,50 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
   const [focusPair, setFocusPair] = useState(null) // 'A|B' — chip-clicked chain pair
   const canvasRef = useRef(null)
   const stripRef = useRef(null)
+  // Measured inline width: the heatmap shares its row with the side profile, so
+  // the 480px default overflows narrow viewports (phones) — the body flex row
+  // is block-level and reports the real available width, the side strip's own
+  // width comes out of it. 0 = unmeasured (fallback to the 480px default).
+  const bodyRef = useRef(null)
+  const sideElRef = useRef(null)
+  const [availW, setAvailW] = useState(0)
   // Maximized mode: the whole PAE module goes fixed over the frame so the
   // error matrix can be explored at presentation size (Esc exits).
   const [maxed, setMaxed] = useState(false)
+  useEffect(() => {
+    const body = bodyRef.current
+    if (!body) return
+    const measure = () => {
+      const side = sideElRef.current
+      const strip = stripRef.current
+      // Heat row = heatmap canvas + 6px gap + per-residue strip. The side
+      // profile shares the body row (14px flex gap) unless the ≤760px
+      // breakpoint stacks them — then the heatmap gets the full body width.
+      // Row mode reserves at least 90px for the side: a canvas that outgrows
+      // the row would otherwise squeeze the side to 0 (min-width:0), which
+      // both hides the readout and feeds a too-wide measurement back.
+      const stacked =
+        typeof getComputedStyle === 'function' && getComputedStyle(body).flexDirection === 'column'
+      let avail = body.clientWidth
+      if (strip) avail -= strip.getBoundingClientRect().width + 6
+      if (!stacked && side) avail -= Math.max(side.getBoundingClientRect().width, 90) + 14
+      setAvailW((prev) => {
+        // Degenerate mid-mount zero widths fall back to the body width itself
+        // rather than an over-reserved heatmap.
+        const next = avail > 100 ? Math.floor(avail) : Math.floor(body.clientWidth) || 0
+        return prev === next ? prev : next
+      })
+    }
+    measure()
+    if (typeof ResizeObserver !== 'function') {
+      window.addEventListener('resize', measure)
+      return () => window.removeEventListener('resize', measure)
+    }
+    const ro = new ResizeObserver(measure)
+    ro.observe(body)
+    if (sideElRef.current) ro.observe(sideElRef.current)
+    return () => ro.disconnect()
+  }, [pae, maxed])
   const [paeCopied, setPaeCopied] = useState(null)
 
   useEffect(() => {
@@ -3723,10 +3764,22 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
   const n = pae?.n ?? 0
   const scale = pae?.scale ?? 1
   // Maximized mode lets the matrix grow past the 480 px inline cap (cell cap
-  // lifts from 8 to 24 so small complexes fill the screen).
-  const maxSize = maxed ? Math.max(480, Math.min(window.innerHeight - 230, window.innerWidth - 140)) : 480
+  // lifts from 8 to 24 so small complexes fill the screen). Inline mode sizes
+  // from the measured row width when available (phones) instead of a hardcoded
+  // 480 px — the heatmap shares the row with the side profile.
+  const maxSize = maxed
+    ? Math.max(480, Math.min(window.innerHeight - 230, window.innerWidth - 140))
+    : availW > 0
+      ? availW
+      : 480
   const cell = n ? Math.max(1, Math.min(maxed ? 24 : 8, Math.floor(maxSize / n))) : 0
   const px = n * cell
+  // Matrices longer than the measured row (cell already floored to 1) scale
+  // down in CSS to fit — the native-resolution canvas keeps exports crisp and
+  // the hover math is relative to rect.width, so interaction survives. Smooth
+  // interpolation replaces `pixelated` while shrinking (nearest-neighbor would
+  // drop cells visually).
+  const dispPx = availW > 0 && px > availW ? availW : px
 
   // Per-residue mean PAE (diagonal excluded — that's self-error, always 0).
   // Long bars flag interface residues / uncertain folds at a glance.
@@ -4056,7 +4109,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
     ),
     h(
       'div',
-      { className: 'pv-pae-body' },
+      { ref: bodyRef, className: 'pv-pae-body' },
       h(
         'div',
         { style: { display: 'flex', gap: '6px', alignItems: 'flex-start' } },
@@ -4069,7 +4122,11 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
             'PAE 误差热图（紫=低误差，黄=高误差）；Tab 聚焦后用方向键移动读出格，Home/End 跳行首行尾，Enter 固定读数，Esc 退出',
           width: px,
           height: px,
-          style: { width: `${px}px`, height: `${px}px` },
+          style: {
+            width: `${dispPx}px`,
+            height: `${dispPx}px`,
+            ...(dispPx < px ? { imageRendering: 'auto' } : null),
+          },
           onFocus: () => {
             if (kbCell) return
             const init = hoverCell ?? pinCell ?? { i: 0, j: 0 }
@@ -4142,7 +4199,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
           'aria-label': '逐残基平均 PAE 误差条',
           width: 28,
           height: px,
-          style: { width: '28px', height: `${px}px` },
+          style: { width: '28px', height: `${dispPx}px` },
           onMouseMove: (e) => {
             const rect = e.currentTarget.getBoundingClientRect()
             const i = Math.floor((e.clientY - rect.top) / (rect.height / n))
@@ -4156,7 +4213,7 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
       ),
       h(
         'div',
-        { className: 'pv-pae-side' },
+        { ref: sideElRef, className: 'pv-pae-side' },
         chainPairs?.length
           ? h(
               'div',

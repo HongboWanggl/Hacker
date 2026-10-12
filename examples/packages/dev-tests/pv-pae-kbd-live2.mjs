@@ -66,10 +66,19 @@ try {
 
   // Click-to-pin: a real click fixes the readout — it survives the mouse
   // leaving AND Esc-blur, and a second click (plus blur) releases it.
+  // Center the canvas first: after the transcript auto-scrolls to the bottom
+  // the heatmap's lower half sits under the fixed composer overlay, which
+  // swallows real mouse events (keyboard/synthetic paths are unaffected).
+  await page.evaluate(() =>
+    document.querySelector('canvas.pv-pae-canvas').scrollIntoView({ block: 'center' }),
+  )
+  await page.waitForTimeout(400)
   const hbox = await page.locator('canvas.pv-pae-canvas').boundingBox()
   if (!hbox) throw new Error('heatmap canvas box unavailable')
   const cx = hbox.x + hbox.width * 0.4
   const cy = hbox.y + hbox.height * 0.6
+  const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.className ?? '', [cx, cy])
+  if (!String(hit).includes('pv-pae-canvas')) throw new Error(`click point occluded by ${hit}`)
   await page.mouse.click(cx, cy)
   await page.waitForTimeout(400)
   const pinned = await readout()
