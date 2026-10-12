@@ -240,17 +240,17 @@ check(dimCount() === 0, `clicking the focus chip clears the focus (got ${dimCoun
   check(btiles.length === 20, `drill-down strip mounted with tiles (got ${btiles.length})`)
   const bmouse = (el, type) =>
     el.dispatchEvent(
-      new win.MouseEvent(type === 'mouseenter' ? 'mouseover' : type, {
+      new win.MouseEvent(type === 'mouseenter' ? 'pointerover' : type, {
         bubbles: true,
         cancelable: true,
         button: 0,
-        buttons: type === 'mouseup' ? 0 : 1,
+        buttons: type === 'pointerup' || type === 'mouseup' ? 0 : 1,
       }),
     )
-  bmouse(btiles[5], 'mousedown')
+  bmouse(btiles[5], 'pointerdown')
   bmouse(btiles[8], 'mouseenter')
   bmouse(btiles[12], 'mouseenter')
-  bmouse(btiles[12], 'mouseup')
+  bmouse(btiles[12], 'pointerup')
   await new Promise((r) => setTimeout(r, 400))
   const bdims = brc.__strokes.filter((s) => s === DIM).length
   check(bdims > 0, `drill-down drag-select fades out-of-segment 3D bonds (got ${bdims} dim strokes)`)

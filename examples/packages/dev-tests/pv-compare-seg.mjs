@@ -138,18 +138,18 @@ const resetStrokes = () => {
 
 const mouse = (el, type) =>
   el.dispatchEvent(
-    new win.MouseEvent(type === 'mouseenter' ? 'mouseover' : type, {
+    new win.MouseEvent(type === 'mouseenter' ? 'pointerover' : type, {
       bubbles: true,
       cancelable: true,
       button: 0,
-      buttons: type === 'mouseup' ? 0 : 1,
+      buttons: type === 'pointerup' || type === 'mouseup' ? 0 : 1,
     }),
   )
 const ts = tiles()
-mouse(ts[5], 'mousedown')
+mouse(ts[5], 'pointerdown')
 mouse(ts[8], 'mouseenter')
 mouse(ts[12], 'mouseenter')
-mouse(ts[12], 'mouseup')
+mouse(ts[12], 'pointerup')
 await new Promise((r) => setTimeout(r, 400))
 const chip = () => container.querySelector('button.pv-fmt--clear')
 check(

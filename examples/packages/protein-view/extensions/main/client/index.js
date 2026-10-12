@@ -159,19 +159,35 @@ const CHAIN_COLORS = ['#4e79e6', '#f28e2b', '#2ca02c', '#e15759', '#9467bd', '#1
 function SequenceStrip({ residues, hover, onHover, selected, onSelect, colorOf, titleOf, onRangeSelect }) {
   const stripRef = useRef(null)
   const kbRef = useRef(null)
-  // Mouse drag-select: mousedown anchors a range, hovering extends it (the
-  // per-tile --range class reads dragRef on every hover-driven re-render),
-  // mouseup commits to onRangeSelect — the same segment focus the jump box's
-  // "36-42" input and the low-confidence chips drive. A same-tile press is a
-  // plain click (cross-tile drags never fire the tile's onClick — the click
-  // lands on the strip), so click-to-select stays untouched.
+  // Pointer drag-select: pointerdown anchors a range, per-tile pointerenter
+  // extends it for the mouse (cheap, no geometry); touch/pen drags extend via
+  // the container's pointermove + tile-rect hit-testing, because implicit
+  // pointer capture keeps the initial tile as the move target and per-tile
+  // enter never fires. pointerup commits to onRangeSelect — the same segment
+  // focus the jump box's "36-42" input and the low-confidence chips drive. A
+  // same-tile press is a plain click; cross-tile drags guard their trailing
+  // click (touch: implicit capture replays the click on the anchor tile, so
+  // the guard is armed by any multi-tile gesture and cleared on the next
+  // pointerdown).
   const dragRef = useRef(null)
+  const clickGuardRef = useRef(false)
   const [drag, setDrag] = useState(null)
   if (!Array.isArray(residues) || !residues.length) return null
+  const hitTile = (ev) => {
+    const kids = stripRef.current?.children
+    if (!kids) return -1
+    for (let i = 0; i < kids.length; i++) {
+      const b = kids[i].getBoundingClientRect()
+      if (ev.clientX >= b.left && ev.clientX < b.right && ev.clientY >= b.top && ev.clientY < b.bottom)
+        return i
+    }
+    return -1
+  }
   const endDrag = (commit) => {
     const d = dragRef.current
     dragRef.current = null
     setDrag(null)
+    if (d && d.cur !== d.anchor) clickGuardRef.current = true
     if (commit && d && d.cur !== d.anchor && onRangeSelect) {
       const [s, t] = d.anchor < d.cur ? [d.anchor, d.cur] : [d.cur, d.anchor]
       onRangeSelect(s, t)
@@ -192,8 +208,21 @@ function SequenceStrip({ residues, hover, onHover, selected, onSelect, colorOf, 
       role: 'listbox',
       'aria-label': '残基序列条（方向键移动，回车选中；拖选聚焦区段）',
       tabIndex: 0,
-      onMouseUp: () => endDrag(true),
-      onMouseLeave: () => {
+      onPointerMove: (ev) => {
+        // Touch/pen drag extension (mouse uses the per-tile enter path below).
+        if (ev.pointerType === 'mouse' || !dragRef.current) return
+        const idx = hitTile(ev)
+        if (idx >= 0 && idx !== dragRef.current.cur) {
+          dragRef.current.cur = idx
+          setDrag({ ...dragRef.current })
+          onHover?.(idx)
+        }
+      },
+      onPointerUp: () => endDrag(true),
+      onPointerLeave: () => {
+        if (dragRef.current) endDrag(false)
+      },
+      onPointerCancel: () => {
         if (dragRef.current) endDrag(false)
       },
       onFocus: () => {
@@ -246,20 +275,24 @@ function SequenceStrip({ residues, hover, onHover, selected, onSelect, colorOf, 
             marginLeft: idx > 0 && r.chain && residues[idx - 1].chain !== r.chain ? 5 : undefined,
           },
           title: label,
-          onMouseDown: (e) => {
-            if (e.button !== 0) return
+          onPointerDown: (e) => {
+            if (e.pointerType === 'mouse' && e.button !== 0) return
+            clickGuardRef.current = false
             dragRef.current = { anchor: idx, cur: idx }
             setDrag({ anchor: idx, cur: idx })
           },
-          onMouseEnter: () => {
+          onPointerEnter: () => {
             onHover?.(idx)
             if (dragRef.current) {
               dragRef.current.cur = idx
               setDrag({ ...dragRef.current })
             }
           },
-          onMouseLeave: () => onHover?.(null),
-          onClick: () => onSelect?.(idx),
+          onPointerLeave: () => onHover?.(null),
+          onClick: () => {
+            if (clickGuardRef.current) return
+            onSelect?.(idx)
+          },
         },
         (r.aa ?? '')[0] ?? '',
       )

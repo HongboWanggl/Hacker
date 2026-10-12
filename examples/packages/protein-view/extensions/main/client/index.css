@@ -1012,6 +1012,8 @@ button.pv-chain-chip:hover {
   margin-top: 6px;
   padding: 4px 2px 2px;
   border-top: 1px dashed rgb(128 128 128 / 25%);
+  /* Touch: horizontal drags select a segment, vertical gestures scroll. */
+  touch-action: pan-y;
 }
 .pv-seq-tile {
   width: 13px;
