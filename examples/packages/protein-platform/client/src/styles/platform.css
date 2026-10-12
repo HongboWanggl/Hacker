@@ -191,9 +191,15 @@ body {
     Menlo,
     monospace;
   color: var(--pl-ink);
+  /* UA form-control paint would otherwise follow color-scheme (light gray in
+     dark mode); the card token keeps light unchanged and harmonizes dark. */
+  background: var(--pl-card);
 }
 .pl-composer textarea::placeholder {
   color: #a3adbd;
+}
+html.dark .pl-composer textarea::placeholder {
+  color: #6f7a8e;
 }
 .pl-composer-foot {
   display: flex;
@@ -233,6 +239,8 @@ body {
   color: var(--pl-ink);
   outline: none;
   width: 150px;
+  /* Same UA-paint rationale as the composer textarea (see there). */
+  background: var(--pl-card);
 }
 .pl-input-name:focus {
   border-color: #9db9f5;
@@ -868,4 +876,124 @@ body {
 }
 .pl-hint-link:hover {
   text-decoration: underline;
+}
+
+/* ── Dark theme ─────────────────────────────────────────────────────────────
+   Keyed on `.dark` on <html> — the same hook the AGH host (theme-boot) and the
+   pv components (index.css's own .dark block) use, so the result page's pv
+   sections re-skin automatically and canvas figures stay paper-white cards in
+   both themes by design. The platform's theme.js boot script applies the class
+   before first paint (system preference by default, localStorage override).
+   Light mode is untouched — this whole section only matches under .dark. */
+html.dark {
+  --pl-bg: #0e131b;
+  --pl-card: #161d29;
+  --pl-ink: #d9e0ea;
+  --pl-muted: #97a2b4;
+  --pl-line: rgb(255 255 255 / 10%);
+  --pl-accent: #6b97f2;
+  --pl-accent-soft: rgb(107 151 242 / 18%);
+  --pl-ok: #3cc48f;
+  --pl-warn: #e8a356;
+  --pl-err: #e56a6a;
+  --pl-shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 45%);
+  --pl-shadow-lg: 0 2px 4px rgb(0 0 0 / 45%), 0 16px 48px rgb(0 0 0 / 55%);
+  color-scheme: dark;
+}
+html.dark body {
+  background:
+    radial-gradient(1200px 500px at 70% -10%, rgb(64 96 168 / 26%) 0%, transparent 60%),
+    radial-gradient(900px 420px at 10% -10%, rgb(38 112 94 / 20%) 0%, transparent 55%), var(--pl-bg);
+}
+html.dark .pl-topbar {
+  background: rgb(15 20 29 / 80%);
+}
+html.dark .pl-nav a:hover {
+  background: rgb(255 255 255 / 6%);
+}
+html.dark .pl-hero h1 {
+  background: linear-gradient(100deg, #d9e0ea 30%, #6b97f2);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+html.dark .pl-composer:focus-within {
+  border-color: rgb(107 151 242 / 55%);
+}
+html.dark .pl-input-name:focus {
+  border-color: rgb(107 151 242 / 55%);
+}
+html.dark .pl-composer textarea::placeholder {
+  color: #6f7a8e;
+}
+html.dark .pl-hint {
+  color: #7f8a9c;
+}
+html.dark .pl-hint code {
+  background: rgb(255 255 255 / 7%);
+}
+html.dark .pl-card:hover,
+html.dark .pl-taskrow:hover,
+html.dark .pl-consent-ok:hover,
+html.dark .pl-back:hover {
+  border-color: rgb(255 255 255 / 18%);
+}
+html.dark .pl-thumb,
+html.dark .pl-thumb-grid {
+  background: radial-gradient(ellipse at 50% 42%, rgb(56 76 112 / 38%) 0%, rgb(40 54 82 / 28%) 70%, transparent 100%);
+}
+html.dark .pl-type-tab {
+  background: var(--pl-card);
+}
+html.dark .pl-type-tab:hover {
+  border-color: rgb(255 255 255 / 22%);
+}
+html.dark .pl-row-del {
+  color: #76839a;
+}
+html.dark .pl-row-del:hover {
+  background: rgb(229 106 106 / 12%);
+}
+html.dark .pl-consent-ok:hover {
+  background: rgb(255 255 255 / 6%);
+}
+html.dark .pl-bandbar {
+  background: rgb(255 255 255 / 8%);
+}
+html.dark .pl-badge.done {
+  background: rgb(60 196 143 / 14%);
+}
+html.dark .pl-badge.failed,
+html.dark .pl-badge.cancelled {
+  background: rgb(229 106 106 / 14%);
+}
+html.dark .pl-stage-dot {
+  background: rgb(255 255 255 / 14%);
+}
+html.dark .pl-back {
+  background: var(--pl-card);
+}
+html.dark .pl-runlog {
+  background: rgb(255 255 255 / 4%);
+}
+html.dark .pl-error-banner {
+  background: rgb(229 106 106 / 12%);
+  color: #f2b8b8;
+  border-color: rgb(229 106 106 / 35%);
+}
+/* Theme toggle in the top bar (ghost round button, both themes). */
+.pl-theme-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--pl-line);
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s;
+}
+.pl-theme-btn:hover {
+  background: rgb(127 138 156 / 15%);
 }

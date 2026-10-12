@@ -55,5 +55,7 @@ const css = readFileSync(join(dist, 'app.css'), 'utf8')
 const pvCss = readFileSync(join(pkg, '../protein-view/extensions/main/client/index.css'), 'utf8')
 writeFileSync(join(dist, 'app.css'), `${pvCss}\n${css}\n`)
 cpSync(join(pkg, 'client/index.html'), join(dist, 'index.html'))
+// Anti-flash theme boot: served as-is next to index.html (see the head script).
+cpSync(join(pkg, 'client/theme-boot.js'), join(dist, 'theme.js'))
 renameSync(join(dist, 'server.js'), join(dist, 'server.mjs'))
 console.log('[protein-platform] build complete → dist/')
