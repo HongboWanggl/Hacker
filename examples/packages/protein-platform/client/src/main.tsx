@@ -7,6 +7,8 @@ import { loadConfig, type PlatformConfig } from './config.ts'
 import { HomeView } from './views/home.tsx'
 import { ResultView } from './views/result.tsx'
 import { TasksView } from './views/tasks.tsx'
+import { BatchView } from './views/batch.tsx'
+import { SearchView } from './views/search.tsx'
 import './styles/platform.css'
 
 async function boot() {
@@ -27,11 +29,13 @@ async function boot() {
     const hash = location.hash || '#/'
     let view = h(HomeView, { ready: connected, cfg, sdk })
     if (hash.startsWith('#/task/')) {
-      view = h(ResultView, { taskId: decodeURIComponent(hash.slice('#/task/'.length)) })
+      view = h(ResultView, { taskId: decodeURIComponent(hash.slice('#/task/'.length)), cfg, sdk })
     } else if (hash.startsWith('#/tasks')) {
       view = h(TasksView)
-    } else if (hash.startsWith('#/batch') || hash.startsWith('#/search')) {
-      view = h('main', { className: 'pl-page' }, h('div', { className: 'pl-empty' }, '即将上线 — 敬请期待'))
+    } else if (hash.startsWith('#/batch')) {
+      view = h(BatchView, { ready: connected, cfg, sdk })
+    } else if (hash.startsWith('#/search')) {
+      view = h(SearchView, { ready: connected, cfg, sdk })
     }
     root.render(h(Shell, { connected }, view))
   }

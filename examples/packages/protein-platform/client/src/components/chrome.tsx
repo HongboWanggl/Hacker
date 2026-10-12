@@ -16,8 +16,8 @@ export function TopBar({ connected }: { connected: boolean }) {
   const links = [
     { href: '#/', label: '首页', match: (h: string) => h === '#/' || h === '' },
     { href: '#/tasks', label: '任务', match: (h: string) => h.startsWith('#/task') },
-    { href: '#/batch', label: '批量', match: (h: string) => h.startsWith('#/batch'), soon: true },
-    { href: '#/search', label: '检索', match: (h: string) => h.startsWith('#/search'), soon: true },
+    { href: '#/batch', label: '批量', match: (h: string) => h.startsWith('#/batch') },
+    { href: '#/search', label: '检索', match: (h: string) => h.startsWith('#/search') },
   ]
   return (
     <header className="pl-topbar">

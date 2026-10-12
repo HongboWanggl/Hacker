@@ -1,3 +1,4 @@
+import { bffCall } from './bff.ts'
 import { STAGE_LABEL, TASK_TYPE_LABEL, buildPrompt, type TaskInput, type TaskType } from './prompts.ts'
 
 // Task = one agent session. Progress is a ledger reduction: tool/call opens a
@@ -18,6 +19,11 @@ export type Task = {
   savedTo: Record<string, string>
   /** main result savedTo (confidence report JSON) once known */
   resultSavedTo?: string
+  /** set once the completed task has been persisted to the surface archive */
+  archived?: boolean
+  /** batch_predict full result JSON ({jobs,summary}) — BatchCard renders from it
+   *  directly (no summary file exists on disk to re-fetch). */
+  batchResult?: string
   previewTail?: string
   createdAt: number
   updatedAt: number
@@ -71,6 +77,8 @@ function patch(id: string, fn: (t: Task) => void) {
 }
 
 export function defaultTitle(type: TaskType, input: TaskInput): string {
+  if (type === 'compare') return `对比：${input.accession ?? '?'} vs AlphaFold`
+  if (input.query) return `检索：${input.query}`
   if (input.accession) return input.accession
   if (input.name) return input.name
   if (input.sequence) return `自定义序列 · ${input.sequence.trim().length} aa`
@@ -79,6 +87,64 @@ export function defaultTitle(type: TaskType, input: TaskInput): string {
 
 export type RunHandle = { cancel: () => void }
 
+const VERDICT_ZH: Array<[number, string]> = [
+  [90, '高置信结构'],
+  [70, '骨架可靠 · 局部待验证'],
+  [50, '置信偏低 · 谨慎解读'],
+]
+function verdictOf(mean: number): string {
+  for (const [floor, label] of VERDICT_ZH) if (mean >= floor) return label
+  return '低置信 · 大概率含无序区'
+}
+
+// Persist a completed task into the surface archive (report JSON + PDB) so the
+// history survives browser storage loss and daemon restarts — the BFF needs a
+// live session in the daemon registry, the archive does not. Best-effort: a
+// failed write logs and leaves the task unarchived (retryable by re-render).
+async function archiveTask(id: string): Promise<void> {
+  const t = getTask(id)
+  // Batch jobs embed per-target PDB paths inside a result that has no summary
+  // file; search reports live in the session workspace only. Neither archives.
+  if (!t?.sessionId || !t.resultSavedTo || (t.type !== 'single' && t.type !== 'complex')) return
+  try {
+    const report = (await bffCall(t.sessionId, 'protein.report', { path: t.resultSavedTo })) as {
+      file?: string
+      meanPlddt?: number
+    }
+    const pdbPath =
+      typeof report.file === 'string' && report.file.endsWith('.pdb')
+        ? report.file
+        : Object.values(t.savedTo).find((p) => p.endsWith('.pdb'))
+    if (!pdbPath) throw new Error('no PDB path in report')
+    const pdb = (await bffCall(t.sessionId, 'protein.file', { path: pdbPath })) as { b64: string }
+    const mean = typeof report.meanPlddt === 'number' ? report.meanPlddt : undefined
+    const base = location.href.split('#')[0]
+    const r = await fetch(new URL('api/archive', base.endsWith('/') ? base : `${base}/`), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        taskId: id,
+        sessionId: t.sessionId,
+        type: t.type,
+        title: t.title,
+        ...(mean !== undefined ? { meanPlddt: mean, verdict: verdictOf(mean) } : {}),
+        reportPath: t.resultSavedTo,
+        pdbPath,
+        files: {
+          'report.json': btoa(unescape(encodeURIComponent(JSON.stringify(report)))),
+          'model.pdb': pdb.b64,
+        },
+      }),
+    })
+    if (!r.ok) throw new Error(`archive: HTTP ${r.status}`)
+    patch(id, (t2) => {
+      t2.archived = true
+    })
+  } catch (e) {
+    console.warn('[platform] archive write failed:', (e as Error)?.message)
+  }
+}
+
 // Drives one task end-to-end. The browser cannot mkdir, so the surface server
 // creates the task dir, we register it as a workspace, then open the session.
 export async function runTask(
@@ -86,6 +152,7 @@ export async function runTask(
   sdk: any,
   type: TaskType,
   input: TaskInput,
+  opts?: { seedFiles?: Record<string, string> }, // relPath -> b64, written into the fresh workspace
 ): Promise<RunHandle> {
   const id = `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
   const task: Task = {
@@ -123,7 +190,7 @@ export async function runTask(
       const r = await fetch(new URL('api/task', base.endsWith('/') ? base : `${base}/`), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ taskId: id }),
+        body: JSON.stringify({ taskId: id, ...(opts?.seedFiles ? { files: opts.seedFiles } : {}) }),
       })
       if (!r.ok) throw new Error(`task dir: HTTP ${r.status}`)
       const cwd = `${cfg.tasksRoot}/${id}`
@@ -166,6 +233,14 @@ export async function runTask(
               })
             } else if (kind === 'tool/result') {
               const text = typeof ev?.content?.[0]?.text === 'string' ? ev.content[0].text : ''
+              // batch_predict has no on-disk summary: its result IS the report
+              // ({jobs,summary} JSON, ≤8 targets fits the preview clip). Keep it
+              // verbatim so the result page can feed BatchCard directly.
+              if (text.startsWith('{') && text.includes('"jobs"')) {
+                patch(id, (t) => {
+                  t.batchResult = text.slice(0, 16_000)
+                })
+              }
               // Artifact paths appear under either key ("savedTo" on fetch/predict outputs,
               // "file" inside the confidence report body), and report previews interleave
               // line-number prefixes — the path itself is always a plain quoted string.
@@ -194,6 +269,7 @@ export async function runTask(
                   t.error = ev.error?.message ?? `turn ${ev.reason}`
                 }
               })
+              if (ev.reason === 'completed') void archiveTask(id)
               return
             }
           }
@@ -257,6 +333,7 @@ export async function runTask(
         t2.stages = []
         t2.savedTo = {}
         t2.resultSavedTo = undefined
+        t2.batchResult = undefined
         t2.previewTail = ''
       })
       await attempt()

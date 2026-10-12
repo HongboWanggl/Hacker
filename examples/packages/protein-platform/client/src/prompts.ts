@@ -1,4 +1,4 @@
-export type TaskType = 'single' | 'complex' | 'batch'
+export type TaskType = 'single' | 'complex' | 'batch' | 'search' | 'compare'
 
 export type TaskInput = {
   sequence?: string
@@ -7,11 +7,14 @@ export type TaskInput = {
   sequences?: string[] // complex: one per chain
   ligandSmiles?: string
   accessions?: string[] // batch
+  query?: string // search
+  predictionPath?: string // compare: predicted PDB (workspace-relative)
 }
 
 // Prompt templates are the product logic: strict, no-questions scripts so the
 // agent just executes the pipeline and every tool lands a savedTo result.
 export function buildPrompt(type: TaskType, input: TaskInput): string {
+  if (type === 'compare') return comparePrompt(input)
   const name = input.name?.trim() || 'structure'
   if (type === 'single') {
     const seq = input.accession
@@ -36,15 +39,28 @@ ${chains}
 `
   }
   const accs = (input.accessions ?? []).join(', ')
-  return `批量预测蛋白质结构。严格按步骤执行，不要询问任何问题：
+  if (type === 'batch') {
+    return `批量预测蛋白质结构。严格按步骤执行，不要询问任何问题：
 1) 调用 batch_predict，accessions 参数为 [${accs}]
 2) 用两三句话总结整体质量分布。`
+  }
+  return `检索 UniProt 数据库。严格按步骤执行，不要询问任何问题：
+1) 调用 uniprot_search，query 参数为 "${(input.query ?? '').trim()}"
+2) 简要列出最相关的前几条（accession、名称、物种、长度）。`
+}
+
+function comparePrompt(input: TaskInput): string {
+  return `对比预测结构与 AlphaFold 数据库参考模型。严格按步骤执行，不要询问任何问题：
+1) 调用 compare_alphafold，accession 参数为 "${input.accession}"，prediction_path 参数为 "${input.predictionPath}"，save_report 参数为 true
+2) 用两三句话总结一致性结论（CA-RMSD、pLDDT 差异分布）。`
 }
 
 export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   single: '单体结构预测',
   complex: '复合物预测',
   batch: '批量预测',
+  search: 'UniProt 检索',
+  compare: 'AlphaFold 对比',
 }
 
 export const STAGE_LABEL: Record<string, string> = {

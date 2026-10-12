@@ -3,7 +3,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { getArchive, listArchive, putArchive } from './archive.ts'
+import { archiveReport, archiveStructure, getArchive, listArchive, putArchive } from './archive.ts'
 
 // AGH Surface: serves the platform SPA + archive API under the mount prefix
 // (default /platform). The daemon allocates the loopback PORT and passes the
@@ -103,13 +103,26 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   if (rel === 'api/task' && req.method === 'POST') {
     // Per-task workspace dir: the SPA composes <tasksRoot>/<taskId>, the server
     // creates it (browsers cannot mkdir), then the SPA registers it as a workspace.
+    // `files` (relPath -> b64) seeds artifacts from a base task into the fresh
+    // workspace — cross-task tool calls need the PDB present in THIS cwd.
     try {
-      const { taskId } = JSON.parse((await readBody(req)).toString('utf8')) as { taskId?: string }
+      const { taskId, files } = JSON.parse((await readBody(req)).toString('utf8')) as {
+        taskId?: string
+        files?: Record<string, string>
+      }
       if (!taskId || !/^[A-Za-z0-9_-]{1,80}$/.test(taskId)) throw new Error('bad taskId')
-      const { mkdirSync } = await import('node:fs')
+      const { mkdirSync, writeFileSync } = await import('node:fs')
       const root = process.env.PROTEIN_PLATFORM_TASKS_ROOT
         ?? join(process.env.AGH_HOME ?? process.env.HOME ?? '/tmp', 'protein-platform', 'tasks')
       mkdirSync(join(root, taskId), { recursive: true })
+      for (const [relPath, b64] of Object.entries(files ?? {})) {
+        const clean = normalize(relPath).replace(/^(\.\.[/\\])+/, '')
+        const target = join(root, taskId, clean)
+        if (!target.startsWith(join(root, taskId))) throw new Error('bad file path')
+        if (Buffer.byteLength(b64, 'base64') > 2 * 1024 * 1024) throw new Error(`${relPath}: too large`)
+        mkdirSync(dirname(target), { recursive: true })
+        writeFileSync(target, Buffer.from(b64, 'base64'))
+      }
       send(res, 200, JSON.stringify({ ok: true }))
     } catch (e) {
       send(res, 400, JSON.stringify({ error: (e as Error).message }))
@@ -128,6 +141,23 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
         return
       }
       const taskId = rel.split('/')[2] ?? ''
+      if (req.method === 'GET' && taskId && rel.endsWith('/meta')) {
+        // Meta only (no file payloads) — list/detail views read this.
+        const { meta } = getArchive(taskId)
+        send(res, 200, JSON.stringify(meta))
+        return
+      }
+      if (req.method === 'GET' && taskId && rel.endsWith('/report')) {
+        // Archived confidence report verbatim — the archived result page serves the
+        // pv components' protein.report calls from here.
+        send(res, 200, JSON.stringify({ output: archiveReport(taskId) }))
+        return
+      }
+      if (req.method === 'GET' && taskId && rel.endsWith('/structure')) {
+        // protein.structure shape parsed from the archived PDB (shared parser).
+        send(res, 200, JSON.stringify({ output: archiveStructure(taskId) }))
+        return
+      }
       if (req.method === 'GET' && taskId) {
         const { meta, files } = getArchive(taskId)
         send(res, 200, JSON.stringify({

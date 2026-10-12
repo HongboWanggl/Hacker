@@ -1,7 +1,7 @@
 import { createElement as h, useEffect, useState } from 'react'
-import { getServices, setServicesSession } from '../bff.ts'
+import { archivedServices, getServices, setServicesSession, type PvServices } from '../bff.ts'
 import { getTask, subscribeTasks } from '../orchestrator.ts'
-import { TASK_TYPE_LABEL } from '../prompts.ts'
+import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
 
 const STATUS_BADGE: Record<string, string> = {
   running: '运行中',
@@ -10,14 +10,56 @@ const STATUS_BADGE: Record<string, string> = {
   cancelled: '已取消',
 }
 
+// A task that lives only in the surface archive (browser storage lost / daemon
+// restarted / opened from another device). Everything the result page renders
+// comes from the archive endpoints — fully interactive, no live session.
+type ArchivedMeta = {
+  taskId: string
+  type?: TaskType
+  title?: string
+  meanPlddt?: number
+  verdict?: string
+  reportPath?: string
+  pdbPath?: string
+  savedAt: string
+}
+
+async function fetchArchiveMeta(taskId: string): Promise<ArchivedMeta | null> {
+  try {
+    const base = location.href.split('#')[0]
+    const r = await fetch(new URL(`api/archive/${taskId}/meta`, base.endsWith('/') ? base : `${base}/`))
+    if (!r.ok) return null
+    return ((await r.json()) as unknown) as ArchivedMeta
+  } catch {
+    return null
+  }
+}
+
 // The workbench result page: the battle-tested protein-view toolview component
 // (captured via the apply() shim) renders inside a clean platform stage. It
 // self-serves report + structure + PAE through the BFF once we hand it the
 // savedTo from the ledger.
-export function ResultView({ taskId }: { taskId: string }) {
+export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sdk?: any }) {
   const [, force] = useState(0)
   useEffect(() => subscribeTasks(() => force((n) => n + 1)), [])
   const task = getTask(taskId)
+  // Not in localStorage (fresh browser / storage cleared) — try the archive.
+  const [archived, setArchived] = useState<ArchivedMeta | null>(null)
+  const [archivedChecked, setArchivedChecked] = useState(false)
+  useEffect(() => {
+    if (task) return
+    let alive = true
+    setArchivedChecked(false)
+    fetchArchiveMeta(taskId).then((m) => {
+      if (alive) {
+        setArchived(m)
+        setArchivedChecked(true)
+      }
+    })
+    return () => {
+      alive = false
+    }
+  }, [taskId, task])
 
   useEffect(() => {
     setServicesSession(task?.sessionId ?? null)
@@ -25,17 +67,77 @@ export function ResultView({ taskId }: { taskId: string }) {
   }, [task?.sessionId])
 
   if (!task) {
+    if (!archivedChecked) return <main className="pl-result" />
+    if (!archived || !archived.reportPath) {
+      return (
+        <main className="pl-result">
+          <div className="pl-empty">任务不存在或已被清除 — 回<a href="#/">首页</a></div>
+        </main>
+      )
+    }
     return (
       <main className="pl-result">
-        <div className="pl-empty">任务不存在或已被清除 — 回<a href="#/">首页</a></div>
+        <div className="pl-result-head">
+          <a className="pl-back" href="#/tasks">
+            ← 任务
+          </a>
+          <span className="pl-badge done">已完成</span>
+          <div>
+            <div className="pl-result-title">{archived.title ?? archived.taskId}</div>
+            <div className="pl-result-sub">
+              {TASK_TYPE_LABEL[archived.type ?? 'single']} · {new Date(archived.savedAt).toLocaleString('zh-CN')} ·
+              历史归档
+            </div>
+          </div>
+        </div>
+        <ToolViewStage
+          toolName={archived.type === 'complex' ? 'predict_complex' : 'predict_structure'}
+          savedTo={archived.reportPath}
+          services={archivedServices(taskId)}
+        />
       </main>
     )
   }
 
   const running = task.status === 'running'
   const viewTool =
-    task.type === 'complex' ? 'predict_complex' : 'predict_structure'
-  const savedTo = task.resultSavedTo
+    task.type === 'complex'
+      ? 'predict_complex'
+      : task.type === 'batch'
+        ? 'batch_predict'
+        : task.type === 'search'
+          ? 'uniprot_search'
+          : task.type === 'compare'
+            ? 'compare_alphafold'
+            : 'predict_structure'
+  // compare_alphafold(save_report:true) always lands at reports/<acc>.vs-alphafold.json,
+  // but that key sits at the tail of a large result JSON — beyond the 4096-char
+  // ledger clip — so the savedTo regex can miss it. Fall back to the deterministic path.
+  const savedTo =
+    task.type === 'compare' && task.input.accession
+      ? task.resultSavedTo ?? `reports/${task.input.accession.toUpperCase()}.vs-alphafold.json`
+      : task.resultSavedTo
+  // 对比入口：单体任务按 accession 提交且已有预测 PDB 时，可一键与 AlphaFold DB 参考模型对比。
+  const pdbPath = Object.values(task.savedTo).find((p) => p.endsWith('.pdb'))
+  const canCompare = cfg && sdk && task.type === 'single' && task.status === 'done' && !!task.input.accession && !!pdbPath
+  const [comparing, setComparing] = useState(false)
+  const runCompare = async () => {
+    if (!cfg || !sdk || comparing) return
+    setComparing(true)
+    try {
+      // Tool calls resolve paths inside the CURRENT session's workspace — the
+      // compare task runs in a fresh cwd, so seed the predicted PDB into it first.
+      const pdb = (await getServices().call('protein.file', { path: pdbPath })) as { b64: string }
+      const { runTask } = await import('../orchestrator.ts')
+      await runTask(cfg, sdk, 'compare', { accession: task.input.accession, predictionPath: pdbPath }, {
+        seedFiles: { [pdbPath!]: pdb.b64 },
+      })
+    } catch (e) {
+      console.warn('[platform] compare seed failed:', (e as Error)?.message)
+    } finally {
+      setComparing(false)
+    }
+  }
 
   return (
     <main className="pl-result">
@@ -80,28 +182,38 @@ export function ResultView({ taskId }: { taskId: string }) {
         </div>
       )}
 
-      {!running && savedTo && <ToolViewStage toolName={viewTool} savedTo={savedTo} />}
-      {!running && !savedTo && (
+      {!running && task.type === 'batch' && task.batchResult && (
+        <ToolViewStage toolName="batch_predict" savedTo="batch" preview={task.batchResult} services={getServices()} />
+      )}
+      {!running && task.type !== 'batch' && savedTo && <ToolViewStage toolName={viewTool} savedTo={savedTo} services={getServices()} />}
+      {canCompare && (
+        <div style={{ marginTop: 14, textAlign: 'center' }}>
+          <button className="pl-back" onClick={() => void runCompare()} disabled={comparing}>
+            {comparing ? '发起对比中…' : `⇄ 与 AlphaFold DB（${task.input.accession}）对比 →`}
+          </button>
+        </div>
+      )}
+      {!running && task.type !== 'batch' && !savedTo && (
         <div className="pl-empty">没有可展示的结果{task.status === 'failed' ? '（任务未完成）' : ''} — 可回到<a href="#/">首页</a>重新提交</div>
       )}
     </main>
   )
 }
 
-function ToolViewStage({ toolName, savedTo }: { toolName: string; savedTo: string }) {
+function ToolViewStage({ toolName, savedTo, services, preview }: { toolName: string; savedTo: string; services: PvServices; preview?: string }) {
   const [comp, setComp] = useState<any>(null)
   useEffect(() => {
     let alive = true
     // Capture the protein-view components bound to our BFF-backed services.
     import('../pv.ts').then(({ bindProteinToolViews, ownerProps }) => {
       if (!alive) return
-      const map = bindProteinToolViews(getServices())
-      setComp({ comp: map.get(toolName), props: ownerProps(toolName, savedTo, getServices()) })
+      const map = bindProteinToolViews(services)
+      setComp({ comp: map.get(toolName), props: ownerProps(toolName, savedTo, services, preview) })
     })
     return () => {
       alive = false
     }
-  }, [toolName, savedTo])
+  }, [toolName, savedTo, services])
   if (!comp?.comp) return <div className="pl-empty">加载视图组件…</div>
   return (
     <div className="pl-stage-wrap">

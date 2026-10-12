@@ -170,6 +170,9 @@ body {
 .pl-taskrow-main { flex: 1; min-width: 0; }
 .pl-taskrow-title { font-weight: 650; font-size: 14.5px; }
 .pl-taskrow-meta { font-size: 12px; color: var(--pl-muted); margin-top: 3px; }
+.pl-taskrow-score { display: flex; align-items: baseline; gap: 4px; flex: none; }
+.pl-taskrow-num { font-size: 19px; font-weight: 750; letter-spacing: -0.4px; color: var(--pl-accent); }
+.pl-taskrow-unit { font-size: 11px; color: var(--pl-muted); }
 .pl-badge { font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 3px 10px; flex: none; }
 .pl-badge.running { background: var(--pl-accent-soft); color: var(--pl-accent); }
 .pl-badge.done { background: #e5f7ef; color: var(--pl-ok); }

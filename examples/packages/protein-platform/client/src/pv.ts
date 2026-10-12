@@ -31,12 +31,17 @@ export function bindProteinToolViews(services: PvServices): Map<string, any> {
 // JSON must stay unparseable (parseReport → null) or the component treats it
 // as the full report, skips the protein.report re-fetch, and — since savedTo
 // here is a report path, not a .pdb — never recovers the structure path.
-export function ownerProps(toolName: string, savedTo: string, services: PvServices) {
+export function ownerProps(toolName: string, savedTo: string, services: PvServices, preview?: string) {
   return {
     owner: {
       callId: 'platform',
       toolName,
-      block: { resultPreview: `{"savedTo":"${savedTo}","clip":` },
+      block: {
+        // Explicit full preview (batch_predict's {jobs,summary}): parseable →
+        // parseReport returns it → BatchCard dispatch. Default: truncated JSON
+        // with an extractable savedTo → self-serve via protein.report.
+        resultPreview: preview ?? `{"savedTo":"${savedTo}","clip":`,
+      },
     },
     // ProteinToolView destructures { owner, services } — without this the
     // BFF fetch throws immediately and its silent .catch hides the failure.
