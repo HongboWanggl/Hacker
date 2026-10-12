@@ -53,7 +53,17 @@ const op = async (kind: string, params: Record<string, unknown>) => {
 const syncDeploy = (minimal: boolean) => {
   rmSync(target, { recursive: true, force: true })
   mkdirSync(target, { recursive: true })
-  cpSync(join(repoDeploy, 'surfaces'), join(target, 'surfaces'), { recursive: true })
+  // PP_SURFACE_WS_URL pins the wsUrl the SPA should use (config.json). Empty on a
+  // loopback deployment (discovery.json default); on a public deployment set it to
+  // the Caddy-proxied wss:// endpoint, e.g.
+  //   PP_SURFACE_WS_URL=wss://host.tailnet.ts.net/agnesd
+  const wsUrl = process.env.PP_SURFACE_WS_URL ?? ''
+  const surface = JSON.parse(readFileSync(join(repoDeploy, 'surfaces/main.json'), 'utf8')) as {
+    config?: Record<string, unknown>
+  }
+  surface.config = { ...(surface.config ?? {}), ...(wsUrl ? { wsUrl } : {}) }
+  mkdirSync(join(target, 'surfaces'), { recursive: true })
+  writeFileSync(join(target, 'surfaces/main.json'), JSON.stringify(surface, null, 2))
   const manifest = JSON.parse(readFileSync(join(repoDeploy, 'manifest.json'), 'utf8')) as Record<
     string,
     unknown

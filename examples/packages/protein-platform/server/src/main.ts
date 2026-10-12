@@ -58,8 +58,21 @@ function daemonWsUrl(): string | null {
 function configJson(): string {
   // The daemon passes AGH_HOME through to local node surfaces; HOME is the fallback.
   const home = process.env.AGH_HOME ?? process.env.HOME ?? '/tmp'
+  // wsUrl precedence: the deploy-declared surface config (deploy/surfaces/main.json
+  // -> AGNES_SURFACE_CONFIG, how a public deployment pins its Caddy-proxied wss://
+  // endpoint — surface child env is a frozen whitelist, so env vars can't carry it),
+  // then a direct env override, then the daemon's discovery file (loopback default).
+  let cfgWsUrl: unknown
+  try {
+    cfgWsUrl = JSON.parse(process.env.AGNES_SURFACE_CONFIG ?? '{}')?.wsUrl
+  } catch {
+    cfgWsUrl = undefined
+  }
   return JSON.stringify({
-    wsUrl: process.env.PROTEIN_PLATFORM_WS_URL ?? daemonWsUrl(),
+    wsUrl:
+      (typeof cfgWsUrl === 'string' && cfgWsUrl) ||
+      process.env.PROTEIN_PLATFORM_WS_URL ||
+      daemonWsUrl(),
     profile: process.env.AGNES_PROFILE ?? 'local-dev',
     rowId: 'web:@aghes/protein-view',
     bffPath: '/api/client-modules/service',
