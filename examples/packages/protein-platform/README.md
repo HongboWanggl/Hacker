@@ -27,7 +27,7 @@ AGH_HOME=$HOME/agh-home AGNES_PROFILE=local-dev \
 | 批量 | 每行一个 UniProt ID（≤8）→ batch_predict → BatchCard 汇总，成功行可展开逐目标 3D 详情 |
 | 检索 | UniProt 关键词检索 → SearchCard hits 列表 |
 | 任务页 | 全部任务列表（运行中/已完成/失败徽标），自动合并 surface 归档历史 |
-| 结果页 | 3D 骨架画布（按 pLDDT 着色、自动旋转、全屏）+ 置信度曲线 + 序列条 + 分段统计 + PNG/CSV/PDB 导出；单体任务可一键发起 AlphaFold DB 对比；复合物任务附 PAE 误差热图（链边界 + 悬停读数） |
+| 结果页 | 3D 骨架画布（按 pLDDT 着色、自动旋转、全屏）+ 置信度曲线 + 序列条 + 分段统计 + PNG/CSV/PDB 导出；单体任务可一键发起 AlphaFold DB 对比；复合物任务附 PAE 误差热图（链边界 + 悬停读数）；失败任务可一键重新提交（按存储的原始输入重放，compare 自动重种 PDB） |
 | 历史归档 | 全部五类任务完成时落盘到 surface archive（单体/复合物：报告+模型+PAE；批量：汇总+逐目标 PDB；检索/对比：报告；对比还存参考模型供覆盖渲染）；换浏览器/清存储/重启 daemon 后结果页仍完整可交互；UniProt 来源的单体归档页可一键发起 AlphaFold DB 对比（PDB 从归档种入新会话，无需原任务在场）；任务页归档行可两键删除（✕ → 确认删除） |
 
 ## 使用示例
@@ -75,6 +75,7 @@ node ../../dev-tests/pp-batch-smoke.mjs             # 批量：2 个 accession�
 node ../../dev-tests/pp-search-smoke.mjs            # 检索：uniprot_search→SearchCard→归档→新上下文重建
 node ../../dev-tests/pp-compare-smoke.mjs           # AlphaFold 对比：一键发起→CompareCard→归档→新上下文重建
 node ../../dev-tests/pp-archive-delete.mjs          # 归档删除：POST 造档→任务页两键删除→服务端 404
+node ../../dev-tests/pp-retry-smoke.mjs             # 失败重试：注入失败任务→重试按钮→新任务入列
 node ../../dev-tests/pp-thumb-wall.mjs --shots      # 报告墙缩略图（批量卡=逐目标迷你迹线网格）
 ```
 

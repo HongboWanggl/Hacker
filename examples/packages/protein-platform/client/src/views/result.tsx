@@ -67,6 +67,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
   // Declared alongside the other top-level hooks: the !task branch renders this
   // only after archivedChecked flips, and a hook added between renders is React #310.
   const [archivedComparing, setArchivedComparing] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   useEffect(() => {
     if (task) return
     let alive = true
@@ -203,6 +204,32 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
       setComparing(false)
     }
   }
+  // One-click resubmit of a failed task (transient gateway stalls are the usual
+  // cause — the stall watchdog already retried once internally). The stored input
+  // is exactly what the views passed to runTask, so replay is verbatim; compare
+  // additionally needs its PDB re-seeded from the (still-registered) session.
+  const retryTask = async () => {
+    if (!cfg || !sdk || retrying) return
+    setRetrying(true)
+    try {
+      const { runTask } = await import('../orchestrator.ts')
+      if (task.type === 'compare' && task.input.predictionPath) {
+        const pdb = (await getServices().call('protein.file', { path: task.input.predictionPath })) as {
+          b64: string
+        }
+        await runTask(cfg, sdk, 'compare', task.input, {
+          seedFiles: { [task.input.predictionPath]: pdb.b64 },
+        })
+      } else {
+        await runTask(cfg, sdk, task.type, task.input)
+      }
+      location.hash = '#/tasks'
+    } catch (e) {
+      console.warn('[platform] retry failed:', (e as Error)?.message)
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   return (
     <main className="pl-result">
@@ -220,6 +247,18 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
       </div>
 
       {task.error && <div className="pl-error-banner">{task.error}</div>}
+
+      {task.status === 'failed' && (
+        <div style={{ marginTop: 14, textAlign: 'center' }}>
+          <button
+            className="pl-back"
+            disabled={retrying}
+            onClick={() => void retryTask()}
+          >
+            {retrying ? '重新提交中…' : '↻ 重新提交此任务'}
+          </button>
+        </div>
+      )}
 
       {running && (
         <div className="pl-stage-wrap">
