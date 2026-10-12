@@ -59,7 +59,9 @@ AGH_HOME=$HOME/agh-home AGNES_PROFILE=local-dev \
   重取）。解析器共享自 `protein-view/extensions/main/pdb-parse.mjs`（B-factor = pLDDT）。
 - **归档**（`server/src/archive.ts`）：`~/protein-platform/archive/<taskId>/`（meta.json +
   report.json + model.pdb，批量另存逐目标 `pdb-<basename>`，≤2MiB）。meta 冗余 meanPlddt/verdict/
-  jobPdbs 供报告墙免取数渲染（list 时推导并写回 meta.json，之后零解析开销）。
+  jobPdbs 供报告墙免取数渲染（list 时推导并写回 meta.json，之后零解析开销）；归档卡缩略图同样
+  服务端预计算（PCA 投影 ≤120 点写入 meta.thumb/thumbs，旧档下次 list 惰性回填）——报告墙与
+  任务页对 structure 接口零请求。
   PDB 结构解析在 server 侧复用同一 parser，返回与活 BFF 完全同形的 protein.structure 输出；
   `/structure?path=` `/file?path=` 按 basename 深链批内/对比参考 PDB（回退 model.pdb）。
 

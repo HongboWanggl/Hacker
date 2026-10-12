@@ -74,12 +74,12 @@ function ArchiveCard({ m }: { m: ArchiveMeta }) {
   const batchJobs = m.type === 'batch' ? (m.jobPdbs ?? []).slice(0, 3) : []
   return (
     <a className="pl-card pl-card-fig" href={`#/task/${m.taskId}`}>
-      {hasStructure && <StructureThumb taskId={m.taskId} />}
+      {hasStructure && <StructureThumb taskId={m.taskId} meta={m} />}
       {batchJobs.length > 0 && (
         <div className="pl-thumb-grid">
           {batchJobs.map((p) => (
             <figure key={p} className="pl-thumb-cell">
-              <StructureThumb taskId={m.taskId} path={p} small />
+              <StructureThumb taskId={m.taskId} path={p} small meta={m} />
               <figcaption>{p.split('_')[0].replace(/\.pdb$/, '')}</figcaption>
             </figure>
           ))}

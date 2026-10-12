@@ -77,6 +77,11 @@ export type ArchiveMeta = {
   jobPdbs?: string[]
   /** Single/complex: UniProt accession, enables the archived-page compare flow. */
   accession?: string
+  /** Server-precomputed Cα mini-trace (model.pdb) — walls render with zero
+   *  per-row fetches; archives predating the field fall back to fetching. */
+  thumb?: { d: string[]; c: string[] }
+  /** Batch: mini-trace per target, keyed by jobPdbs basename. */
+  thumbs?: Record<string, { d: string[]; c: string[] }>
 }
 
 /** Archive list for history views; fails soft to [] (surface unreachable). One

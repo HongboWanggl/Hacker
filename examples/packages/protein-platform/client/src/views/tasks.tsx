@@ -39,7 +39,7 @@ function ArchivedRow({ m, onDeleted }: { m: ArchiveMeta; onDeleted: (taskId: str
   return (
     <a className="pl-taskrow" href={`#/task/${m.taskId}`}>
       {hasStructure ? (
-        <StructureThumb taskId={m.taskId} small />
+        <StructureThumb taskId={m.taskId} small meta={m} />
       ) : (
         <span className="pl-badge done">已完成</span>
       )}

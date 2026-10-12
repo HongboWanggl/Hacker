@@ -27,7 +27,14 @@ export type ArchiveEntry = {
   /** Single/complex archives with a UniProt source: lets the archived result page
    *  offer the AlphaFold-DB compare flow without the original live task. */
   accession?: string
+  /** Precomputed Cα mini-trace for the wall card (model.pdb), paths + band colors
+   *  — lets the report wall render thumbnails with ZERO per-row fetches. */
+  thumb?: ThumbData
+  /** Batch archives: mini-trace per target, keyed by the jobPdbs basename. */
+  thumbs?: Record<string, ThumbData>
 }
+
+export type ThumbData = { d: string[]; c: string[] }
 
 function archiveRoot(): string {
   return (
@@ -75,6 +82,13 @@ export function putArchive(body: {
   for (const [name, b64] of Object.entries(body.files ?? {})) {
     if (!/^[A-Za-z0-9_.-]{1,64}$/.test(name)) continue
     writeFileSync(join(dir, name), Buffer.from(b64, 'base64'))
+  }
+  // Project the wall thumbnail(s) right away — new archives land on the wall
+  // fully rendered, no per-row structure fetch, no lazy backfill pass.
+  try {
+    if (enrichThumbs(meta, dir)) writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta))
+  } catch {
+    /* thumb is cosmetic — never fail the archive write over it */
   }
   return meta
 }
@@ -144,6 +158,127 @@ export function archivePae(taskId: string): unknown {
   return JSON.parse(pae.toString('utf8'))
 }
 
+// --- Precomputed wall thumbnails --------------------------------------------
+// The report wall / task list draw one Cα mini-trace per card. Fetching and
+// PCA-projecting every archived PDB on EVERY view was O(entries) requests plus
+// O(entries) parses; compute the projection once (at archive write, or lazily
+// on the next list after deploy) and persist it in meta.json — the same
+// write-back pattern the meanPlddt backfill uses. The client draws the stored
+// paths verbatim; only archives without a computable PDB still fetch.
+
+const THUMB_MAX_POINTS = 120
+
+const bandColor = (p: number) => (p > 90 ? '#0053D6' : p >= 70 ? '#65CBF3' : p >= 50 ? '#FFDB13' : '#FF7D45')
+
+// Power iteration on the 3×3 covariance, then deflation for the second axis —
+// mirrors the client projector in components/thumb.tsx so both shapes agree.
+function pca2(pts: number[][]): [number[], number[]] {
+  const mean = [0, 0, 0]
+  for (const p of pts) for (let i = 0; i < 3; i++) mean[i] += p[i] / pts.length
+  const cov = Array.from({ length: 3 }, () => [0, 0, 0])
+  for (const p of pts) {
+    const d = [p[0] - mean[0], p[1] - mean[1], p[2] - mean[2]]
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) cov[i][j] += (d[i] * d[j]) / pts.length
+  }
+  const power = (m: number[][]) => {
+    let v = [0.577, 0.577, 0.577]
+    for (let it = 0; it < 24; it++) {
+      const w = [
+        m[0][0] * v[0] + m[0][1] * v[1] + m[0][2] * v[2],
+        m[1][0] * v[0] + m[1][1] * v[1] + m[1][2] * v[2],
+        m[2][0] * v[0] + m[2][1] * v[1] + m[2][2] * v[2],
+      ]
+      const n = Math.hypot(w[0], w[1], w[2]) || 1
+      v = w.map((x) => x / n)
+    }
+    return v
+  }
+  const v1 = power(cov)
+  const lam = v1.reduce((s, vi, i) => s + vi * (cov[i][0] * v1[0] + cov[i][1] * v1[1] + cov[i][2] * v1[2]), 0)
+  const cov2 = cov.map((row, i) => row.map((x, j) => x - lam * v1[i] * v1[j]))
+  const v2 = power(cov2)
+  return [v1, v2]
+}
+
+function computeThumb(pdb: Buffer): ThumbData | undefined {
+  let residues: Array<{ x: number; y: number; z: number; b: number; chain: string }>
+  try {
+    residues = (parsePdbStructure(pdb.toString('utf8')).residues ?? []) as typeof residues
+  } catch {
+    return undefined
+  }
+  if (!Array.isArray(residues) || residues.length < 2) return undefined
+  // Stride very long targets so meta.json stays lean (fidelity at thumbnail
+  // size is unaffected); chain boundaries are respected by the picks below.
+  const stride = Math.max(1, Math.ceil(residues.length / THUMB_MAX_POINTS))
+  const picked: typeof residues = []
+  for (let i = 0; i < residues.length; i += stride) picked.push(residues[i])
+  if (picked.length < 2) return undefined
+  const pts = picked.map((r) => [r.x, r.y, r.z])
+  const [v1, v2] = pca2(pts)
+  const flat = pts.map((p) => [
+    p[0] * v1[0] + p[1] * v1[1] + p[2] * v1[2],
+    p[0] * v2[0] + p[1] * v2[1] + p[2] * v2[2],
+  ])
+  const xs = flat.map((p) => p[0])
+  const ys = flat.map((p) => p[1])
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
+  const span = Math.max(maxX - minX, maxY - minY, 0.001)
+  const px = (p: number[]) => +(((p[0] - minX) / span) * 96 + 2).toFixed(1)
+  const py = (p: number[]) => +(98 - ((p[1] - minY) / span) * 96).toFixed(1)
+  const d: string[] = []
+  const c: string[] = []
+  let start = 0
+  while (start < picked.length) {
+    let end = start + 1
+    while (end < picked.length && picked[end].chain === picked[start].chain) end++
+    const byColor = new Map<string, string[]>()
+    for (let i = start; i < end - 1; i++) {
+      const key = bandColor(picked[i].b)
+      const arr = byColor.get(key) ?? []
+      arr.push(`M${px(flat[i])} ${py(flat[i])}L${px(flat[i + 1])} ${py(flat[i + 1])}`)
+      byColor.set(key, arr)
+    }
+    for (const [color, seg] of byColor) {
+      d.push(seg.join(''))
+      c.push(color)
+    }
+    start = end
+  }
+  return d.length > 0 ? { d, c } : undefined
+}
+
+/** Fill meta.thumb / meta.thumbs from the archive's PDBs. Returns true when
+ *  something was added (caller persists the meta). */
+function enrichThumbs(meta: ArchiveEntry, dir: string): boolean {
+  let dirty = false
+  if (!meta.thumb && existsSync(join(dir, 'model.pdb'))) {
+    const t = computeThumb(readFileSync(join(dir, 'model.pdb')))
+    if (t) {
+      meta.thumb = t
+      dirty = true
+    }
+  }
+  if (meta.type === 'batch' && Array.isArray(meta.jobPdbs) && meta.jobPdbs.length > 0) {
+    const missing = meta.jobPdbs.filter((base) => !meta.thumbs?.[base] && existsSync(join(dir, `pdb-${base}`)))
+    if (missing.length > 0) {
+      const thumbs: Record<string, ThumbData> = { ...(meta.thumbs ?? {}) }
+      for (const base of missing) {
+        const t = computeThumb(readFileSync(join(dir, `pdb-${base}`)))
+        if (t) thumbs[base] = t
+      }
+      if (Object.keys(thumbs).length > (meta.thumbs ? Object.keys(meta.thumbs).length : 0)) {
+        meta.thumbs = thumbs
+        dirty = true
+      }
+    }
+  }
+  return dirty
+}
+
 export function listArchive(): ArchiveEntry[] {
   const root = archiveRoot()
   if (!existsSync(root)) return []
@@ -193,6 +328,9 @@ export function listArchive(): ArchiveEntry[] {
           /* no model.pdb or unparsable — card stays scoreless */
         }
       }
+      // Same lazy-backfill for wall thumbnails: archives predating the thumb
+      // field get their mini-trace projected on the first list after deploy.
+      if (enrichThumbs(meta, join(root, id))) dirty = true
       // Persist enrichment once — list runs on every wall load; re-parsing
       // every scoreless PDB each time is wasted work (write-back, not cache).
       if (dirty) {

@@ -87,12 +87,33 @@ function projectThumb(output: any): Thumb {
   return { chains, colors, viewBox: '0 0 100 100' }
 }
 
-export function StructureThumb({ taskId, path, small }: { taskId: string; path?: string; small?: boolean }) {
+type ThumbData = { d: string[]; c: string[] }
+
+export function StructureThumb({
+  taskId,
+  path,
+  small,
+  meta,
+}: {
+  taskId: string
+  path?: string
+  small?: boolean
+  /** ArchiveMeta carrying server-precomputed thumb(s) — when present the SVG
+   *  renders synchronously, no structure fetch at all. */
+  meta?: { thumb?: ThumbData; thumbs?: Record<string, ThumbData> }
+}) {
   // Batch archives hold one PDB per target (pdb-<basename>); `path` deep-links
   // to one of them via the server's ?path= resolution (model.pdb otherwise).
   const key = path ? `${taskId}::${path}` : taskId
-  const [thumb, setThumb] = useState<Thumb | undefined>(cache.get(key))
+  const preset = path ? meta?.thumbs?.[(path.split('/').pop() ?? '')] : meta?.thumb
+  const [thumb, setThumb] = useState<Thumb | undefined>(() =>
+    preset ? { chains: preset.d, colors: preset.c, viewBox: '0 0 100 100' } : cache.get(key),
+  )
   useEffect(() => {
+    if (preset) {
+      setThumb({ chains: preset.d, colors: preset.c, viewBox: '0 0 100 100' })
+      return
+    }
     const hit = cache.get(key)
     if (hit !== undefined) {
       setThumb(hit)
@@ -115,7 +136,7 @@ export function StructureThumb({ taskId, path, small }: { taskId: string; path?:
     return () => {
       alive = false
     }
-  }, [key, taskId, path])
+  }, [key, taskId, path, preset])
   if (!thumb) return null
   return (
     <svg className={`pl-thumb${small ? ' pl-thumb-sm' : ''}`} viewBox={thumb.viewBox} aria-hidden>
