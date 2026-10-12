@@ -24,7 +24,7 @@ type ArchivedMeta = {
   savedAt: string
 }
 
-async function fetchArchiveMeta(taskId: string, tries = 3): Promise<ArchivedMeta | null> {
+async function fetchArchiveMeta(taskId: string, tries = 5): Promise<ArchivedMeta | null> {
   // The mount table flaps for a few seconds when the surface misses a health
   // probe (proxy answers 404 not_found mid-refresh) — so even a 404 gets
   // retried before we believe it; a false「任务不存在」reads as data loss.
@@ -36,7 +36,7 @@ async function fetchArchiveMeta(taskId: string, tries = 3): Promise<ArchivedMeta
     } catch {
       /* transient — retry */
     }
-    if (i < tries - 1) await new Promise((resolve) => setTimeout(resolve, 1500))
+    if (i < tries - 1) await new Promise((resolve) => setTimeout(resolve, 2000))
   }
   return null
 }

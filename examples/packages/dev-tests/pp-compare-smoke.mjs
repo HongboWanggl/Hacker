@@ -4,10 +4,14 @@
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
-const base = 'http://127.0.0.1:4177/platform/'
+// PP_BASE/PP_USER/PP_PASS: drive a remote deployment (see pp-complex-full.mjs).
+const base = process.env.PP_BASE ?? 'http://127.0.0.1:4177/platform/'
+const httpCreds = process.env.PP_USER
+  ? { username: process.env.PP_USER, password: process.env.PP_PASS ?? '' }
+  : undefined
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } })
+const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
 await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForSelector('.pl-composer textarea', { timeout: 15000 })
 await page.fill('.pl-composer textarea', 'P69905')
@@ -64,8 +68,17 @@ if (fail.length === 0) {
   await page.screenshot({ path: '/tmp/pp-compare-smoke.png' })
   // Fresh context: archived compare page must rebuild from the archive alone.
   const page2 = await browser.newPage({ viewport: { width: 1400, height: 1000 } })
-  await page2.goto(`${base}#/task/${t.id}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
-  await page2.waitForSelector('.pv-root', { timeout: 60000 }).catch(() => fail.push('archived page2: no .pv-root'))
+  // One reload retry: the mount-table flap can outlast the app's own retries.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await page2.goto(`${base}#/task/${t.id}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
+    const root = await page2
+      .waitForSelector('.pv-root', { timeout: 60000 })
+      .then(() => true)
+      .catch(() => false)
+    if (root) break
+    if (attempt === 1) fail.push('archived page2: no .pv-root')
+    await page2.waitForTimeout(4000)
+  }
   await page2
     .waitForFunction(() => /RMSD|一致性/i.test(document.querySelector('.pl-result')?.innerText ?? ''), { timeout: 30000 })
     .catch(() => {})
