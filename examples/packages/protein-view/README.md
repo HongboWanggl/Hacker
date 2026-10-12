@@ -30,6 +30,13 @@ standalone in papers and slides.
 
 ![对比卡拖选区段聚焦](../docs/screenshots/compare-seg-focus.png)
 
+复合物面板的 PAE 误差热图：链边界虚线、链对均值芯片（点击框出该链对的两个
+对称误差块，低值 = 界面可信）、悬停十字线联动 3D，点击任意格以琥珀虚线固定
+读数——移开鼠标不消失，对着 3D 讲解界面残基对时用；右侧误差条逐残基标出
+平均误差（长条 = 界面残基或无序区）：
+
+![PAE 误差热图：固定读数 + 链对聚焦](../docs/screenshots/pae-heatmap.png)
+
 序列条支持键盘导航（Tab 聚焦，←/→ 移动光标、回车选中、Home/End 跳转、Esc 退出），
 光标复用悬停高亮——鼠标与键盘共享同一套 3D/曲线联动；对比卡的分歧序列条复用同一组件，
 键盘行为一致；搜索表与批处理表同样可键盘操作（↑↓/Home/End 行间移动，空格勾选/展开，
@@ -48,6 +55,8 @@ standalone in papers and slides.
 | ![深色单蛋白面板](../docs/screenshots/main-panel-dark.png) | ![深色对比面板](../docs/screenshots/compare-panel-dark.png) |
 
 ![深色区段聚焦](../docs/screenshots/segment-focus-dark.png)
+
+![深色 PAE 热图](../docs/screenshots/pae-heatmap-dark.png)
 
 ## Layout
 
