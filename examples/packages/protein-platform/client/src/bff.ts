@@ -75,6 +75,8 @@ export type ArchiveMeta = {
   pdbPath?: string
   /** Batch: per-target PDB basenames (pdb-<basename> files in the archive). */
   jobPdbs?: string[]
+  /** Single/complex: UniProt accession, enables the archived-page compare flow. */
+  accession?: string
 }
 
 /** Archive list for history views; fails soft to [] (surface unreachable). One

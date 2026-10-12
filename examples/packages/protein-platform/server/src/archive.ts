@@ -24,6 +24,9 @@ export type ArchiveEntry = {
   /** Batch archives: basenames of the per-target PDBs stored as pdb-<basename>,
    *  so wall cards can render mini structure thumbnails per job. */
   jobPdbs?: string[]
+  /** Single/complex archives with a UniProt source: lets the archived result page
+   *  offer the AlphaFold-DB compare flow without the original live task. */
+  accession?: string
 }
 
 function archiveRoot(): string {
@@ -48,6 +51,7 @@ export function putArchive(body: {
   reportPath?: string
   pdbPath?: string
   jobPdbs?: string[]
+  accession?: string
   files: Record<string, string> // name -> base64
 }): ArchiveEntry {
   const dir = taskDir(body.taskId)
@@ -65,6 +69,7 @@ export function putArchive(body: {
     ...(body.reportPath ? { reportPath: body.reportPath } : {}),
     ...(body.pdbPath ? { pdbPath: body.pdbPath } : {}),
     ...(Array.isArray(body.jobPdbs) && body.jobPdbs.length > 0 ? { jobPdbs: body.jobPdbs.slice(0, 8) } : {}),
+    ...(body.accession ? { accession: body.accession } : {}),
   }
   writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta))
   for (const [name, b64] of Object.entries(body.files ?? {})) {

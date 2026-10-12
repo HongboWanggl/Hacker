@@ -265,6 +265,7 @@ async function archiveTask(id: string): Promise<void> {
     await post(files, {
       ...(mean !== undefined ? { meanPlddt: mean, verdict: verdictOf(mean) } : {}),
       pdbPath,
+      ...(t.input.accession ? { accession: t.input.accession } : {}),
     })
   } catch (e) {
     console.warn('[platform] archive write failed:', (e as Error)?.message)

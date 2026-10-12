@@ -21,6 +21,7 @@ type ArchivedMeta = {
   verdict?: string
   reportPath?: string
   pdbPath?: string
+  accession?: string
   savedAt: string
 }
 
@@ -63,6 +64,9 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
   // Not in localStorage (fresh browser / storage cleared) — try the archive.
   const [archived, setArchived] = useState<ArchivedMeta | null>(null)
   const [archivedChecked, setArchivedChecked] = useState(false)
+  // Declared alongside the other top-level hooks: the !task branch renders this
+  // only after archivedChecked flips, and a hook added between renders is React #310.
+  const [archivedComparing, setArchivedComparing] = useState(false)
   useEffect(() => {
     if (task) return
     let alive = true
@@ -94,6 +98,34 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
         </main>
       )
     }
+    // Compare entry on ARCHIVED single/complex pages: the old compare flow needed
+    // the live task in localStorage, which stranded predictions opened from another
+    // device / a cleared store. The archive carries accession + pdbPath, so the PDB
+    // can be seeded into the fresh compare session straight from the archive API.
+    const canCompareArchived =
+      cfg && sdk && (archived.type ?? 'single') === 'single' && !!archived.accession && !!archived.pdbPath
+    const runArchivedCompare = async () => {
+      if (!cfg || !sdk || !archived?.pdbPath || archivedComparing) return
+      setArchivedComparing(true)
+      try {
+        const pdb = (await archivedServices(taskId).call('protein.file', {
+          path: archived.pdbPath,
+        })) as { b64: string }
+        const { runTask } = await import('../orchestrator.ts')
+        await runTask(
+          cfg,
+          sdk,
+          'compare',
+          { accession: archived.accession, predictionPath: archived.pdbPath },
+          { seedFiles: { [archived.pdbPath]: pdb.b64 } },
+        )
+        location.hash = '#/tasks'
+      } catch (e) {
+        console.warn('[platform] archived compare seed failed:', (e as Error)?.message)
+      } finally {
+        setArchivedComparing(false)
+      }
+    }
     return (
       <main className="pl-result">
         <div className="pl-result-head">
@@ -114,6 +146,13 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
           savedTo={archived.reportPath}
           services={archivedServices(taskId)}
         />
+        {canCompareArchived && (
+          <div style={{ marginTop: 14, textAlign: 'center' }}>
+            <button className="pl-back" onClick={() => void runArchivedCompare()} disabled={archivedComparing}>
+              {archivedComparing ? '发起对比中…' : `⇄ 与 AlphaFold DB（${archived.accession}）对比 →`}
+            </button>
+          </div>
+        )}
       </main>
     )
   }
