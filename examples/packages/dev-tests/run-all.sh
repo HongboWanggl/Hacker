@@ -53,6 +53,7 @@ run pv-kbd-compare.mjs            # compare divergence strip inherits keyboard n
 run pv-drag-range.mjs             # strip mouse drag-select commits segment focus
 run pv-seg-3d.mjs                 # segment focus fades out-of-segment 3D bonds (main + drill-down)
 run pv-compare-seg.mjs            # compare card drag-select fades out-of-segment 3D bonds
+run pv-pinch.mjs                  # 3D pinch-to-zoom + ghost-release robustness (pointer events)
 
 if [ "${1:-}" = "--live" ]; then
   echo "=== live E2E (needs daemon + web on 4177) ==="

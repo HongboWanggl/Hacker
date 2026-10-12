@@ -3087,6 +3087,10 @@ function Structure3D({
   })
   const frame = useRef(0)
   const wake = useRef(0)
+  // Multi-touch: active pointers drive pinch-zoom (two-finger spread on
+  // tablets/phones); a single pointer keeps the drag-rotate path below.
+  const pointersRef = useRef(new Map())
+  const pinchRef = useRef(null)
   // Maximized mode: the wrap goes fixed over the whole viewport (works inside
   // the toolview iframe where the fullscreen API is unavailable).
   const [maxed, setMaxed] = useState(false)
@@ -3502,6 +3506,19 @@ function Structure3D({
       onPointerDown: (ev) => {
         ev.currentTarget.setPointerCapture(ev.pointerId)
         const v = view.current
+        pointersRef.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY })
+        if (pointersRef.current.size === 2 && ev.pointerType !== 'mouse') {
+          // Second finger lands: switch to pinch-zoom and stop rotating so the
+          // two gestures don't fight over the same pointer stream. A second
+          // MOUSE button (right-drag while left-dragging) must not zoom.
+          const [p1, p2] = [...pointersRef.current.values()]
+          pinchRef.current = { d0: Math.hypot(p1.x - p2.x, p1.y - p2.y), zoom0: v.zoom }
+          v.dragging = false
+          v.vx = 0
+          v.vy = 0
+          v.lastInteract = performance.now()
+          return
+        }
         v.dragging = true
         v.lastX = ev.clientX
         v.lastY = ev.clientY
@@ -3513,6 +3530,16 @@ function Structure3D({
       },
       onPointerMove: (ev) => {
         const v = view.current
+        if (pointersRef.current.has(ev.pointerId))
+          pointersRef.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY })
+        if (pinchRef.current && pointersRef.current.size >= 2) {
+          const [p1, p2] = [...pointersRef.current.values()]
+          const d = Math.hypot(p1.x - p2.x, p1.y - p2.y)
+          if (pinchRef.current.d0 > 0)
+            v.zoom = Math.max(0.4, Math.min(6, pinchRef.current.zoom0 * (d / pinchRef.current.d0)))
+          v.lastInteract = performance.now()
+          return
+        }
         if (v.dragging) {
           const dx = ev.clientX - v.lastX
           const dy = ev.clientY - v.lastY
@@ -3538,6 +3565,23 @@ function Structure3D({
       },
       onPointerUp: (ev) => {
         const v = view.current
+        const tracked = pointersRef.current.delete(ev.pointerId)
+        if (pinchRef.current) {
+          // Lifted out of a pinch: swallow the release (a finger-lift must
+          // never register as a residue click) and require a fresh touch to
+          // resume rotating — avoids the surviving finger yanking the view.
+          // An untracked release (a lost/cancelled finger left a ghost entry)
+          // means the bookkeeping is out of sync — reset everything, or the
+          // stale `size >= 2` would swallow every later pointermove forever.
+          if (!tracked || pointersRef.current.size < 2) {
+            pointersRef.current.clear()
+            pinchRef.current = null
+          }
+          v.dragging = false
+          v.lastInteract = performance.now()
+          return
+        }
+        if (!tracked) pointersRef.current.clear()
         v.dragging = false
         v.lastInteract = performance.now()
         // A click (pointer barely moved) picks the residue under the cursor —
@@ -3549,7 +3593,16 @@ function Structure3D({
           if (k != null && k >= 0) onSelect(k)
         }
       },
-      onPointerLeave: () => onHover?.(null),
+      onPointerLeave: (ev) => {
+        onHover?.(null)
+        if (!pointersRef.current.delete(ev.pointerId)) pointersRef.current.clear()
+        if (pointersRef.current.size < 2) pinchRef.current = null
+      },
+      onPointerCancel: (ev) => {
+        if (!pointersRef.current.delete(ev.pointerId)) pointersRef.current.clear()
+        if (pointersRef.current.size < 2) pinchRef.current = null
+        view.current.dragging = false
+      },
       onWheel: (ev) => {
         ev.preventDefault()
         const v = view.current
@@ -3568,7 +3621,14 @@ function Structure3D({
         r ? `${resLabel(residues, r)} · pLDDT ${r.b.toFixed(1)}` : '',
       )
     })(),
-    h('div', { className: 'pv-3d-hint' }, hintText ?? '拖拽旋转 · 滚轮缩放 · 双击复位'),
+    h(
+      'div',
+      { className: 'pv-3d-hint' },
+      hintText ??
+        (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
+          ? '拖拽旋转 · 双指缩放 · 双击复位'
+          : '拖拽旋转 · 滚轮缩放 · 双击复位'),
+    ),
     // Maximized mode hides the siblings below the canvas — re-render the
     // active color legend (plus the ligand key) inside the overlay.
     maxed
