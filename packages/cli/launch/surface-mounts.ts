@@ -11,6 +11,15 @@ type MountProxyLookup = Parameters<typeof createMountProxy>[0]['lookup']
  *  yet" can never be mistaken for "the new instance failed to start". See spec RC1. */
 export const SURFACE_MOUNT_REFRESH_MS = 8_000
 
+/** How long a SUCCESSFUL-but-empty mount table is ignored while a previously populated table is
+ *  being served. Matches the SurfaceController's 30s instance startup deadline: a Surface restart
+ *  (republish, daemon boot) filters its row out of the RPC table while `state !== 'healthy'`, which
+ *  the poller would otherwise read as a *successful* "no surfaces" answer and blank the proxy the
+ *  instant it lands -- transient 404s for every mounted page. Within this grace the last populated
+ *  table keeps serving (worst case a stale endpoint yields a connection error, not a 404); a real
+ *  uninstall is still honored because empty answers persist past the deadline. */
+const EMPTY_TABLE_GRACE_MS = 30_000
+
 /** Reserved URL prefixes the Web server answers with its own fixed branches (design WC3): the admin
  *  surfaces, the skin asset route and the client module asset route. A Surface mount at or under one
  *  of these could never receive traffic anyway (every fixed branch returns before mountProxy is
@@ -47,7 +56,10 @@ export type SurfaceMountFeed = Readonly<{
  * `boot-coordination.ts`'s `coordinateSurfacesOnBoot` has when no deploy directory was ever trusted.
  * A LATER poll failing (after at least one success) keeps serving the last known-good table rather
  * than blanking out a page the user is currently viewing -- a transient daemon hiccup must not look
- * like every Surface vanished. Web itself remains reachable either way.
+ * like every Surface vanished. The same protection covers a SUCCESSFUL-but-empty answer while a
+ * previously populated table is in hand: the daemon filters non-healthy instances out of the RPC
+ * table, so every Surface restart briefly reads as "no surfaces" (see EMPTY_TABLE_GRACE_MS). Web
+ * itself remains reachable either way.
  */
 export async function fetchSurfaceMountLookup(
   backend: LocalBackend,
@@ -57,6 +69,11 @@ export async function fetchSurfaceMountLookup(
   // empty table". Only a SUCCESSFUL fetch ever writes here: a later poll that throws must leave the
   // last-known-good table in place rather than blanking out a page the user is currently viewing.
   let mounts: readonly MountProxyMatch[] | undefined
+  // When the last populated table landed, for the EMPTY_TABLE_GRACE_MS debounce below. `undefined`
+  // means either "nothing populated yet" (first-ever empty answers apply immediately -- a fresh
+  // install with no Surfaces is a real state, not a flap) or "an empty table has already been
+  // accepted" (subsequent empties are then equally unremarkable).
+  let populatedAt: number | undefined
   let inflight: Promise<void> | undefined
   let stopped = false
 
@@ -73,12 +90,22 @@ export async function fetchSurfaceMountLookup(
     })
     try {
       await client.initialize()
-      const next = await client.surfaces.mounts()
+      const next_ = await client.surfaces.mounts()
       // M3 (final review, Minor): the Task-15 RPC row only ever carries {mount, host, port}; it used
       // to be padded with a fabricated `healthPath: ''` purely to satisfy createMountProxy's lookup()
       // return type, which has since been narrowed (mount-proxy.ts's `MountProxyMatch`) to exactly
       // this shape, so the padding is gone.
-      if (!stopped) mounts = next.mounts.filter((row) => !isReservedMount(row.mount))
+      const next = next_.mounts.filter((row) => !isReservedMount(row.mount))
+      if (stopped) return
+      if (next.length > 0) {
+        mounts = next
+        populatedAt = Date.now()
+      } else if (populatedAt === undefined || Date.now() - populatedAt >= EMPTY_TABLE_GRACE_MS) {
+        // Empty answer outside the grace window (or nothing ever populated): a real uninstall --
+        // honor it. Inside the window: keep serving the last populated table (see the constant).
+        mounts = next
+        populatedAt = undefined
+      }
     } finally {
       await client.close().catch(() => undefined)
     }

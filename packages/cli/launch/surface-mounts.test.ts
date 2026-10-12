@@ -137,3 +137,37 @@ it('drops mounts under the reserved /plugins, /admin and /skins prefixes (design
   await feed.close()
   await second.close()
 })
+
+it('a successful-but-EMPTY poll inside the grace window keeps the last populated table', async () => {
+  // Surface restarts filter their row out of the RPC table while state !== 'healthy' -- the poller
+  // must not read that as "uninstalled" and blank the proxy mid-restart.
+  responses = [{ mounts: [surface(1111)] }, { mounts: [] }, { mounts: [surface(2222)] }]
+  const feed = await fetchSurfaceMountLookup(fakeBackend, { intervalMs: 50 })
+  expect(feed.lookup('/demo/version')).toMatchObject({ port: 1111 })
+  await vi.advanceTimersByTimeAsync(50) // empty answer lands inside the grace window
+  expect(feed.lookup('/demo/version')).toMatchObject({ port: 1111 }) // old table still served
+  await vi.advanceTimersByTimeAsync(50) // instance healthy again with a new endpoint
+  expect(feed.lookup('/demo/version')).toMatchObject({ port: 2222 })
+  await feed.close()
+})
+
+it('a persistent empty table beyond the grace window is honored (real uninstall)', async () => {
+  // The standard answering double repeats its last entry, so the trailing empty answer persists
+  // across every subsequent tick.
+  responses = [{ mounts: [surface(1111)] }, { mounts: [] }]
+  const feed = await fetchSurfaceMountLookup(fakeBackend, { intervalMs: 50 })
+  expect(feed.lookup('/demo/version')).toMatchObject({ port: 1111 })
+  // > EMPTY_TABLE_GRACE_MS (30s) of consecutive empty answers: the Surface is really gone.
+  await vi.advanceTimersByTimeAsync(50)
+  expect(feed.lookup('/demo/version')).toMatchObject({ port: 1111 }) // still inside the grace
+  await vi.advanceTimersByTimeAsync(31_000)
+  expect(feed.lookup('/demo/version')).toBeUndefined()
+  await feed.close()
+})
+
+it('a first-ever empty table applies immediately (fresh install with no Surfaces)', async () => {
+  responses = [{ mounts: [] }]
+  const feed = await fetchSurfaceMountLookup(fakeBackend, { intervalMs: 50 })
+  expect(feed.lookup('/demo/version')).toBeUndefined()
+  await feed.close()
+})
