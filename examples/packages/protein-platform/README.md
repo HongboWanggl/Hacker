@@ -51,11 +51,15 @@ AGH_HOME=$HOME/agh-home AGNES_PROFILE=local-dev \
 
 ## 验证
 
+dev-tests 下的 live 探针（按链路全覆盖；需要本机 daemon + 已发布平台）：
+
 ```bash
-# 全流程 E2E（提交 P69905 → 阶段完成 → 结果页 canvas/曲线渲染 → 截图）
-node ../../dev-tests/pp-platform-live.mjs --shots
-# 归档往返（提交→archived→无 localStorage 新上下文渲染→archive API 直查）
-node /tmp/pp-archive-verify.mjs
+node ../../dev-tests/pp-platform-live.mjs --shots   # 单体全流程：提交→阶段→3D/曲线→截图
+node ../../dev-tests/pp-archive-roundtrip.mjs       # 归档往返：完成→archived→无 localStorage 新上下文→API 直查
+node ../../dev-tests/pp-complex-full.mjs            # 复合物全流程：双链→内联报告渲染→归档（含 PAE）→新上下文
+node ../../dev-tests/pp-batch-smoke.mjs             # 批量：2 个 accession→BatchCard 汇总
+node ../../dev-tests/pp-search-smoke.mjs            # 检索：uniprot_search→SearchCard hits
+node ../../dev-tests/pp-compare-smoke.mjs           # AlphaFold 对比：一键发起→CompareCard（RMSD/差值轮廓）
 ```
 
 ## 公网部署要点（WSL 服务器）

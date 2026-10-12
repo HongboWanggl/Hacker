@@ -182,10 +182,15 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
         </div>
       )}
 
-      {!running && task.type === 'batch' && task.batchResult && (
-        <ToolViewStage toolName="batch_predict" savedTo="batch" preview={task.batchResult} services={getServices()} />
+      {!running && task.type === 'batch' && task.resultJson && (
+        <ToolViewStage toolName="batch_predict" savedTo="batch" preview={task.resultJson} services={getServices()} />
       )}
-      {!running && task.type !== 'batch' && savedTo && <ToolViewStage toolName={viewTool} savedTo={savedTo} services={getServices()} />}
+      {!running && task.type === 'complex' && task.resultJson && (
+        <ToolViewStage toolName="predict_complex" savedTo="complex" preview={task.resultJson} services={getServices()} />
+      )}
+      {!running && task.type !== 'batch' && task.type !== 'complex' && savedTo && (
+        <ToolViewStage toolName={viewTool} savedTo={savedTo} services={getServices()} />
+      )}
       {canCompare && (
         <div style={{ marginTop: 14, textAlign: 'center' }}>
           <button className="pl-back" onClick={() => void runCompare()} disabled={comparing}>

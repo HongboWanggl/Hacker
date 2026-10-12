@@ -98,6 +98,15 @@ export function archiveStructure(taskId: string): unknown {
   return parsePdbStructure(pdb.toString('utf8'))
 }
 
+/** Archived PAE heatmap (quantized matrix persisted at archive time), same shape
+ *  the live protein.pae service returns. */
+export function archivePae(taskId: string): unknown {
+  const { files } = getArchive(taskId)
+  const pae = files['pae.json']
+  if (!pae) throw new Error('no PAE in archive')
+  return JSON.parse(pae.toString('utf8'))
+}
+
 export function listArchive(): ArchiveEntry[] {
   const root = archiveRoot()
   if (!existsSync(root)) return []

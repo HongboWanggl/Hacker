@@ -3,7 +3,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { archiveReport, archiveStructure, getArchive, listArchive, putArchive } from './archive.ts'
+import { archivePae, archiveReport, archiveStructure, getArchive, listArchive, putArchive } from './archive.ts'
 
 // AGH Surface: serves the platform SPA + archive API under the mount prefix
 // (default /platform). The daemon allocates the loopback PORT and passes the
@@ -156,6 +156,11 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       if (req.method === 'GET' && taskId && rel.endsWith('/structure')) {
         // protein.structure shape parsed from the archived PDB (shared parser).
         send(res, 200, JSON.stringify({ output: archiveStructure(taskId) }))
+        return
+      }
+      if (req.method === 'GET' && taskId && rel.endsWith('/pae')) {
+        // Archived quantized PAE matrix (complex tasks), protein.pae output shape.
+        send(res, 200, JSON.stringify({ output: archivePae(taskId) }))
         return
       }
       if (req.method === 'GET' && taskId) {

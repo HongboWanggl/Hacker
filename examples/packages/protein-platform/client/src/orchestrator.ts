@@ -21,9 +21,10 @@ export type Task = {
   resultSavedTo?: string
   /** set once the completed task has been persisted to the surface archive */
   archived?: boolean
-  /** batch_predict full result JSON ({jobs,summary}) — BatchCard renders from it
-   *  directly (no summary file exists on disk to re-fetch). */
-  batchResult?: string
+  /** Full inline result JSON for tools whose report only lives in the ledger —
+   *  batch_predict ({jobs,summary}, BatchCard) and predict_complex (report.savedTo
+   *  is the PDB itself, so no report file exists to re-fetch). */
+  resultJson?: string
   previewTail?: string
   createdAt: number
   updatedAt: number
@@ -105,18 +106,37 @@ async function archiveTask(id: string): Promise<void> {
   const t = getTask(id)
   // Batch jobs embed per-target PDB paths inside a result that has no summary
   // file; search reports live in the session workspace only. Neither archives.
-  if (!t?.sessionId || !t.resultSavedTo || (t.type !== 'single' && t.type !== 'complex')) return
+  if (!t?.sessionId || (t.type !== 'single' && t.type !== 'complex')) return
   try {
-    const report = (await bffCall(t.sessionId, 'protein.report', { path: t.resultSavedTo })) as {
-      file?: string
-      meanPlddt?: number
+    let report: { file?: string; savedTo?: string; meanPlddt?: number; paePath?: string }
+    let reportJson: string
+    if (t.type === 'complex') {
+      if (!t.resultJson) return
+      reportJson = t.resultJson
+      report = JSON.parse(reportJson)
+    } else {
+      if (!t.resultSavedTo) return
+      report = (await bffCall(t.sessionId, 'protein.report', { path: t.resultSavedTo })) as typeof report
+      reportJson = JSON.stringify(report)
     }
     const pdbPath =
-      typeof report.file === 'string' && report.file.endsWith('.pdb')
-        ? report.file
-        : Object.values(t.savedTo).find((p) => p.endsWith('.pdb'))
+      (typeof report.file === 'string' && report.file.endsWith('.pdb') ? report.file : undefined) ??
+      (typeof report.savedTo === 'string' && report.savedTo.endsWith('.pdb') ? report.savedTo : undefined) ??
+      Object.values(t.savedTo).find((p) => p.endsWith('.pdb'))
     if (!pdbPath) throw new Error('no PDB path in report')
     const pdb = (await bffCall(t.sessionId, 'protein.file', { path: pdbPath })) as { b64: string }
+    const b64of = (s: string) => btoa(unescape(encodeURIComponent(s)))
+    const files: Record<string, string> = { 'report.json': b64of(reportJson), 'model.pdb': pdb.b64 }
+    // Persist the PAE heatmap alongside the model when the report carries one —
+    // the quantized matrix is tiny and lets the archived page render the full panel.
+    if (report.paePath) {
+      try {
+        const pae = await bffCall(t.sessionId, 'protein.pae', { path: report.paePath })
+        files['pae.json'] = b64of(JSON.stringify(pae))
+      } catch {
+        /* heatmap is optional — archive without it */
+      }
+    }
     const mean = typeof report.meanPlddt === 'number' ? report.meanPlddt : undefined
     const base = location.href.split('#')[0]
     const r = await fetch(new URL('api/archive', base.endsWith('/') ? base : `${base}/`), {
@@ -128,12 +148,9 @@ async function archiveTask(id: string): Promise<void> {
         type: t.type,
         title: t.title,
         ...(mean !== undefined ? { meanPlddt: mean, verdict: verdictOf(mean) } : {}),
-        reportPath: t.resultSavedTo,
+        reportPath: 'report.json',
         pdbPath,
-        files: {
-          'report.json': btoa(unescape(encodeURIComponent(JSON.stringify(report)))),
-          'model.pdb': pdb.b64,
-        },
+        files,
       }),
     })
     if (!r.ok) throw new Error(`archive: HTTP ${r.status}`)
@@ -175,7 +192,10 @@ export async function runTask(
     // transport error, so neither turn/end nor the events-loop catch ever fires and
     // the task spins in "running" forever. Any ledger event or preview delta counts
     // as life; silence past STALL_MS aborts the session and the retry below resubmits.
-    const STALL_MS = 180_000
+    // Boltz runs emit NO events for their whole duration — the watchdog must outlive
+    // the tool's own timeout (predict_complex 1300s / batch 900s in the preset), or it
+    // kills perfectly healthy predictions mid-flight.
+    const STALL_MS = type === 'complex' || type === 'batch' ? 1_400_000 : 180_000
     let lastActivity = Date.now()
     let stalled = false
     const watchdog = setInterval(() => {
@@ -233,12 +253,15 @@ export async function runTask(
               })
             } else if (kind === 'tool/result') {
               const text = typeof ev?.content?.[0]?.text === 'string' ? ev.content[0].text : ''
-              // batch_predict has no on-disk summary: its result IS the report
-              // ({jobs,summary} JSON, ≤8 targets fits the preview clip). Keep it
-              // verbatim so the result page can feed BatchCard directly.
-              if (text.startsWith('{') && text.includes('"jobs"')) {
+              // batch_predict has no on-disk summary and predict_complex's report
+              // carries no JSON savedTo (its savedTo IS the PDB): in both cases the
+              // result IS the report. Keep it verbatim so the result page can feed
+              // the pv components a parseable resultPreview directly. Complex runs
+              // in two shapes — API mode carries predictionId, local boltz carries
+              // engine:"boltz2-local" — match either.
+              if (text.startsWith('{') && (text.includes('"jobs"') || text.includes('"predictionId"') || text.includes('"boltz2-local"'))) {
                 patch(id, (t) => {
-                  t.batchResult = text.slice(0, 16_000)
+                  t.resultJson = text.slice(0, 32_000)
                 })
               }
               // Artifact paths appear under either key ("savedTo" on fetch/predict outputs,
@@ -326,14 +349,14 @@ export async function runTask(
     // One fresh-session retry turns that from a failed task into a slower success.
     await new Promise((r) => setTimeout(r, 3000))
     const t = getTask(id)
-    if (t?.status === 'failed' && /STALL_WATCHDOG|TRANSPORT|TURN_ERROR|status=\?|事件流中断|ECONN|EAI_AGAIN|socket hang up|fetch failed|reset/i.test(t.error ?? '')) {
+    if (t?.status === 'failed' && /STALL_WATCHDOG|TRANSPORT|TURN_ERROR|turn abort|status=\?|事件流中断|ECONN|EAI_AGAIN|socket hang up|fetch failed|reset/i.test(t.error ?? '')) {
       patch(id, (t2) => {
         t2.status = 'running'
         t2.error = undefined
         t2.stages = []
         t2.savedTo = {}
         t2.resultSavedTo = undefined
-        t2.batchResult = undefined
+        t2.resultJson = undefined
         t2.previewTail = ''
       })
       await attempt()

@@ -95,6 +95,7 @@ export function archivedServices(taskId: string): PvServices {
     async call(service) {
       if (service === 'protein.report') return get(`api/archive/${taskId}/report`)
       if (service === 'protein.structure') return get(`api/archive/${taskId}/structure`)
+      if (service === 'protein.pae') return get(`api/archive/${taskId}/pae`)
       throw new Error(`${service}: not available for archived tasks`)
     },
   }
