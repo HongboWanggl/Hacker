@@ -108,6 +108,16 @@ check(
   firstAcc() === 'P04637' && !container.querySelector('.pv-search-head-cell--sorted'),
 )
 
+// row-tap copy: the toast pill must confirm the accession (the inline ✓ on the
+// row is too subtle on a phone — the toast is the primary feedback)
+click(container.querySelector('.pv-search-row'))
+await sleep(150)
+const toast = document.querySelector('.pv-toast')
+check(
+  `row tap shows copy toast (got "${toast?.textContent}")`,
+  !!toast && toast.classList.contains('pv-toast--on') && /已复制 P04637 ✓/.test(toast.textContent ?? ''),
+)
+
 // batch multi-select: tick rows → hand-off bar → select-all → clear
 const checks2 = container.querySelectorAll('.pv-search-row .pv-search-check')
 check('per-row checkboxes rendered', checks2.length === 3)

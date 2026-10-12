@@ -1376,3 +1376,30 @@ button.pv-chain-chip:hover {
 .dark .pv-batch-row:focus-visible {
   outline-color: #9db8ff;
 }
+
+/* Transient copy confirmation pill — dark surface reads on both themes;
+   mounted on document.body (outside .pv-root), so it also covers the
+   fixed-composer case where a panel's bottom edge sits under the input. */
+.pv-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%) translateY(8px);
+  background: #1d232e;
+  color: #f2f5fa;
+  font-size: 12px;
+  line-height: 1;
+  padding: 10px 16px;
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 25%);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+  z-index: 999;
+}
+.pv-toast--on {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}

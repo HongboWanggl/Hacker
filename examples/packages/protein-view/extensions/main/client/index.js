@@ -147,6 +147,27 @@ function prefersReducedMotion() {
 // order so Structure3D coloring and the legend chips always agree.
 const CHAIN_COLORS = ['#4e79e6', '#f28e2b', '#2ca02c', '#e15759', '#9467bd', '#17becf']
 
+// Transient confirmation pill (bottom center of the viewport, theme-proof dark
+// surface). Copied-state buttons show their own ✓, but row-level copies (the
+// search table copies an accession on a plain tap — easy to mis-tap on a
+// phone) need a readout the user can't miss. Mounted on document.body so React
+// reconciliation never touches it; singleton + timer, later calls restart the
+// fade.
+let toastEl = null
+let toastTimer = null
+function showToast(text) {
+  if (typeof document === 'undefined') return
+  if (!toastEl) {
+    toastEl = document.createElement('div')
+    toastEl.className = 'pv-toast'
+    document.body.appendChild(toastEl)
+  }
+  toastEl.textContent = text
+  toastEl.classList.add('pv-toast--on')
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => toastEl?.classList.remove('pv-toast--on'), 1800)
+}
+
 // Linear sequence strip: one band-colored tile per residue (single-letter code),
 // hover/click wired to the same hover/selected state as the 3D view and curve —
 // a third way to scan the sequence. Chain changes get a small gap. `colorOf`
@@ -1687,6 +1708,7 @@ function SearchCard({ report }) {
       // Clipboard may be unavailable; the row still shows the accession.
     }
     setCopied(acc)
+    showToast(`已复制 ${acc} ✓`)
     setTimeout(() => setCopied((c) => (c === acc ? null : c)), 1500)
   }
   const headCell = (key, label, extra = '') =>
