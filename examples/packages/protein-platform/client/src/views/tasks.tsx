@@ -1,7 +1,7 @@
 import { type MouseEvent, useEffect, useState } from 'react'
 import { type ArchiveMeta, listArchive } from '../bff.ts'
 import { StructureThumb } from '../components/thumb.tsx'
-import { getTasks, subscribeTasks } from '../orchestrator.ts'
+import { cancelTask, getTasks, subscribeTasks, type Task } from '../orchestrator.ts'
 import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
 
 const STATUS_BADGE: Record<string, string> = {
@@ -63,6 +63,46 @@ function ArchivedRow({ m, onDeleted }: { m: ArchiveMeta; onDeleted: (taskId: str
   )
 }
 
+// Live rows need the same in-row-action pattern as ArchivedRow (a button inside
+// the row link), so they get a component too. Cancel arms like delete: the first
+// click turns 取消 into a red 确认 for 4s — aborting a multi-minute prediction on
+// a stray click would be worse than one extra tap.
+function LiveRow({ t }: { t: Task }) {
+  const [confirming, setConfirming] = useState(false)
+  const cancel = (e: MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!confirming) {
+      setConfirming(true)
+      setTimeout(() => setConfirming(false), 4000)
+      return
+    }
+    cancelTask(t.id)
+  }
+  return (
+    <a className="pl-taskrow" href={`#/task/${t.id}`}>
+      <span className={`pl-badge ${t.status}`}>{STATUS_BADGE[t.status] ?? t.status}</span>
+      <div className="pl-taskrow-main">
+        <div className="pl-taskrow-title">{t.title}</div>
+        <div className="pl-taskrow-meta">
+          {TASK_TYPE_LABEL[t.type]} · {new Date(t.createdAt).toLocaleString('zh-CN')}
+          {t.error ? ` · ${t.error.slice(0, 60)}` : ''}
+        </div>
+      </div>
+      <div className="pl-stages">
+        {t.stages.map((s, i) => (
+          <span key={i} className={`pl-stage-dot ${s.status}`} title={`${s.label} · ${s.status}`} />
+        ))}
+      </div>
+      {t.status === 'running' && (
+        <button className={`pl-row-del${confirming ? ' armed' : ''}`} onClick={cancel} title="取消任务">
+          {confirming ? '确认取消' : '取消'}
+        </button>
+      )}
+    </a>
+  )
+}
+
 export function TasksView() {
   const [, force] = useState(0)
   useEffect(() => subscribeTasks(() => force((n) => n + 1)), [])
@@ -92,21 +132,7 @@ export function TasksView() {
       ) : (
         <div className="pl-tasklist">
           {tasks.map((t) => (
-            <a key={t.id} className="pl-taskrow" href={`#/task/${t.id}`}>
-              <span className={`pl-badge ${t.status}`}>{STATUS_BADGE[t.status] ?? t.status}</span>
-              <div className="pl-taskrow-main">
-                <div className="pl-taskrow-title">{t.title}</div>
-                <div className="pl-taskrow-meta">
-                  {TASK_TYPE_LABEL[t.type]} · {new Date(t.createdAt).toLocaleString('zh-CN')}
-                  {t.error ? ` · ${t.error.slice(0, 60)}` : ''}
-                </div>
-              </div>
-              <div className="pl-stages">
-                {t.stages.map((s, i) => (
-                  <span key={i} className={`pl-stage-dot ${s.status}`} title={`${s.label} · ${s.status}`} />
-                ))}
-              </div>
-            </a>
+            <LiveRow key={t.id} t={t} />
           ))}
           {history.map((m) => (
             <ArchivedRow

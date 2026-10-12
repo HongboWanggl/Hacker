@@ -70,6 +70,9 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
   const [archivedComparing, setArchivedComparing] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [sharing, setSharing] = useState(false)
+  // Cancel arm state for the running-stage block: first click asks, second
+  // click (within 4s) aborts — same vocabulary as the task-list row.
+  const [cancelArmed, setCancelArmed] = useState(false)
 
   // Shareable report: headline numbers live in the task's report JSON (shapes
   // differ per tool), the figures are the rendered stage canvases — snapshotted
@@ -299,6 +302,20 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
       setComparing(false)
     }
   }
+  // Cancel a running task from the result page: same two-click arm as the task
+  // list. cancelTask aborts the session's prompt; the orchestrator settles the
+  // task to 已取消 and (being a user cancel) never auto-retries it.
+  const cancelRunning = () => {
+    if (!running) return
+    if (!cancelArmed) {
+      setCancelArmed(true)
+      setTimeout(() => setCancelArmed(false), 4000)
+      return
+    }
+    setCancelArmed(false)
+    void import('../orchestrator.ts').then(({ cancelTask }) => cancelTask(task.id))
+  }
+
   // One-click resubmit of a failed task (transient gateway stalls are the usual
   // cause — the stall watchdog already retried once internally). The stored input
   // is exactly what the views passed to runTask, so replay is verbatim; compare
@@ -343,7 +360,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
 
       {task.error && <div className="pl-error-banner">{task.error}</div>}
 
-      {task.status === 'failed' && (
+      {(task.status === 'failed' || task.status === 'cancelled') && (
         <div style={{ marginTop: 14, textAlign: 'center' }}>
           <button
             className="pl-back"
@@ -358,8 +375,15 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
       {running && (
         <div className="pl-stage-wrap">
           <div style={{ padding: '28px 20px' }}>
-            <div className="pl-taskrow-title" style={{ marginBottom: 12 }}>
-              正在运行 · 阶段进度
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div className="pl-taskrow-title">正在运行 · 阶段进度</div>
+              <button
+                className={`pl-row-del${cancelArmed ? ' armed' : ''}`}
+                onClick={cancelRunning}
+                title="取消任务"
+              >
+                {cancelArmed ? '确认取消' : '取消'}
+              </button>
             </div>
             {task.stages.length === 0 ? (
               <div className="pl-card-verdict">正在启动 agent…</div>
@@ -433,7 +457,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
       )}
       {!running && task.type !== 'batch' && !savedTo && (
         <div className="pl-empty">
-          没有可展示的结果{task.status === 'failed' ? '（任务未完成）' : ''} — 可回到<a href="#/">首页</a>
+          没有可展示的结果{(task.status === 'failed' || task.status === 'cancelled') ? '（任务未完成）' : ''} — 可回到<a href="#/">首页</a>
           重新提交
         </div>
       )}

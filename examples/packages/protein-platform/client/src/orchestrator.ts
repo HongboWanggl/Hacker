@@ -92,6 +92,19 @@ export function defaultTitle(type: TaskType, input: TaskInput): string {
 
 export type RunHandle = { cancel: () => void }
 
+// Live run controls by task id — cancelTask works from any view without the
+// caller having to keep the RunHandle around (rows in the task list, the
+// result page header). A hung gateway turn is exactly when nobody has it.
+const runners = new Map<string, () => void>()
+
+/** Abort a running task's session; true if a live run was actually cancelled. */
+export function cancelTask(id: string): boolean {
+  const cancel = runners.get(id)
+  if (!cancel) return false
+  cancel()
+  return true
+}
+
 const VERDICT_ZH: Array<[number, string]> = [
   [90, '高置信结构'],
   [70, '骨架可靠 · 局部待验证'],
@@ -297,6 +310,7 @@ export async function runTask(
   emit()
 
   const controller = new AbortController()
+  runners.set(id, () => controller.abort())
   const attempt = async (): Promise<void> => {
     // Stall watchdog: the model gateway occasionally hangs an inference without a
     // transport error, so neither turn/end nor the events-loop catch ever fires and
@@ -414,8 +428,12 @@ export async function runTask(
               patch(id, (t) => {
                 if (ev.reason === 'completed') t.status = 'done'
                 else if (t.status === 'running') {
-                  t.status = 'failed'
-                  t.error = ev.error?.message ?? `turn ${ev.reason}`
+                  // A user cancel (controller aborted, not a stall) settles as
+                  // 已取消 — and must NOT read as failed, or the gateway-flake
+                  // retry below resubmits the task the user just cancelled.
+                  const cancelled = controller.signal.aborted && !stalled
+                  t.status = cancelled ? 'cancelled' : 'failed'
+                  t.error = cancelled ? undefined : (ev.error?.message ?? `turn ${ev.reason}`)
                 }
               })
               if (ev.reason === 'completed') void archiveTask(id)
@@ -427,8 +445,9 @@ export async function runTask(
           // task must not hang forever — surface the failure instead of swallowing it.
           patch(id, (t) => {
             if (t.status === 'running') {
-              t.status = 'failed'
-              t.error = `事件流中断：${(e as Error)?.message ?? 'session ended'}`
+              const cancelled = controller.signal.aborted && !stalled
+              t.status = cancelled ? 'cancelled' : 'failed'
+              t.error = cancelled ? undefined : `事件流中断：${(e as Error)?.message ?? 'session ended'}`
             }
           })
         }
@@ -453,7 +472,9 @@ export async function runTask(
 
       await session.prompt(buildPrompt(type, input), { signal: controller.signal })
       patch(id, (t) => {
-        if (t.status === 'running') t.status = 'done'
+        // An aborted turn can also RESOLVE here (stopReason=aborted) instead of
+        // rejecting — only a non-cancelled settle may read as done.
+        if (t.status === 'running' && !controller.signal.aborted) t.status = 'done'
       })
     } catch (e: any) {
       patch(id, (t) => {
@@ -470,27 +491,32 @@ export async function runTask(
   }
 
   void (async () => {
-    await attempt()
-    // The model gateway intermittently drops large agent rounds (TRANSPORT, no status).
-    // One fresh-session retry turns that from a failed task into a slower success.
-    await new Promise((r) => setTimeout(r, 3000))
-    const t = getTask(id)
-    if (
-      t?.status === 'failed' &&
-      /STALL_WATCHDOG|TRANSPORT|TURN_ERROR|turn (abort|blocked)|status=\?|事件流中断|ECONN|EAI_AGAIN|socket hang up|fetch failed|reset/i.test(
-        t.error ?? '',
-      )
-    ) {
-      patch(id, (t2) => {
-        t2.status = 'running'
-        t2.error = undefined
-        t2.stages = []
-        t2.savedTo = {}
-        t2.resultSavedTo = undefined
-        t2.resultJson = undefined
-        t2.previewTail = ''
-      })
+    try {
       await attempt()
+      // The model gateway intermittently drops large agent rounds (TRANSPORT, no status).
+      // One fresh-session retry turns that from a failed task into a slower success.
+      await new Promise((r) => setTimeout(r, 3000))
+      const t = getTask(id)
+      if (
+        !controller.signal.aborted &&
+        t?.status === 'failed' &&
+        /STALL_WATCHDOG|TRANSPORT|TURN_ERROR|turn (abort|blocked)|status=\?|事件流中断|ECONN|EAI_AGAIN|socket hang up|fetch failed|reset/i.test(
+          t.error ?? '',
+        )
+      ) {
+        patch(id, (t2) => {
+          t2.status = 'running'
+          t2.error = undefined
+          t2.stages = []
+          t2.savedTo = {}
+          t2.resultSavedTo = undefined
+          t2.resultJson = undefined
+          t2.previewTail = ''
+        })
+        await attempt()
+      }
+    } finally {
+      runners.delete(id)
     }
   })()
 
