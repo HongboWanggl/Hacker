@@ -22,7 +22,7 @@ AGH_HOME=$HOME/agh-home AGNES_PROFILE=local-dev \
 
 | 入口 | 说明 |
 | --- | --- |
-| 首页 | 极简输入框（FASTA / UniProt ID / 原始序列自动识别，输入时实时解析条提示识别结果与将被忽略的内容）+ 类型选择（单体 / 复合物 / 批量）+ 最近预测报告墙（归档卡带 Cα 主链缩略图，按 pLDDT 着色）+ 首次提交前的一次性自动化说明卡 |
+| 首页 | 极简输入框（FASTA / UniProt ID / 原始序列自动识别，输入时实时解析条提示识别结果与将被忽略的内容）+ 类型选择（单体 / 复合物 / 批量）+ 类型筛选 chips + 最近预测报告墙（归档卡带 Cα 主链缩略图，按 pLDDT 着色）+ 首次提交前的一次性自动化说明卡 |
 | 复合物 | 每行一条链 + 可选配体 SMILES → predict_complex（Boltz-2）→ 界面置信度结果页 |
 | 批量 | 每行一个 UniProt ID（≤8）→ batch_predict → BatchCard 汇总，成功行可展开逐目标 3D 详情；展开的工具条带「⇄ 对比」——该目标一键发起 AlphaFold DB 对比（PDB 种入新对比会话，归档页同样可用） |
 | 检索 | UniProt 关键词检索 → SearchCard hits 列表；行内 ▶ 一键预测该 hit，勾选后批条可「▶ 预测所选」（多选自动升级为批量任务，平台宿主独有；AGH 面板同组件仍是纯复制流） |
@@ -89,6 +89,8 @@ node ../../dev-tests/pp-thumb-wall.mjs --shots      # 报告墙缩略图（批�
 针对公网部署回归）。
 
 ## 公网部署要点（WSL 服务器）
+
+- 面向测试人员的操作手册：`docs/操作手册.md`（guest 只读账号说明、全功能 walkthrough、反馈路径）。
 
 - daemon WS 端口钉死（user unit `--local-web-addr 127.0.0.1:46119`，localWeb 模式下 WS 同端口）。
 - Caddy `/agnesd*`：`header_up Host 127.0.0.1:46119` + `header_up Origin http://127.0.0.1:4177`
