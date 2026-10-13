@@ -1,10 +1,38 @@
 # 交接文档：蛋白质平台迭代（2026-10-13）
 
-> 状态：**表单登录页 + guest 权限放开上线（2026-10-13，第 19 轮）**——Caddy basic-auth 已摘除，
-> 换 cookie 会话闸门（Caddy `forward_auth` → web `/login/check`），根治「WS 升级不带凭据 →
-> 反复弹登录框 → 开始预测点不了」；guest 开到**可提交、不可删**。全量验证绿（VPS + 本地回环）。
-> 试用地址 `http://118.25.194.247/platform/`，账号 hongbo/guest，明文密码只在
-> VPS `~/agh-home/caddy-credentials.txt`。用户指示不变：停止新功能，只做链路体验优化。
+> 状态：**算力路由第一期上线（2026-10-13，第 20 轮）**——家里 GPU 机器（RTX 4060，WSL）
+> 以 worker + 反向 SSH 隧道挂到 VPS 回环 `127.0.0.1:7610`，端到端真预测验证通过
+> （双链任务 184s，PDB/PAE/置信度齐全）。**VPS 侧分发逻辑未动**（用户指示：先只动家里
+> 那台），第二期在 boltz.mjs 分发链头插「GPU worker → 云 API → 保底」档位，待用户点头。
+> 用户指示不变：停止新功能，只做链路体验优化（算力路由经用户逐项拍板豁免）。
+
+## 追加完成项（第 20 轮：算力路由第一期——GPU worker + 隧道）
+
+1. **动机**（用户提议）：轻量 VPS 够用但无 GPU；家里 WSL 机器配置更好（RTX 4060 Laptop，
+   WSL2 GPU 直通正常）。用户拍板：家里机器当第一算力选择、VPS 保底，**先只动家里那台**。
+2. **实现**（commit 18884c1 + f0b819f）：
+   - `protein-predictor/worker.mjs`（新）：HTTP 包壳复用 `runLocalBoltz`（boltz.mjs 仅补
+     一处 `export`，逻辑零改动）。`GET /health`→{ok,busy,bin}，`POST /predict`
+     {proteins,smiles?}→{pdb,paeNpzB64,conf,aff}。GPU 串行队列（一次一任务）、请求体
+     64KB/响应 32MB 上限、token 校验（`~/.config/boltz-worker/token` 或
+     BOLTZ_WORKER_TOKEN，不设则关）。双端只绑 127.0.0.1，公网摸不到。
+   - 家里机器（serverofWHB@100.91.157.78，ssh 要 `-i ~/.ssh/agh_key`，默认 key 不认）：
+     systemd user 单元 `boltz-worker.service`（跑 repo 里的 worker.mjs）+
+     `boltz-tunnel.service`（`ssh -N -R 127.0.0.1:7610:...` 反向隧道，ServerAlive
+     30s×3，断线 10s 重连，ExitOnForwardFailure），均 enable+active。
+   - 隧道密钥 `~/.ssh/boltz_tunnel`（家里生成）；公钥已加到 VPS authorized_keys
+     （**对 VPS 的唯一改动**）。
+   - 家里 repo 已 ff 到 f0b819f（GitHub 直连可用，与 VPS 不同）。
+3. **验证**：worker 本机冒烟（health/参数校验）；家里 health OK；**VPS 上
+   `curl 127.0.0.1:7610/health` 通**（隧道端到端）；真任务：双链 20+20 aa 从 VPS 发起，
+   184s 返回 200，334 行 ATOM + PAE npz + conf/aff 齐全（ptm 低是测试序列本身是垃圾
+   序列，链路无关）。
+4. **第二期（待用户点头）**：VPS `boltz.mjs` 分发链头插一档——探 worker /health（短超时）
+   → 通则 POST /predict（带 token），任何失败原样落回现有链（API key → 本地 → SETUP_HINT）。
+   预计半天内。token 从家里 `~/.config/boltz-worker/token` 读入 env，不进聊天。
+5. **注意事项**：家里机器关机/休眠 = GPU 档自动消失（隧道断，将来二期 fallback 兜底），
+   现状下 VPS 行为完全不变；boltz 单任务上限 20 分钟（runLocalBoltz 内置，组 SIGKILL 防
+   GPU 孤儿）。
 
 ## 追加完成项（第 19 轮：正式登录页 + guest 可提交不可删）
 
