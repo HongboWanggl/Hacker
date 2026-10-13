@@ -71,11 +71,13 @@ renameSync(join(dist, 'server.js'), join(dist, 'server.mjs'))
 const idx = readFileSync(join(dist, 'index.html'), 'utf8')
 const assetV = (name) =>
   createHash('sha256').update(readFileSync(join(dist, name))).digest('base64url').slice(0, 10)
+// Anchor on the attribute so comment mentions of the filenames never match.
 writeFileSync(
   join(dist, 'index.html'),
   idx
-    .replace('theme.js', `theme.js?v=${assetV('theme.js')}`)
-    .replace('app.css', `app.css?v=${assetV('app.css')}`)
-    .replace('app.js', `app.js?v=${assetV('app.js')}`),
+    .replace('src="theme.js"', `src="theme.js?v=${assetV('theme.js')}"`)
+    .replace('href="app.css"', `href="app.css?v=${assetV('app.css')}"`)
+    .replace('src="app.js"', `src="app.js?v=${assetV('app.js')}"`)
+    .replace('src="sw-register.js"', `src="sw-register.js?v=${assetV('sw-register.js')}"`),
 )
 console.log('[protein-platform] build complete → dist/')
