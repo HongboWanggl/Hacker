@@ -7,10 +7,11 @@
 //   POST /predict {proteins:[...], smiles?} → {pdb, paeNpzB64?, conf, aff} or {error}
 // Jobs are serialized (one GPU run at a time); BOLTZ_WORKER_TOKEN (0600 file or
 // env) turns on a bearer check on /predict when set.
-import { createServer } from 'node:http'
-import { readFile, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+
 import { accessSync, constants as fsConstants } from 'node:fs'
+import { readFile, stat } from 'node:fs/promises'
+import { createServer } from 'node:http'
+import { join } from 'node:path'
 import { runLocalBoltz } from './boltz.mjs'
 
 const PORT = Number(process.env.BOLTZ_WORKER_PORT ?? 7610)
@@ -22,9 +23,7 @@ let token
 try {
   if (process.env.BOLTZ_WORKER_TOKEN) token = process.env.BOLTZ_WORKER_TOKEN
   else
-    token = (
-      await readFile(join(process.env.HOME ?? '', '.config', 'boltz-worker', 'token'), 'utf8')
-    ).trim()
+    token = (await readFile(join(process.env.HOME ?? '', '.config', 'boltz-worker', 'token'), 'utf8')).trim()
 } catch {
   token = undefined
 }

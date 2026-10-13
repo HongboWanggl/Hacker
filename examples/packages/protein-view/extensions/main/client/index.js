@@ -648,9 +648,10 @@ function ConfidenceSummary({ report, onCopy }) {
               className: 'pv-export pv-summary-copy',
               title: '复制可直接粘贴的预测结论（Markdown）',
               onClick: () => {
-                onCopy()
-                setCopied(true)
-                setTimeout(() => setCopied(false), 1600)
+                void Promise.resolve(onCopy()).then((ok) => {
+                  setCopied(ok !== false)
+                  setTimeout(() => setCopied(false), 1600)
+                })
               },
             },
             copied ? '已复制 ✓' : '复制结论',
@@ -893,7 +894,13 @@ function Compare3D({ report, services, selectedRes, onPickRes }) {
                 setTimeout(() => setCmpCopied(null), 1600)
               },
             },
-            cmpCopied == null ? '复制图像' : cmpCopied ? '已复制 ✓' : '复制失败',
+            cmpCopied == null
+              ? '复制图像'
+              : cmpCopied === 'failed'
+                ? '复制失败'
+                : cmpCopied === 'downloaded'
+                  ? '已保存下载 ✓'
+                  : '已复制 ✓',
           ),
           h(
             'button',
@@ -1170,14 +1177,10 @@ function CompareCard({ report, services }) {
         ? `- pLDDT 分歧最大残基: ${c.largestDeltas.map((d) => `#${d.residue} (Δ${d.delta > 0 ? '+' : ''}${d.delta})`).join(', ')}`
         : null,
     ].filter(Boolean)
-    try {
-      void navigator.clipboard?.writeText(lines.join('\n'))?.catch(() => {})
-    } catch {
-      // Clipboard unavailable — the button still confirms; the same numbers
-      // stay visible in the chips above.
-    }
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1600)
+    void copyText(lines.join('\n')).then((ok) => {
+      setCopied(ok)
+      setTimeout(() => setCopied(false), 1600)
+    })
   }
   return h(
     'div',
@@ -1453,13 +1456,10 @@ function BatchRowDetail({ job, services, onCompare }) {
               className: 'pv-export',
               title: '复制可直接粘贴的预测结论（Markdown，按当前结构现算）',
               onClick: () => {
-                try {
-                  void navigator.clipboard
-                    ?.writeText(residuesSummaryMd(job.accession, job.savedTo, residues))
-                    ?.catch(() => {})
-                } catch {}
-                setConclCopied(true)
-                setTimeout(() => setConclCopied(false), 1600)
+                void copyText(residuesSummaryMd(job.accession, job.savedTo, residues)).then((ok) => {
+                  setConclCopied(ok)
+                  setTimeout(() => setConclCopied(false), 1600)
+                })
               },
             },
             conclCopied ? '已复制 ✓' : '复制结论',
@@ -1480,7 +1480,13 @@ function BatchRowDetail({ job, services, onCompare }) {
                 setTimeout(() => setImgCopied(null), 1600)
               },
             },
-            imgCopied == null ? '复制图像' : imgCopied ? '已复制 ✓' : '复制失败',
+            imgCopied == null
+              ? '复制图像'
+              : imgCopied === 'failed'
+                ? '复制失败'
+                : imgCopied === 'downloaded'
+                  ? '已保存下载 ✓'
+                  : '已复制 ✓',
           ),
           h(
             'select',
@@ -1520,11 +1526,10 @@ function BatchRowDetail({ job, services, onCompare }) {
               type: 'button',
               className: 'pv-export',
               onClick: () => {
-                try {
-                  void navigator.clipboard?.writeText(fastaOf(residues, job.accession))?.catch(() => {})
-                } catch {}
-                setSeqCopied(true)
-                setTimeout(() => setSeqCopied(false), 1600)
+                void copyText(fastaOf(residues, job.accession)).then((ok) => {
+                  setSeqCopied(ok)
+                  setTimeout(() => setSeqCopied(false), 1600)
+                })
               },
               title: '复制 FASTA 序列',
             },
@@ -1614,7 +1619,13 @@ function BatchRowDetail({ job, services, onCompare }) {
                   setTimeout(() => setCurveCopied(null), 1600)
                 },
               },
-              curveCopied == null ? '复制图像' : curveCopied ? '已复制 ✓' : '复制失败',
+              curveCopied == null
+                ? '复制图像'
+                : curveCopied === 'failed'
+                  ? '复制失败'
+                  : curveCopied === 'downloaded'
+                    ? '已保存下载 ✓'
+                    : '已复制 ✓',
             ),
             h(
               'button',
@@ -1711,23 +1722,20 @@ function SearchCard({ report, owner }) {
     setSel(() => (allSel ? new Set() : new Set(hits.map((x) => x.accession).filter(Boolean))))
   const copyBatch = () => {
     const text = `用 batch_predict 一次预测这些蛋白：${[...sel].join(' ')}`
-    try {
-      void navigator.clipboard?.writeText(text)?.catch(() => {})
-    } catch {
-      // Clipboard unavailable — the bar still confirms selection; user can
-      // retype from the visible accessions.
-    }
-    setBatchCopied(true)
-    setTimeout(() => setBatchCopied(false), 1800)
+    void copyText(text).then((ok) => {
+      setBatchCopied(ok)
+      setTimeout(() => setBatchCopied(false), 1800)
+    })
   }
   const copy = (acc) => {
-    try {
-      void navigator.clipboard?.writeText(acc)?.catch(() => {})
-    } catch {
-      // Clipboard may be unavailable; the row still shows the accession.
-    }
-    setCopied(acc)
-    showToast(`已复制 ${acc} ✓`)
+    void copyText(acc).then((ok) => {
+      if (!ok) {
+        showToast('复制失败——浏览器拒绝访问剪贴板')
+        return
+      }
+      setCopied(acc)
+      showToast(`已复制 ${acc} ✓`)
+    })
     setTimeout(() => setCopied((c) => (c === acc ? null : c)), 1500)
   }
   const headCell = (key, label, extra = '') =>
@@ -2040,11 +2048,10 @@ function BatchCard({ report, services, onCompare }) {
                   className: 'pv-export',
                   title: '复制可直接粘贴的批处理结论（Markdown 表格，含失败行）',
                   onClick: () => {
-                    try {
-                      void navigator.clipboard?.writeText(batchSummaryMd(jobs, s))?.catch(() => {})
-                    } catch {}
-                    setConclCopied(true)
-                    setTimeout(() => setConclCopied(false), 1600)
+                    void copyText(batchSummaryMd(jobs, s)).then((ok) => {
+                      setConclCopied(ok)
+                      setTimeout(() => setConclCopied(false), 1600)
+                    })
                   },
                 },
                 conclCopied ? '已复制 ✓' : '复制结论',
@@ -2376,17 +2383,67 @@ function export3DPng(
   } catch {}
 }
 
+// navigator.clipboard only exists in secure contexts — on the plain-http trial
+// site (bare-IP URL, no TLS) it is undefined, so every copy button used to
+// silently no-op (text) or report 复制失败 (image). Text falls back to the
+// legacy execCommand path (works on http); images fall back to a download so
+// the button still delivers the figure.
+function copyTextExec(text) {
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    ta.remove()
+    return ok
+  } catch {
+    return false
+  }
+}
+
+// Returns Promise<boolean> — the ONLY copy entry point; call sites wire the
+// button's ✓ state to the resolved value so "已复制" never lies.
+function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text).then(
+      () => true,
+      () => copyTextExec(text),
+    )
+  }
+  return Promise.resolve(copyTextExec(text))
+}
+
 // Clipboard copy of a composited figure (paste straight into slides or docs).
-// Returns false when the async Clipboard API is unavailable/denied; `build`
-// receives the source canvas and returns the composite (null = plain canvas).
+// Returns 'copied' | 'downloaded' | 'failed'; `build` receives the source
+// canvas and returns the composite (null = plain canvas). When the async
+// Clipboard API is unavailable (http) or denied, the composite downloads
+// instead so the user still gets the figure.
 async function copyCanvasPng(canvas, build) {
-  if (!canvas || typeof canvas.toBlob !== 'function') return false
-  if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') return false
+  if (!canvas || typeof canvas.toBlob !== 'function') return 'failed'
   const c = build(canvas) ?? canvas
   const blob = await new Promise((res) => c.toBlob(res, 'image/png'))
-  if (!blob) return false
-  await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-  return true
+  if (!blob) return 'failed'
+  if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      return 'copied'
+    } catch {
+      // Permission denied etc. — fall through to the download below.
+    }
+  }
+  try {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'protein-view.png'
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+    return 'downloaded'
+  } catch {
+    return 'failed'
+  }
 }
 
 async function copy3DComposite(
@@ -4260,7 +4317,13 @@ function PaesModule({ paePath, residues, services, onHover, hover, onInterface, 
               setTimeout(() => setPaeCopied(null), 1600)
             },
           },
-          paeCopied == null ? '复制图像' : paeCopied ? '已复制 ✓' : '复制失败',
+          paeCopied == null
+            ? '复制图像'
+            : paeCopied === 'failed'
+              ? '复制失败'
+              : paeCopied === 'downloaded'
+                ? '已保存下载 ✓'
+                : '已复制 ✓',
         ),
         h(
           'button',
@@ -4609,13 +4672,9 @@ function ProteinToolView({ owner, services }) {
     },
     h(ConfidenceSummary, {
       report,
-      onCopy: () => {
-        try {
-          void navigator.clipboard?.writeText(predictionSummaryMd(report))?.catch(() => {})
-        } catch {
-          // Clipboard unavailable — the same numbers stay visible in the summary.
-        }
-      },
+      // Returns the copy promise so the button's ✓ reflects the real outcome
+      // (clipboard needs a secure context — copyText falls back on http).
+      onCopy: () => copyText(predictionSummaryMd(report)),
     }),
     h(SegmentChips, {
       segments: report.lowConfidenceSegments,
@@ -4713,7 +4772,13 @@ function ProteinToolView({ owner, services }) {
                     },
                     title: '复制合成图（含图例）到剪贴板，可直接粘贴进幻灯片/文档',
                   },
-                  imgCopied == null ? '复制图像' : imgCopied ? '已复制 ✓' : '复制失败',
+                  imgCopied == null
+                    ? '复制图像'
+                    : imgCopied === 'failed'
+                      ? '复制失败'
+                      : imgCopied === 'downloaded'
+                        ? '已保存下载 ✓'
+                        : '已复制 ✓',
                 ),
                 h(
                   'button',
@@ -4722,13 +4787,10 @@ function ProteinToolView({ owner, services }) {
                     className: 'pv-export',
                     onClick: () => {
                       if (!residues) return
-                      try {
-                        void navigator.clipboard?.writeText(fastaOf(residues, pdbName))?.catch(() => {})
-                      } catch {
-                        // Clipboard unavailable — sequence stays visible in the strip.
-                      }
-                      setSeqCopied(true)
-                      setTimeout(() => setSeqCopied(false), 1600)
+                      void copyText(fastaOf(residues, pdbName)).then((ok) => {
+                        setSeqCopied(ok)
+                        setTimeout(() => setSeqCopied(false), 1600)
+                      })
                     },
                     title: '复制 FASTA 序列（多链复合物按链分条）',
                   },
@@ -4865,7 +4927,13 @@ function ProteinToolView({ owner, services }) {
                       setTimeout(() => setCurveCopied(null), 1600)
                     },
                   },
-                  curveCopied == null ? '复制图像' : curveCopied ? '已复制 ✓' : '复制失败',
+                  curveCopied == null
+                    ? '复制图像'
+                    : curveCopied === 'failed'
+                      ? '复制失败'
+                      : curveCopied === 'downloaded'
+                        ? '已保存下载 ✓'
+                        : '已复制 ✓',
                 ),
                 h(
                   'button',

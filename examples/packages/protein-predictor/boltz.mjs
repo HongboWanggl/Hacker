@@ -233,6 +233,108 @@ async function writePaeBestEffort(tctx, label, bytes) {
   }
 }
 
+// 算力路由第一档：remote GPU worker (worker.mjs on a GPU machine, reverse-SSH
+// tunneled to loopback). Health-probe first (short timeout so a dead tunnel
+// costs nothing), then POST the job. ANY failure returns undefined and the
+// caller falls through to the legacy chain (hosted API → local CLI → hint) —
+// the worker is an accelerator, never a dependency.
+const WORKER_URL = process.env.BOLTZ_WORKER_URL ?? 'http://127.0.0.1:7610'
+export async function runWorkerBoltz({ proteins, smiles }) {
+  try {
+    const health = await fetch(`${WORKER_URL}/health`, { signal: AbortSignal.timeout(1500) })
+    if (!health.ok) return undefined
+    const h = await health.json()
+    if (!h.ok || !h.bin) return undefined
+    const headers = { 'content-type': 'application/json' }
+    const token =
+      process.env.BOLTZ_WORKER_TOKEN ??
+      (await readFile(join(process.env.HOME ?? '', '.config', 'boltz-worker', 'token'), 'utf8')
+        .then((s) => s.trim())
+        .catch(() => undefined))
+    if (token) headers.authorization = `Bearer ${token}`
+    // 22 min > the worker's own 20 min per-job cap, so the worker always gets
+    // to answer (even with a compute error) before the client gives up.
+    const res = await fetch(`${WORKER_URL}/predict`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ proteins, smiles }),
+      signal: AbortSignal.timeout(22 * 60_000),
+    })
+    if (!res.ok) return undefined // 5xx compute error → legacy chain takes it
+    const out = await res.json()
+    if (!out.pdb) return undefined
+    return { pdbContent: out.pdb, paeNpzB64: out.paeNpzB64, conf: out.conf ?? {}, aff: out.aff ?? {} }
+  } catch {
+    return undefined
+  }
+}
+
+// Shared tail of the worker/local paths: persist the PDB (pLDDT is in the
+// B-factor column, so the existing confidence viewer renders it as-is), shape
+// conf/aff into the panel's report, best-effort the PAE heatmap.
+async function finishBoltzResult({
+  tctx,
+  proteins,
+  smiles,
+  singleChain,
+  label,
+  t0,
+  pdbContent,
+  paeBytes,
+  conf,
+  aff,
+  engine,
+  paeMissingNote,
+}) {
+  const nResidues = [...pdbContent.matchAll(/^ATOM\s+\d+\s+CA\s/gm)].length
+  const path = `structures/${label}_boltz_local.pdb`
+  await tctx.fs.write(path, pdbContent)
+  const pct = (x) => (Number.isFinite(x) ? Math.round(x * 1000) / 10 : undefined)
+  const metrics = {
+    ...(pct(conf?.ptm) !== undefined ? { ptm: pct(conf.ptm) } : {}),
+    ...(pct(conf?.iptm) !== undefined && !singleChain ? { iptm: pct(conf.iptm) } : {}),
+    // A ligand-free run still reports ligand_iptm: 0.0 — surfacing it
+    // would render a meaningless "ligand ipTM 0" chip. Same for
+    // protein_iptm on single-protein runs (no protein interface exists).
+    ...(smiles && pct(conf?.ligand_iptm) !== undefined ? { ligandIptm: pct(conf.ligand_iptm) } : {}),
+    ...(proteins.length >= 2 && pct(conf?.protein_iptm) !== undefined
+      ? { proteinIptm: pct(conf.protein_iptm) }
+      : {}),
+    ...(pct(aff?.affinity_probability_binary ?? aff?.affinity_probability) !== undefined
+      ? {
+          bindingConfidence: pct(aff.affinity_probability_binary ?? aff.affinity_probability),
+        }
+      : {}),
+  }
+  const affProb = aff?.affinity_probability_binary ?? aff?.affinity_probability
+  // A single chain has no interface and no binder: judge the fold itself
+  // by pTM instead of the ipTM-family scores (which come back as 0.0).
+  const verdict = singleChain
+    ? foldVerdict(conf?.ptm ?? 0)
+    : affProb != null
+      ? verdictFrom({ binding_confidence: affProb })
+      : verdictFrom({ iptm: conf?.iptm ?? conf?.ptm ?? 0 })
+  const report = {
+    engine,
+    savedTo: path,
+    chains: proteins.length,
+    hasLigand: Boolean(smiles),
+    residues: nResidues,
+    ...metrics,
+    ...(verdict ? { verdict } : {}),
+    runtimeSec: Math.round((Date.now() - t0) / 1000),
+  }
+  // Persist the PAE matrix for the panel's error heatmap. Best-effort:
+  // its absence only hides the heatmap, never the model itself.
+  if (paeBytes) {
+    const paePath = await writePaeBestEffort(tctx, label, paeBytes)
+    if (paePath) report.paePath = paePath
+  } else if (paeMissingNote) {
+    console.error(`[predict_complex] ${paeMissingNote}`)
+  }
+  return result(report, JSON.stringify(report))
+}
+
 // API-mode PAE pickup: the panel's heatmap rides on `paePath`, and the API may
 // expose the matrix alongside the structure files. Detection is defensive —
 // an entry whose name/url looks like a PAE npz is downloaded (capped, binary)
@@ -416,8 +518,27 @@ export const predictComplex = {
             )
           }
         }
-        const key = resolveApiKey()
         const label = name.replace(/[^A-Za-z0-9_.-]/g, '_')
+        // 算力路由第一档：GPU worker（家里机器经反向 SSH 隧道挂在回环端口）。
+        // 任何失败（隧道断/忙/算错）都静默落回下面的原链路——保底语义，对前端透明。
+        const workerOut = await runWorkerBoltz({ proteins, smiles })
+        if (workerOut) {
+          const t0 = Date.now()
+          return finishBoltzResult({
+            tctx,
+            proteins,
+            smiles,
+            singleChain,
+            label,
+            t0,
+            pdbContent: workerOut.pdbContent,
+            paeBytes: workerOut.paeNpzB64 ? Buffer.from(workerOut.paeNpzB64, 'base64') : undefined,
+            conf: workerOut.conf,
+            aff: workerOut.aff,
+            engine: 'boltz2-worker',
+          })
+        }
+        const key = resolveApiKey()
         // No key → run the open-source weights locally when the CLI exists.
         if (!key) {
           if (!resolveLocalBoltz()) return fail(SETUP_HINT)
@@ -427,56 +548,20 @@ export const predictComplex = {
           if (out.error) return fail(out.error)
           // boltz writes pLDDT into the PDB B-factor column, so the existing
           // confidence viewer renders local models without extra work.
-          const pdb = await readFile(out.modelPdb, 'utf8')
-          const nResidues = [...pdb.matchAll(/^ATOM\s+\d+\s+CA\s/gm)].length
-          const path = `structures/${label}_boltz_local.pdb`
-          await tctx.fs.write(path, pdb)
-          const pct = (x) => (Number.isFinite(x) ? Math.round(x * 1000) / 10 : undefined)
-          const metrics = {
-            ...(pct(out.conf?.ptm) !== undefined ? { ptm: pct(out.conf.ptm) } : {}),
-            ...(pct(out.conf?.iptm) !== undefined && !singleChain ? { iptm: pct(out.conf.iptm) } : {}),
-            // A ligand-free run still reports ligand_iptm: 0.0 — surfacing it
-            // would render a meaningless "ligand ipTM 0" chip. Same for
-            // protein_iptm on single-protein runs (no protein interface exists).
-            ...(smiles && pct(out.conf?.ligand_iptm) !== undefined
-              ? { ligandIptm: pct(out.conf.ligand_iptm) }
-              : {}),
-            ...(proteins.length >= 2 && pct(out.conf?.protein_iptm) !== undefined
-              ? { proteinIptm: pct(out.conf.protein_iptm) }
-              : {}),
-            ...(pct(out.aff?.affinity_probability_binary ?? out.aff?.affinity_probability) !== undefined
-              ? {
-                  bindingConfidence: pct(out.aff.affinity_probability_binary ?? out.aff.affinity_probability),
-                }
-              : {}),
-          }
-          const affProb = out.aff?.affinity_probability_binary ?? out.aff?.affinity_probability
-          // A single chain has no interface and no binder: judge the fold itself
-          // by pTM instead of the ipTM-family scores (which come back as 0.0).
-          const verdict = singleChain
-            ? foldVerdict(out.conf?.ptm ?? 0)
-            : affProb != null
-              ? verdictFrom({ binding_confidence: affProb })
-              : verdictFrom({ iptm: out.conf?.iptm ?? out.conf?.ptm ?? 0 })
-          const report = {
+          return finishBoltzResult({
+            tctx,
+            proteins,
+            smiles,
+            singleChain,
+            label,
+            t0,
+            pdbContent: await readFile(out.modelPdb, 'utf8'),
+            paeBytes: out.paeNpz ? await readFile(out.paeNpz) : undefined,
+            conf: out.conf,
+            aff: out.aff,
             engine: 'boltz2-local',
-            savedTo: path,
-            chains: proteins.length,
-            hasLigand: Boolean(smiles),
-            residues: nResidues,
-            ...metrics,
-            ...(verdict ? { verdict } : {}),
-            runtimeSec: Math.round((Date.now() - t0) / 1000),
-          }
-          // Persist the PAE matrix for the panel's error heatmap. Best-effort:
-          // its absence only hides the heatmap, never the model itself.
-          if (out.paeNpz) {
-            const paePath = await writePaeBestEffort(tctx, label, await readFile(out.paeNpz))
-            if (paePath) report.paePath = paePath
-          } else {
-            console.error('[predict_complex] no pae_*.npz found next to the model; heatmap hidden')
-          }
-          return result(report, JSON.stringify(report))
+            paeMissingNote: out.paeNpz ? undefined : 'no pae_*.npz found next to the model; heatmap hidden',
+          })
         }
 
         const resumeId = String(prediction_id || '').trim()

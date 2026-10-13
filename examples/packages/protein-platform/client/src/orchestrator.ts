@@ -392,13 +392,14 @@ export async function runTask(
               // carries no JSON savedTo (its savedTo IS the PDB): in both cases the
               // result IS the report. Keep it verbatim so the result page can feed
               // the pv components a parseable resultPreview directly. Complex runs
-              // in two shapes — API mode carries predictionId, local boltz carries
-              // engine:"boltz2-local" — match either.
+              // in three shapes — API mode carries predictionId; the local/worker
+              // boltz paths carry engine:"boltz2-local"/"boltz2-worker" — match all.
               if (
                 text.startsWith('{') &&
                 (text.includes('"jobs"') ||
                   text.includes('"predictionId"') ||
-                  text.includes('"boltz2-local"'))
+                  text.includes('"boltz2-local"') ||
+                  text.includes('"boltz2-worker"'))
               ) {
                 patch(id, (t) => {
                   t.resultJson = text.slice(0, 32_000)
