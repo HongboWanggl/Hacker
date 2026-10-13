@@ -277,9 +277,13 @@ export function localPackageAdmin(backend: LocalBackend, origin: string) {
       try {
         const result = await client.clientModules.callService(params as ClientModuleServiceCallParams)
         serviceReply(response, 200, result)
-      } catch {
+      } catch (e) {
         // No host/worker exception crosses this boundary. A stale/untrusted row and a transient
-        // backend failure deliberately look alike to the page.
+        // backend failure deliberately look alike to the page — but the real reason (e.g. a
+        // stale session's E_WORKSPACE_REQUIRED) must reach the launcher log or every 503 is
+        // undebuggable.
+        const rpcData = (e as { data?: unknown }).data
+        console.warn('[bff] callService failed:', (e as Error)?.message ?? e, rpcData ? JSON.stringify(rpcData) : '')
         serviceReply(response, 503, { error: 'service unavailable' })
       }
       return true

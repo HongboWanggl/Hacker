@@ -10,22 +10,38 @@ let cfgRef: PlatformConfig | null = null
 const sessionIdRef = { current: null as string | null }
 let singleton: PvServices | null = null
 
+/** A daemon/surface restart mid-task turns in-flight BFF posts into 502/503/504.
+ *  These are transient by construction — retry them (short, bounded) instead of
+ *  failing the task's report fetch or archive write. */
+async function bffPost(body: Record<string, unknown>): Promise<Response> {
+  let r = await fetch(cfgRef!.bffPath, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  for (let i = 0; i < 2 && (r.status === 502 || r.status === 503 || r.status === 504); i++) {
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    r = await fetch(cfgRef!.bffPath, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  }
+  return r
+}
+
 export function initServices(cfg: PlatformConfig): PvServices {
   cfgRef = cfg
   singleton ??= {
     async call(service, input) {
       const sessionId = sessionIdRef.current
       if (!sessionId) throw new Error('no active session')
-      const r = await fetch(cfgRef!.bffPath, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          profile: cfgRef!.profile,
-          rowId: cfgRef!.rowId,
-          sessionId,
-          service,
-          input,
-        }),
+      const r = await bffPost({
+        profile: cfgRef!.profile,
+        rowId: cfgRef!.rowId,
+        sessionId,
+        service,
+        input,
       })
       if (!r.ok) throw new Error(`${service}: HTTP ${r.status}`)
       const j = (await r.json()) as { output?: unknown; error?: string }
@@ -53,11 +69,7 @@ export async function bffCall(
   service: string,
   input: Record<string, unknown>,
 ): Promise<any> {
-  const r = await fetch(cfgRef!.bffPath, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ profile: cfgRef!.profile, rowId: cfgRef!.rowId, sessionId, service, input }),
-  })
+  const r = await bffPost({ profile: cfgRef!.profile, rowId: cfgRef!.rowId, sessionId, service, input })
   if (!r.ok) throw new Error(`${service}: HTTP ${r.status}`)
   const j = (await r.json()) as { output?: unknown; error?: string }
   if (j.error) throw new Error(`${service}: ${j.error}`)
