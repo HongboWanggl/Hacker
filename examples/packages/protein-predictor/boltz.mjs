@@ -86,7 +86,8 @@ function resolveLocalBoltz() {
 // Run a prediction locally and shape the result like the API path so the panel
 // renders identically. Local runs take minutes (MPS fp32, roughly 1-2x slower
 // than a T4); the first ever run also downloads ~10 GB of weights.
-async function runLocalBoltz({ proteins, smiles }) {
+// Exported for worker.mjs (the GPU-borrow HTTP worker deployed on GPU machines).
+export async function runLocalBoltz({ proteins, smiles }) {
   const bin = resolveLocalBoltz()
   if (!bin) return { missing: true }
   const work = await mkdtemp(join(tmpdir(), 'boltz-local-'))
