@@ -8,7 +8,8 @@
   <link rel="stylesheet" href="app.css" />
   <script type="module" src="app.js"></script>
   <!-- App-shell SW: Chromium won't reuse disk-cache entries for basic-auth
-       responses, so repeat public visits re-downloaded the bundle. Register
+       responses, and SW-issued fetches lose the cached credentials — so this
+       SW never fetches: the page posts asset blobs to it (see sw.js). Register
        only on secure/localhost origins (SW requirement anyway). -->
   <script>
     if (
@@ -18,6 +19,31 @@
       addEventListener('load', function () {
         navigator.serviceWorker.register('sw.js').catch(function () {})
       })
+      // Hand the controlling SW the content-hashed assets. When they are
+      // already cached this fetch is served by the SW itself (free); on a new
+      // deploy the URLs are unknown to the SW and flow through the normal
+      // authenticated browser path, then land in the SW cache for next time.
+      var fill = function () {
+        var sw = navigator.serviceWorker
+        if (!sw.controller) return
+        var urls = []
+        document.querySelectorAll('script[src], link[rel="stylesheet"]').forEach(function (el) {
+          var u = el.src || el.href
+          if (u && /\/platform\/(app\.js|app\.css|theme\.js)\?v=/.test(u)) urls.push(u)
+        })
+        urls.forEach(function (u) {
+          fetch(u)
+            .then(function (r) {
+              if (!r.ok) return
+              return r.blob().then(function (b) {
+                sw.controller.postMessage({ type: 'cache-asset', url: u, blob: b })
+              })
+            })
+            .catch(function () {})
+        })
+      }
+      if (document.readyState === 'complete') fill()
+      else addEventListener('load', fill)
     }
   </script>
 </head>
