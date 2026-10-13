@@ -117,31 +117,74 @@ export function TasksView() {
       alive = false
     }
   }, [])
+  // Filter row: as the archive grows past a screenful, type chips + a title
+  // search are the only sane way back to "that run from last week".
+  const [filter, setFilter] = useState<'all' | TaskType>('all')
+  const [q, setQ] = useState('')
   const liveIds = new Set(tasks.map((t) => t.id))
   const history = (archived ?? []).filter((m) => !liveIds.has(m.taskId))
-  const empty = tasks.length === 0 && history.length === 0
+  const ql = q.trim().toLowerCase()
+  const match = (hay: string) => !ql || hay.toLowerCase().includes(ql)
+  const liveF = tasks.filter((t) => (filter === 'all' || t.type === filter) && match(`${t.title} ${t.id}`))
+  const historyF = history.filter(
+    (m) =>
+      (filter === 'all' || (m.type ?? 'single') === filter) &&
+      match(`${m.title ?? ''} ${m.taskId} ${m.accession ?? ''} ${m.verdict ?? ''}`),
+  )
+  const total = tasks.length + history.length
+  const empty = total === 0
+  const types: Array<'all' | TaskType> = ['all', 'single', 'complex', 'batch', 'search', 'compare']
+  const countFor = (k: 'all' | TaskType) =>
+    k === 'all'
+      ? total
+      : tasks.filter((t) => t.type === k).length + history.filter((m) => (m.type ?? 'single') === k).length
   return (
     <main className="pl-page">
       <div className="pl-wall-title">
-        全部任务 <small>· {tasks.length + history.length}</small>
+        全部任务 <small>· {ql || filter !== 'all' ? `${liveF.length + historyF.length} / ${total}` : total}</small>
       </div>
       {empty ? (
         <div className="pl-empty">
           还没有任务 — 回<a href="#/">首页</a>提交第一个预测
         </div>
       ) : (
-        <div className="pl-tasklist">
-          {tasks.map((t) => (
-            <LiveRow key={t.id} t={t} />
-          ))}
-          {history.map((m) => (
-            <ArchivedRow
-              key={m.taskId}
-              m={m}
-              onDeleted={(id) => setArchived((list) => (list ?? []).filter((x) => x.taskId !== id))}
+        <>
+          <div className="pl-filters">
+            {types.map((k) => (
+              <button
+                key={k}
+                className={`pl-type-tab ${filter === k ? 'on' : ''}`}
+                onClick={() => setFilter(k)}
+              >
+                {k === 'all' ? '全部' : TASK_TYPE_LABEL[k]}
+                <em>{countFor(k)}</em>
+              </button>
+            ))}
+            <input
+              className="pl-input-name pl-search"
+              placeholder="搜索标题 / ID…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
             />
-          ))}
-        </div>
+          </div>
+          {(liveF.length > 0 || historyF.length > 0) && (
+            <div className="pl-tasklist">
+              {liveF.map((t) => (
+                <LiveRow key={t.id} t={t} />
+              ))}
+              {historyF.map((m) => (
+                <ArchivedRow
+                  key={m.taskId}
+                  m={m}
+                  onDeleted={(id) => setArchived((list) => (list ?? []).filter((x) => x.taskId !== id))}
+                />
+              ))}
+            </div>
+          )}
+          {liveF.length === 0 && historyF.length === 0 && (
+            <div className="pl-empty">没有匹配的任务 — 换个关键词或类型试试</div>
+          )}
+        </>
       )}
     </main>
   )

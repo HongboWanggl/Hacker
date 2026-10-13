@@ -246,6 +246,24 @@ html.dark .pl-composer textarea::placeholder {
   cursor: pointer;
   transition: all 0.15s ease;
 }
+/* Task-page filter row: type chips (with counts) + title search. */
+.pl-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0 14px;
+}
+.pl-filters .pl-type-tab em {
+  font-style: normal;
+  margin-left: 5px;
+  font-size: 11.5px;
+  opacity: 0.65;
+}
+.pl-filters .pl-search {
+  width: 180px;
+  margin-left: auto;
+}
 .pl-type-tab:hover {
   border-color: #c5d4f2;
 }
