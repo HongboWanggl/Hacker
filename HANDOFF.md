@@ -1,10 +1,42 @@
 # 交接文档：蛋白质平台迭代（2026-10-13）
 
-> 状态：**算力路由第一期上线（2026-10-13，第 20 轮）**——家里 GPU 机器（RTX 4060，WSL）
-> 以 worker + 反向 SSH 隧道挂到 VPS 回环 `127.0.0.1:7610`，端到端真预测验证通过
-> （双链任务 184s，PDB/PAE/置信度齐全）。**VPS 侧分发逻辑未动**（用户指示：先只动家里
-> 那台），第二期在 boltz.mjs 分发链头插「GPU worker → 云 API → 保底」档位，待用户点头。
-> 用户指示不变：停止新功能，只做链路体验优化（算力路由经用户逐项拍板豁免）。
+> 状态：**算力路由二期 + 夜班三修全量上线（2026-10-13 深夜，第 21 轮）**——VPS 分发链
+> 头插 GPU worker 档（探活 1.5s → 22min 上限 → 任何失败静默落回原链）；「没有可展示
+> 的结果」双根因修复（VPS 无算力 + 假完成语义）；复制三按钮 http 兜底（execCommand +
+> 下载）。全链路真测绿，公网站点可直接验收。用户指示：夜班自治，明早验收。
+
+## 追加完成项（第 21 轮：算力路由二期 + 复合物结果 + 复制按钮）
+
+1. **算力路由二期**（用户拍板开工）：`boltz.mjs` 分发链 = **worker → 云 API → 本地 CLI →
+   SETUP_HINT**。`runWorkerBoltz`：探 `127.0.0.1:7610/health`（1.5s 超时，隧道断零成本）→
+   POST /predict（22min 上限 > worker 自身 20min 任务上限）→ 任何失败返回 undefined 落回
+   原链。报告整形抽成 `finishBoltzResult`（worker/本地两路共用；engine 区分
+   boltz2-worker/boltz2-local）。token 在 VPS `~/.config/boltz-worker/token`（家里 scp 而来，
+   不进聊天）。
+2. **真实测试**：公网 UI 提交双链复合物 → 家里 RTX 4060 跑 ~3 分钟 → 报告
+   `engine:"boltz2-worker"`、ptm 70.5/iptm 58.4、PAE 落盘、归档回放全绿（pp-complex-full
+   PASS×2）。**fallback 真测**：停隧道 → 提交 → 秒级 failed + 可执行的 SETUP_HINT 提示，
+   不再假完成；隧道拉起 → 恢复 GPU 跑通。
+3. **「没有可展示的结果」双根因**（用户报的第二项）：
+   - **算力根因**：VPS 无 BOLTZ_API_KEY 无本地 boltz → predict_complex 必然 fail(SETUP_HINT)
+     ——二期路由顺带根治（worker 档兜住正常预测）。
+   - **假完成根因**：agent 把工具错误当数据报告后正常收尾 → 平台一律标「已完成」→ 结果页
+     「没有可展示的结果」无解释、任务墙绿勾。修 orchestrator：completed + 无 resultJson +
+     无 savedTo + lastError → **failed + 带出错误文本**；归档仅在真 done 时触发。
+   - 顺带修：复合物报告匹配器补 `"boltz2-worker"`（orchestrator.ts）。
+4. **复制三按钮**（用户报的第三项）：`navigator.clipboard` 仅 secure context 存在，http 裸
+   IP 站点上 undefined → 复制静默无效/假成功。修 protein-view client：新增 `copyText`
+   （execCommand 兜底，Promise<boolean>）、`copyCanvasPng` 三态（copied/downloaded/failed，
+   图像兜底下载 protein-view.png），9 处调用点状态如实反映成败。探针 pp-copy-buttons
+   PASS（execCommand ok:true×2 + 真下载事件）。
+5. **新探针**：`pp-copy-buttons.mjs`（http 兜底契约；标签断言为 best-effort——toolview 重挂载
+   会吞掉 1.6s 的标签闪烁，功能断言才是硬性的）。
+6. **部署纪要**：thin bundle 恢复可用（VPS 已有 9c6ce8f 前置）；**agh-update-platform 前必须
+   先 commit+sync**（两次踩到「integrity 没变=发布的是旧码」）；publish 后 daemon+web 双重启。
+7. **本地回环回归**：platform 重发 + 双重启 → pp-guest-gate / pp-help-smoke /
+   pp-copy-buttons / pp-platform-live 全 PASS。
+8. **已知边界**：pae 探针行偶发 null（归档写入竞态，信息性输出非断言）；复制图像合成图
+   构建 ~3s（大画布 PNG 编码）；runtimeSec 修复已随 991ffdc 发布。
 
 ## 追加完成项（第 20 轮：算力路由第一期——GPU worker + 隧道）
 
