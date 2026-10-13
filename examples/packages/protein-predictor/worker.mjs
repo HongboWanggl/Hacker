@@ -9,8 +9,7 @@
 // env) turns on a bearer check on /predict when set.
 import { createServer } from 'node:http'
 import { readFile, stat } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { accessSync, constants as fsConstants } from 'node:fs'
 import { runLocalBoltz } from './boltz.mjs'
 
@@ -22,7 +21,10 @@ const BIN = process.env.BOLTZ_LOCAL_BIN ?? join(process.env.HOME ?? '', 'boltz2'
 let token
 try {
   if (process.env.BOLTZ_WORKER_TOKEN) token = process.env.BOLTZ_WORKER_TOKEN
-  else token = (await readFile(join(dirname(fileURLToPath(import.meta.url)), 'worker-token'), 'utf8')).trim()
+  else
+    token = (
+      await readFile(join(process.env.HOME ?? '', '.config', 'boltz-worker', 'token'), 'utf8')
+    ).trim()
 } catch {
   token = undefined
 }
