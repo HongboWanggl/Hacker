@@ -159,6 +159,15 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
       alive = false
     }
   }, [])
+  // Wall type filter (same chips as the tasks page). Filters both pools, then
+  // the existing 12-cap fills live-first. Must live BELOW the archived state —
+  // historyF reads it, and the component body evaluates top-down (TDZ).
+  const [wallFilter, setWallFilter] = useState<'all' | TaskType>('all')
+  const liveF = tasks.filter((t) => wallFilter === 'all' || t.type === wallFilter)
+  const liveIds = new Set(tasks.map((t) => t.id))
+  const historyF = archived.filter(
+    (m) => (wallFilter === 'all' || (m.type ?? 'single') === wallFilter) && !liveIds.has(m.taskId),
+  )
 
   const submit = async () => {
     if (!ready || busy) return
@@ -344,13 +353,21 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
           <div className="pl-wall-title">
             最近预测 <small>· {tasks.length + archived.length} 个任务</small>
           </div>
+          {/* Same filter row as the tasks page — the wall is a capped preview,
+              but "show me my complexes" works the same way everywhere. */}
+          <div className="pl-filters pl-filters-wall">
+            {(['all', 'single', 'complex', 'batch', 'search', 'compare'] as const).map((k) => (
+              <button key={k} className={`pl-type-tab ${wallFilter === k ? 'on' : ''}`} onClick={() => setWallFilter(k)}>
+                {k === 'all' ? '全部' : TASK_TYPE_LABEL[k]}
+              </button>
+            ))}
+          </div>
           <div className="pl-wall">
-            {tasks.slice(0, 12).map((t) => (
+            {liveF.slice(0, 12).map((t) => (
               <TaskCard key={t.id} task={t} />
             ))}
-            {archived
-              .filter((m) => !tasks.some((t) => t.id === m.taskId))
-              .slice(0, Math.max(0, 12 - Math.min(tasks.length, 12)))
+            {historyF
+              .slice(0, Math.max(0, 12 - Math.min(liveF.length, 12)))
               .map((m) => (
                 <ArchiveCard key={m.taskId} m={m} />
               ))}

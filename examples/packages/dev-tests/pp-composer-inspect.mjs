@@ -19,7 +19,9 @@ await ta.waitFor({ timeout: 20000 })
 
 // chips(text, type?) → the strip's chip texts for a given composer input
 const chips = async (text, type) => {
-  if (type) await page.locator('.pl-type-tab', { hasText: type }).click()
+  // Scope to the composer: the wall filter row (same .pl-type-tab class) also
+  // lives on the home page now.
+  if (type) await page.locator('.pl-composer .pl-type-tab', { hasText: type }).click()
   await ta.fill(text)
   await page.locator('.pl-inspect').waitFor({ timeout: 5000 }).catch(() => {})
   await page.waitForTimeout(150)
