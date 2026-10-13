@@ -29,6 +29,9 @@ export type Task = {
   createdAt: number
   updatedAt: number
   error?: string
+  /** last errored tool result (truncated) — a completed turn with zero
+   *  artifacts and a recorded error is a FAILED task, not a fake done. */
+  lastError?: string
 }
 
 const LS_KEY = 'pp-tasks-v1'
@@ -416,6 +419,7 @@ export async function runTask(
               patch(id, (t) => {
                 const st = [...t.stages].reverse().find((s) => s.status === 'running')
                 if (st) st.status = ev.isError ? 'error' : 'done'
+                if (ev.isError) t.lastError = text.slice(0, 400)
                 if (!ev.isError) {
                   if (savedTo) t.savedTo[ev.toolUseId ?? st?.tool ?? '?'] = savedTo
                   // The result page renders the confidence report; prefer it over any
@@ -427,8 +431,19 @@ export async function runTask(
               })
             } else if (kind === 'turn/end') {
               patch(id, (t) => {
-                if (ev.reason === 'completed') t.status = 'done'
-                else if (t.status === 'running') {
+                if (ev.reason === 'completed') {
+                  // The agent reports a tool error and stops → turn ends
+                  // "completed" with zero artifacts. That is a failed task,
+                  // not a fake done — otherwise the wall shows a green ✓ and
+                  // the result page a bare 没有可展示的结果 with no reason.
+                  if (!t.resultJson && Object.keys(t.savedTo).length === 0 && t.lastError) {
+                    t.status = 'failed'
+                    t.error = t.lastError
+                  } else {
+                    t.status = 'done'
+                    t.lastError = undefined
+                  }
+                } else if (t.status === 'running') {
                   // A user cancel (controller aborted, not a stall) settles as
                   // 已取消 — and must NOT read as failed, or the gateway-flake
                   // retry below resubmits the task the user just cancelled.
@@ -437,7 +452,7 @@ export async function runTask(
                   t.error = cancelled ? undefined : (ev.error?.message ?? `turn ${ev.reason}`)
                 }
               })
-              if (ev.reason === 'completed') void archiveTask(id)
+              if (ev.reason === 'completed' && getTask(id)?.status === 'done') void archiveTask(id)
               return
             }
           }
