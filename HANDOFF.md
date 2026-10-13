@@ -4,9 +4,9 @@
 
 ## 0. 一句话现状
 
-产品功能清单 1-5 全部落地；「开始预测」已修（wsUrl 层）；**BFF 503 假回归已结案**（见 §1）；
-本地 daemon/web 全新运行且 search smoke E2E PASS。**下一个窗口的主任务是：
-「多测试一下前端功能」= 远端全套探针矩阵（§3），外加服务器侧同步两处小改（§2）。**
+产品功能清单 1-5 全部落地；「开始预测」已修；BFF 503 假回归已结案（§1）；
+**前端功能大测试已完成：15/15 探针 PASS（§3）**；服务器已同步到最新（§2）。
+下一个窗口可从 §5 遗留项/backlog 里挑，或做产品打磨。
 
 ## 1. BFF 503 结案报告（勿再排查）
 
@@ -29,7 +29,14 @@
 - **探针卫生**：误导性的 bogus-only 探针（原 packages/sdk/bff-probe.mts）已删除；
   真实 session 探针移到 `examples/packages/dev-tests/pp-bff-probe.mts`，以后怀疑 BFF 先跑它。
 
-## 2. 服务器侧待同步（远端测试前做）
+## 2. 服务器侧同步 —— ✅ 已完成（2026-10-13，详见 §3 末尾）
+
+原待办（bff.ts 重试 + package-admin.ts 日志上服务器）已通过 git bundle 同步 + 服务器本地构建完成。
+以后服务器同步流程：`git bundle create /tmp/agh-sync.bundle main ^<服务器HEAD>` → scp →
+`git fetch /tmp/agh-sync.bundle main:from-mac && git merge --ff-only from-mac` → 服务器
+`pnpm --filter @agnes/cli build:local` + platform `node tools/build.mjs` → republish **必带
+PP_SURFACE_WS_URL=wss://hambobo.tail81da4f.ts.net/agnesd** → `systemctl --user restart
+agnes-daemon agnes-web`。
 
 本机两处改动需要上服务器（WSL，`ssh -F /dev/null -i ~/.ssh/agh_key -o IdentitiesOnly=yes
 serverofWHB@100.91.157.78`，`export PATH=$HOME/.local/node24/bin:$PATH`）：
@@ -40,22 +47,30 @@ serverofWHB@100.91.157.78`，`export PATH=$HOME/.local/node24/bin:$PATH`）：
 2. **package-admin.ts 日志**（launcher）：服务器若从 git 仓库跑，pull 后 rebuild cli dist +
    重启；若只 scp 过 dist，则同样 scp 对应产物。低优先——只是可观测性，不影响功能。
 
-## 3. 主任务：前端功能大测试（用户明确要求）
+## 3. 主任务：前端功能大测试 —— ✅ 已完成（2026-10-13）
 
-远端模式跑全套探针（凭据纪律：密码经 ssh 读 `/mnt/c/agh-home/caddy-credentials.txt` 的 guest 行
-进 env，**不打印**；探针用 `PP_BASE=https://hambobo.tail81da4f.ts.net/platform/ PP_USER=guest
-PP_PASS=$GPW`）：
+远端全套探针矩阵（公网 guest 身份）+ 本机两探针，**15/15 PASS**：
 
-```
-pp-search-smoke  pp-complex-full  pp-batch-smoke  pp-compare-smoke  pp-batch-compare-smoke
-pp-cancel-smoke  pp-retry-smoke   pp-share-report  pp-archive-roundtrip
-pp-wall-filter   pp-tasks-filter  pp-composer-inspect  pp-thumb-wall --shots
-```
+| 探针 | 本机 | 公网(guest) |
+| --- | --- | --- |
+| pp-platform-live --shots（单体全流程） | PASS | — |
+| pp-help-smoke | PASS | — |
+| pp-wall-filter / pp-tasks-filter / pp-composer-inspect | — | PASS |
+| pp-search-smoke / pp-batch-smoke | — | PASS |
+| pp-complex-full（含 PAE） | — | PASS |
+| pp-compare-smoke / pp-batch-compare-smoke | — | PASS |
+| pp-cancel-smoke / pp-retry-smoke / pp-share-report | — | PASS |
+| pp-archive-roundtrip / pp-thumb-wall --shots | — | PASS |
 
-本机模式再跑 `pp-platform-live.mjs --shots`（单体全流程）+ `pp-help-smoke`。输出 PASS/FAIL
-矩阵汇报。已知 flake：compare smoke 的 "compare button not visible"（重跑即过）；探针要在
-关浏览器前等归档落盘。**注意：重启服务器 unit 会打断在跑的远端探针——先同步 §2 再开跑，
-跑的过程中不再动服务器。**
+过程中的两个发现（都已处理）：
+1. **探针竞态**（已修 pp-complex-full/pp-composer-inspect）：composer 类型页签切换重渲染 textarea，
+   冷加载远端页面 fill 落进旧节点 → 提交钮永 disabled。click 后 settle 400ms + 等 `.pl-inspect`
+   解析条再提交。教训已入记忆 agh-web-ui-live-probes。
+2. **Boltz-2 任务级偶发失败**（complex 一次任务 failed，重跑即过）——已知的 API 抖动类别，
+   结果页有「↻ 重新提交」兜底，无需改代码。
+
+服务器已同步到 3059a0d（bundle 方式，无 GitHub 出网）：platform dist 重发（带
+PP_SURFACE_WS_URL）+ cli dist 重建 + daemon/web 重启，config.json 钉 wss:// 正确。
 
 ## 4. 环境速查
 

@@ -21,7 +21,12 @@ await ta.waitFor({ timeout: 20000 })
 const chips = async (text, type) => {
   // Scope to the composer: the wall filter row (same .pl-type-tab class) also
   // lives on the home page now.
-  if (type) await page.locator('.pl-composer .pl-type-tab', { hasText: type }).click()
+  if (type) {
+    await page.locator('.pl-composer .pl-type-tab', { hasText: type }).click()
+    // Tab switch re-renders the composer textarea; settle so the fill below
+    // can't land in the pre-switch node (cold remote load race).
+    await page.waitForTimeout(300)
+  }
   await ta.fill(text)
   await page.locator('.pl-inspect').waitFor({ timeout: 5000 }).catch(() => {})
   await page.waitForTimeout(150)

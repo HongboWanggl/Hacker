@@ -23,8 +23,16 @@ p1.on('console', (m) => {
 })
 await p1.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await p1.waitForSelector('.pl-composer textarea', { timeout: 15000 })
-await p1.click('.pl-type-tab:has-text("复合物预测")')
+await p1.click('.pl-composer .pl-type-tab:has-text("复合物预测")')
+// The tab switch re-renders the composer (new textarea); on a cold remote load
+// the fill can land in the pre-switch node and the value is silently dropped —
+// settle, then trust the live inspect strip (React state) before submitting.
+await p1.waitForTimeout(400)
 await p1.fill('.pl-composer textarea', 'MVLSPADKTNVKAAWGKVGAHAGEYGAEAL\nVHLTPEEKSAVTALWGKVNVDEVGGEALGR')
+await p1.waitForFunction(
+  () => document.querySelector('.pl-inspect')?.textContent?.includes('2 条链'),
+  { timeout: 5000 },
+).catch(() => fail.push('complex inspect strip never showed 2 条链'))
 await p1.click('.pl-submit')
 await p1.goto(`${base}#/tasks`, { timeout: 15000 })
 const outcome = await p1
