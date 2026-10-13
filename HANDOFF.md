@@ -1,7 +1,34 @@
 # 交接文档：蛋白质平台迭代（2026-10-13）
 
-> 状态：**分享报告内嵌交互 3D 已落地**（本文件顶部），前端大测试 15/15 PASS（§3），
-> 服务器与 main 同步至 ce0a870，公网部署健康。
+> 状态：**公网链路提速落地（SW app-shell 缓存，重复访问秒开）**；用户指示：停止新功能开发，
+> 只做既有前后端链路体验优化。前端大测试 15/15 PASS（§3）；服务器与 main 同步至 a5d2cdb。
+
+## 追加完成项（第 17 轮：批量 3D 页签 + 公网链路提速）
+
+1. **批量任务分享报告带逐目标 3D 页签**（9022e43）：查看器吃 sets 数组，批量报告逐 job 取
+   structure（≤8，live/archived 均支持），页签显示 accession·均分，切换重绘。新探针
+   pp-share-batch.mjs（本机+公网 PASS）。
+2. **公网链路提速（本次核心）**——慢的根因：tailscale funnel 走 DERP relay（~10-20KB/s），
+   且 Chromium 不复用带 Authorization 响应的盘存缓存 → 每次访问全量重拉 205KB gzip（100-180s）。
+   三层修复：
+   - 构建钉内容哈希 `?v=<sha256-10>`（ebf2488）+ 服务器 Caddy 对三个静态资产发
+     `immutable`（`header_down >Cache-Control` 的 `>` 强替换前缀是关键；`route`/裸 `header`
+     都改不动上游头）；
+   - **SW app-shell 缓存**（b41ad26 + a5d2cdb）：sw.js 只回缓存**永不发网络请求**——SW 内
+     fetch 会丢 basic-auth 凭据（401 且会把 profile 凭据状态标坏：ERR_INVALID_AUTH_CREDENTIALS
+     持久化，踩过）；资产 blob 由页面（带凭据）postMessage 递给 SW 存。URL 带 ?v=hash，
+     新部署=新 URL=自然失效；sw.js 拦截范围=「页面告知过的 URL」，未知资产走正常鉴权路径。
+   - **sw-register.js 必须是外部文件**：页面 CSP `script-src 'self'` 会静默拦截内联
+     `<script>`（曾内联注册导致公网 SW 从未激活，排查半天）；且 build.mjs 曾漏拷
+     sw-register.js（404）——两坑均已修。
+   - 实测：首次访问 16s（填充），重复访问 **5s 整页就绪、app.js/app.css transfer:0
+     cache-storage**（此前 100-180s）。
+3. 验证：远端 pp-tasks-filter / pp-guest-gate / pp-share-report + 本机 help/share-batch/
+   tasks-filter 全 PASS。
+
+**链路优化候选（下轮可做）**：index.html no-store + config.json 每次往返是剩余大头；可考虑
+SW 对 config.json 做 stale-while-revalidate（URL 不带 hash，需小心）；public 冷首访仍受
+DERP relay 带宽限制（无解，除非换直连部署）。
 
 ## 追加完成项（第 16 轮）
 
