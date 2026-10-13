@@ -2,6 +2,7 @@
 // exposes a ⇄ 对比 button (platform-only onCompare hand-off); clicking it seeds
 // that job's archived PDB into a fresh compare session and lands a new task.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
+import { login } from './pp-login.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
 // PP_BASE/PP_USER/PP_PASS: drive a remote deployment (see pp-complex-full.mjs).
@@ -13,6 +14,7 @@ const origin = new URL(base).origin
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+if (httpCreds) await login(page.request, base, httpCreds)
 page.on('console', (msg) => {
   const t = msg.text()
   if (/archive|orchestrat|compare seed/i.test(t)) console.log('  [console]', t.slice(0, 200))

@@ -2,6 +2,7 @@
 // assert the one-click retry button, click it, and require a NEW running task
 // of the same type to appear in the store (redirects to #/tasks).
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
+import { login } from './pp-login.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
 // PP_BASE/PP_USER/PP_PASS: drive a remote deployment (see pp-complex-full.mjs).
@@ -12,6 +13,7 @@ const httpCreds = process.env.PP_USER
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+if (httpCreds) await login(ctx.request, base, httpCreds)
 const page = await ctx.newPage()
 
 const seed = {

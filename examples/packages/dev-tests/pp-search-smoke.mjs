@@ -1,5 +1,6 @@
 // Search smoke: uniprot_search → SearchCard renders hits with accessions.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
+import { login } from './pp-login.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
 // PP_BASE/PP_USER/PP_PASS: drive a remote deployment (see pp-complex-full.mjs).
@@ -10,6 +11,7 @@ const httpCreds = process.env.PP_USER
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+if (httpCreds) await login(page.request, base, httpCreds)
 await page.goto(`${base}#/search`, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForSelector('.pl-input-name', { timeout: 15000 })
 await page.fill('.pl-input-name', 'hemoglobin human')
@@ -57,6 +59,7 @@ await page.screenshot({ path: '/tmp/pp-search-smoke.png' })
 // Fresh context: the archived search page must rebuild SearchCard from the
 // archived report.json alone.
 const page2 = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+if (httpCreds) await login(page2.request, base, httpCreds)
 await page2.goto(`${base}#/task/${taskId}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page2.waitForSelector('.pv-root', { timeout: 60000 })
 await page2

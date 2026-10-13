@@ -1,6 +1,7 @@
 // Home wall filter smoke: the type chips narrow the capped wall to one task
 // type (live + archive cards alike) and 全部 restores the mixed preview.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
+import { login } from './pp-login.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
 const base = process.env.PP_BASE ?? 'http://127.0.0.1:4177/platform/'
@@ -10,6 +11,7 @@ const httpCreds = process.env.PP_USER
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+if (httpCreds) await login(page.request, base, httpCreds)
 page.on('pageerror', (err) => fail.push(`pageerror: ${String(err).slice(0, 120)}`))
 
 await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })

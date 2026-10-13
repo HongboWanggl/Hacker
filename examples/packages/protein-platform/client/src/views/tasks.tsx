@@ -146,9 +146,9 @@ export function TasksView() {
   // empty state here flashes "还没有任务" on every visit before the list lands.
   const loaded = archived !== null
   const empty = loaded && total === 0
-  // Read-only visitors (guest/testers behind Caddy basic auth) get no delete
-  // affordance — and the server 403s the call regardless. Local dev (no
-  // forwarding header) defaults to owner.
+  // Non-owner visitors (guest/testers behind the login gate) get no delete
+  // affordance — and the server 403s the call regardless; submission stays open
+  // to every role. Local dev (no forwarding header) defaults to owner.
   const [canDelete, setCanDelete] = useState(true)
   useEffect(() => {
     let alive = true
@@ -170,7 +170,8 @@ export function TasksView() {
   return (
     <main className="pl-page">
       <div className="pl-wall-title">
-        全部任务 <small>· {ql || filter !== 'all' ? `${liveF.length + historyF.length} / ${total}` : total}</small>
+        全部任务{' '}
+        <small>· {ql || filter !== 'all' ? `${liveF.length + historyF.length} / ${total}` : total}</small>
       </div>
       {!loaded ? (
         <div className="pl-empty">正在加载历史归档…</div>

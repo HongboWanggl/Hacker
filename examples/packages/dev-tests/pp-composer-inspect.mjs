@@ -1,6 +1,7 @@
 // Composer live-inspect smoke: typing in the home composer surfaces an inspect
 // strip (what the platform parsed / will drop) before any task is committed.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
+import { login } from './pp-login.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
 // PP_BASE/PP_USER/PP_PASS: drive a remote deployment (see pp-complex-full.mjs).
@@ -11,6 +12,7 @@ const httpCreds = process.env.PP_USER
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+if (httpCreds) await login(page.request, base, httpCreds)
 page.on('pageerror', (err) => fail.push(`pageerror: ${String(err).slice(0, 120)}`))
 
 await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })

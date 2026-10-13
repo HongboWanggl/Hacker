@@ -2,6 +2,7 @@
 // the tasks-page UI (two-click confirm) and verify the server copy is gone.
 //   node pp-archive-delete.mjs [--shots]
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
+import { login } from './pp-login.mjs'
 
 const SHOTS = process.argv.includes('--shots')
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
@@ -17,6 +18,7 @@ const page = await browser.newPage({
   viewport: { width: 1400, height: 1000 },
   ...(httpCreds ? { httpCredentials: httpCreds } : {}),
 })
+if (httpCreds) await login(page.request, base, httpCreds)
 
 // Seed a disposable archive (the UI delete must never touch real results).
 const seeded = await page.request

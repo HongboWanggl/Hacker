@@ -1,6 +1,7 @@
 // Wall thumbnail probe: home shows archived cards with a Cα-trace SVG figure.
 //   node pp-thumb-wall.mjs [--shots]
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
+import { login } from './pp-login.mjs'
 
 const SHOTS = process.argv.includes('--shots')
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
@@ -15,6 +16,7 @@ const page = await browser.newPage({
   viewport: { width: 1400, height: 1100 },
   ...(httpCreds ? { httpCredentials: httpCreds } : {}),
 })
+if (httpCreds) await login(page.request, base, httpCreds)
 await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForSelector('.pl-wall', { timeout: 20000 })
 // Thumbnails mount after the archive list lands; wait for at least one SVG.

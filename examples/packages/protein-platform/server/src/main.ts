@@ -86,20 +86,22 @@ function configJson(): string {
   })
 }
 
-// Destructive API access: Caddy's basic_auth identity arrives as
-// X-Forwarded-User (header_up {http.auth.user.id} in the server Caddyfile).
-// Only the owner account may delete archive history — every other credentialed
-// user (guest/testers) gets read-only access. No header at all = local dev /
-// loopback = owner.
+// Identity arrives as X-Forwarded-User, injected by the login gate (Caddy
+// forward_auth → copy_headers from /login/check). Role model: the owner account
+// may submit AND delete archive history; every other named user (guest/testers)
+// may submit but never delete. No header at all = local dev / loopback = owner.
 const ADMIN_USER = process.env.PROTEIN_PLATFORM_ADMIN_USER ?? 'hongbo'
 function forwardedUser(req: IncomingMessage): string | null {
   const u = req.headers['x-forwarded-user']
   const s = Array.isArray(u) ? u[0] : u
   return s?.trim() || null
 }
-function isOwner(req: IncomingMessage): boolean {
+function roleOf(req: IncomingMessage): 'owner' | 'guest' {
   const u = forwardedUser(req)
-  return !u || u === ADMIN_USER
+  return !u || u === ADMIN_USER ? 'owner' : 'guest'
+}
+function isOwner(req: IncomingMessage): boolean {
+  return roleOf(req) === 'owner'
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -123,8 +125,18 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     return
   }
   if (rel === 'api/whoami') {
-    // The UI checks this to hide destructive controls for read-only visitors.
-    send(res, 200, JSON.stringify({ user: forwardedUser(req), readOnly: !isOwner(req) }))
+    // The UI checks this to hide destructive controls for non-owner visitors.
+    // Submission is open to every authenticated role; only DELETE is owner-gated.
+    send(
+      res,
+      200,
+      JSON.stringify({
+        user: forwardedUser(req),
+        role: roleOf(req),
+        readOnly: !isOwner(req),
+        canSubmit: true,
+      }),
+    )
     return
   }
   if (rel === 'api/task' && req.method === 'POST') {

@@ -2,6 +2,7 @@
 // preference or saved choice), the TopBar toggle flips + persists, and the pv
 // result-page sections follow the same class. Light mode stays untouched.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
+import { login } from './pp-login.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
 // PP_BASE/PP_USER/PP_PASS: drive a remote deployment (see pp-complex-full.mjs).
@@ -19,6 +20,7 @@ const browser = await chromium.launch({ executablePath: exe, headless: true })
     colorScheme: 'dark',
     ...(httpCreds ? { httpCredentials: httpCreds } : {}),
   })
+if (httpCreds) await login(page.request, base, httpCreds)
   await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
   await page.waitForSelector('.pl-theme-btn', { timeout: 15000, state: 'attached' })
   const dark = await page.evaluate(() => ({
@@ -54,6 +56,7 @@ const browser = await chromium.launch({ executablePath: exe, headless: true })
     colorScheme: 'light',
     ...(httpCreds ? { httpCredentials: httpCreds } : {}),
   })
+if (httpCreds) await login(page.request, base, httpCreds)
   await page.goto(`${base}#/tasks`, { waitUntil: 'domcontentloaded', timeout: 60000 })
   if (await page.evaluate(() => document.documentElement.classList.contains('dark')))
     fail.push('fresh context: system light must stay light')
@@ -79,6 +82,7 @@ const browser = await chromium.launch({ executablePath: exe, headless: true })
     colorScheme: 'dark',
     ...(httpCreds ? { httpCredentials: httpCreds } : {}),
   })
+if (httpCreds) await login(page.request, base, httpCreds)
   // Latest archived task (any type) — the pv-root must exist and be dark.
   const list = await page.request.get(`${base}api/archive`, { headers: { origin: 'http://127.0.0.1:4177' } })
   const entries = (await list.json()).slice(0, 8)

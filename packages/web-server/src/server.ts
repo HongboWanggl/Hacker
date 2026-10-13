@@ -2,6 +2,16 @@ import { createHash, randomBytes } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { extname, isAbsolute, join, posix } from 'node:path'
+import {
+  loadSecret,
+  mintSessionToken,
+  parseCookies,
+  readUsers,
+  SESSION_COOKIE,
+  SESSION_TTL_S,
+  verifyPassword,
+  verifySessionToken,
+} from './session.js'
 import { VENDOR_ENTRY_NAMES } from './vendor-assets.js'
 
 export const DEFAULT_WEB_PORT = 4177
@@ -87,6 +97,15 @@ export type WebServerOptions = {
   port?: number
   /** Exact page origin selected by the daemon. Defaults to http://127.0.0.1:<port>. */
   origin?: string
+  /**
+   * Directory holding `users.json` (scrypt password hashes) and the auto-generated
+   * `session-secret` for the form-login gate. The gate itself lives in the public
+   * front proxy (Caddy `forward_auth` → `/login/check`); loopback access never goes
+   * through it and needs no auth. When unset, the login endpoints still answer but
+   * `/login/check` fails closed (500) — deployment without credentials must not
+   * accidentally authenticate anyone.
+   */
+  authHome?: string
   /** Add the source-development reload client and event stream. Disabled for ordinary serve runs. */
   developmentReload?: boolean
   /**
@@ -265,6 +284,185 @@ function json(response: ServerResponse, status: number, body: unknown): void {
   response.end(JSON.stringify(body))
 }
 
+// --- login gate --------------------------------------------------------------
+// The public front (Caddy) checks every gated request here via forward_auth:
+// it sends GET /login/check with the browser's Cookie header and the original
+// URI in `X-Forwarded-Uri`. A 2xx admits the request (Caddy copies the
+// X-Forwarded-User answer header into the proxied request — the identity the
+// Surface servers read); a redirect sends the browser to the login page.
+// Loopback clients never traverse that gate and are unaffected by all of this.
+
+function safeNextPath(raw: string | null | undefined): string {
+  // Open-redirect guard: same-origin absolute paths only (no scheme-relative
+  // `//host`, no backslash tricks). Everything else falls back to the platform.
+  if (raw?.startsWith('/') && !raw.startsWith('//') && !raw.startsWith('/\\') && !raw.includes('\\'))
+    return raw
+  return '/platform/'
+}
+
+const CLEAR_SESSION_COOKIE = `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`
+
+function htmlResponse(response: ServerResponse, status: number, body: string): void {
+  response.writeHead(status, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Content-Security-Policy':
+      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'",
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+  })
+  response.end(body)
+}
+
+function renderLoginPage(next: string, error?: string): string {
+  const attr = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登录 · 蛋白质结构预测平台</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f3f6fb; color: #1c2430; padding: 24px;
+  }
+  .card {
+    width: 100%; max-width: 360px; padding: 36px 32px; border-radius: 16px;
+    background: #fff; border: 1px solid #e3e9f2;
+    box-shadow: 0 8px 30px rgba(28, 36, 48, .08);
+  }
+  .mark { font-size: 40px; line-height: 1; }
+  h1 { font-size: 18px; margin: 14px 0 4px; }
+  .sub { font-size: 13px; color: #6b7686; margin-bottom: 26px; }
+  label { display: block; font-size: 12px; color: #6b7686; margin: 14px 0 6px; }
+  input {
+    width: 100%; padding: 10px 12px; font-size: 14px; border-radius: 8px;
+    border: 1px solid #cdd6e2; background: #fbfcfe; color: inherit; outline: none;
+  }
+  input:focus { border-color: #4f7cff; box-shadow: 0 0 0 3px rgba(79, 124, 255, .15); }
+  button {
+    width: 100%; margin-top: 24px; padding: 11px; font-size: 14px; font-weight: 600;
+    border: 0; border-radius: 8px; background: #4f7cff; color: #fff; cursor: pointer;
+  }
+  button:hover { background: #3f6af0; }
+  .error {
+    margin-top: 16px; padding: 9px 12px; font-size: 13px; border-radius: 8px;
+    background: #fdecec; color: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #10151d; color: #e6ebf3; }
+    .card { background: #1a212c; border-color: #2a3342; box-shadow: 0 8px 30px rgba(0, 0, 0, .4); }
+    .sub, label { color: #93a0b4; }
+    input { background: #121822; border-color: #34405a; }
+    input:focus { border-color: #6d95ff; box-shadow: 0 0 0 3px rgba(109, 149, 255, .2); }
+    .error { background: #3a2226; color: #ff8d86; }
+  }
+</style>
+</head>
+<body>
+  <form class="card" method="post" action="/login">
+    <div class="mark">🧬</div>
+    <h1>蛋白质结构预测平台</h1>
+    <div class="sub">请登录后继续</div>
+    <label for="user">账号</label>
+    <input id="user" name="user" autocomplete="username" autofocus required>
+    <label for="password">密码</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <input type="hidden" name="next" value="${attr(next)}">
+    <button type="submit">登录</button>
+    ${error ? `<div class="error">${attr(error)}</div>` : ''}
+  </form>
+</body>
+</html>`
+}
+
+async function handleLoginRoutes(
+  request: IncomingMessage,
+  response: ServerResponse,
+  requestUrl: URL,
+  options: WebServerOptions,
+): Promise<void> {
+  const pathname = requestUrl.pathname
+  if (pathname === '/login/check') {
+    if (!options.authHome) {
+      response.writeHead(500).end()
+      return
+    }
+    const token = parseCookies(request.headers.cookie)[SESSION_COOKIE]
+    const user = token ? verifySessionToken(token, loadSecret(options.authHome)) : null
+    if (user) {
+      response.writeHead(200, { 'X-Forwarded-User': user.sub, 'Cache-Control': 'no-store' })
+      response.end()
+      return
+    }
+    const next = safeNextPath(
+      (request.headers['x-forwarded-uri'] as string | undefined) ?? requestUrl.searchParams.get('next'),
+    )
+    response.writeHead(302, { Location: `/login?next=${encodeURIComponent(next)}` }).end()
+    return
+  }
+  if (pathname === '/logout') {
+    response.writeHead(302, { Location: '/login', 'Set-Cookie': CLEAR_SESSION_COOKIE }).end()
+    return
+  }
+  // /login — the page itself, or a credential submit.
+  if (request.method === 'GET') {
+    const next = safeNextPath(requestUrl.searchParams.get('next'))
+    htmlResponse(
+      response,
+      200,
+      renderLoginPage(next, requestUrl.searchParams.has('error') ? '账号或密码不对，请重试' : undefined),
+    )
+    return
+  }
+  if (request.method !== 'POST') {
+    response.writeHead(405, { Allow: 'GET, POST' }).end()
+    return
+  }
+  // Cross-site form posts are refused; same-origin browsers always send both
+  // headers, while non-browser clients (probes) send neither and pass.
+  if (
+    request.headers['sec-fetch-site'] === 'cross-site' ||
+    (request.headers.origin !== undefined && request.headers.origin !== requestUrl.origin)
+  ) {
+    response.writeHead(403).end()
+    return
+  }
+  let body = ''
+  for await (const chunk of request) {
+    body += chunk
+    if (body.length > 32_768) {
+      response.writeHead(413).end()
+      return
+    }
+  }
+  const form = new URLSearchParams(body)
+  const name = (form.get('user') ?? '').trim()
+  const next = safeNextPath(form.get('next'))
+  if (!options.authHome || !name) {
+    htmlResponse(response, 200, renderLoginPage(next, '账号或密码不对，请重试'))
+    return
+  }
+  const stored = readUsers(options.authHome)[name]
+  if (!stored || !verifyPassword(form.get('password') ?? '', stored.hash)) {
+    htmlResponse(response, 200, renderLoginPage(next, '账号或密码不对，请重试'))
+    return
+  }
+  const token = mintSessionToken({ sub: name, role: stored.role ?? 'guest' }, loadSecret(options.authHome))
+  response
+    .writeHead(302, {
+      Location: next,
+      // Plain-http trial: no Secure flag yet — add it when the site moves to TLS.
+      'Set-Cookie': `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL_S}`,
+    })
+    .end()
+}
+
 function listen(server: Server, requestedPort: number): Promise<{ port: number; host: string }> {
   return new Promise((resolve, reject) => {
     const failed = (error: Error) => reject(error)
@@ -395,6 +593,18 @@ export async function createWebServer(options: WebServerOptions): Promise<WebSer
         return
       }
       const requestUrl = new URL(request.url ?? '/', expectedOrigin)
+      if (
+        requestUrl.pathname === '/login/check' ||
+        requestUrl.pathname === '/login' ||
+        requestUrl.pathname === '/logout' ||
+        requestUrl.pathname === '/login/'
+      ) {
+        // Login endpoints sit before every other branch (the 405 method gate, mountProxy
+        // and the static whitelist): the gate itself must be reachable unauthenticated.
+        // Their non-2xx answers are what Caddy's forward_auth copies back to the browser.
+        await handleLoginRoutes(request, response, requestUrl, options)
+        return
+      }
       if (requestUrl.pathname === WORKSPACE_PICKER_PATH) {
         const site = request.headers['sec-fetch-site']
         if (

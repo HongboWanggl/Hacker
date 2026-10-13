@@ -2,6 +2,7 @@
 // wait for the NEW compare task (not the base task's badge) to finish, assert
 // CompareCard renders.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
+import { login } from './pp-login.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
 // PP_BASE/PP_USER/PP_PASS: drive a remote deployment (see pp-complex-full.mjs).
@@ -12,6 +13,7 @@ const httpCreds = process.env.PP_USER
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+if (httpCreds) await login(page.request, base, httpCreds)
 await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForSelector('.pl-composer textarea', { timeout: 15000 })
 await page.fill('.pl-composer textarea', 'P69905')
@@ -70,6 +72,7 @@ if (fail.length === 0) {
   // Fresh context = fresh localStorage; on remote deployments it also needs the
   // basic-auth credentials (a bare browser.newPage() 401s on every archive fetch).
   const ctx2 = await browser.newContext({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+if (httpCreds) await login(ctx2.request, base, httpCreds)
   const page2 = await ctx2.newPage()
   // One reload retry: the mount-table flap can outlast the app's own retries.
   for (let attempt = 0; attempt < 2; attempt++) {

@@ -154,11 +154,16 @@ export async function runWebCommand(
     // process's boot is picked up within a bounded window instead of never -- see
     // packages/cli/launch/surface-mounts.ts.
     mounts = await fetchSurfaceMountProxy(backend)
+    // The login gate reads users.json and the session secret from the AGH home
+    // (same --home > AGH_HOME precedence the daemon entry applies). Without a home
+    // the gate fails closed; loopback serving is unaffected either way.
+    const authHome = parsed.home ?? (io.env ?? process.env).AGH_HOME
     web = await makeServer({
       root: resources.webRoot,
       wsUrl: backend.web.url,
       port,
       origin,
+      ...(authHome ? { authHome } : {}),
       ...(io.developmentReload === undefined ? {} : { developmentReload: io.developmentReload }),
       workspacePicker: createNativeWorkspacePicker({ env: io.env ?? process.env }),
       // `/skins/*` bytes come from the daemon over the launcher's private connection: this process

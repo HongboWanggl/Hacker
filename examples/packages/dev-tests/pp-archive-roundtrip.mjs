@@ -1,6 +1,7 @@
 // Archive roundtrip probe (self-contained): submit P69905 → done → archived=true →
 // fresh context (no localStorage) renders the result page from the surface archive.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
+import { login } from './pp-login.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
 // PP_BASE/PP_USER/PP_PASS: drive a remote deployment (see pp-complex-full.mjs).
@@ -14,6 +15,7 @@ const browser = await chromium.launch({ executablePath: exe, headless: true })
 
 // --- Pass 1: submit + wait done + archived flag.
 const ctx1 = await browser.newContext({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+if (httpCreds) await login(ctx1.request, base, httpCreds)
 const p1 = await ctx1.newPage()
 await p1.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await p1.waitForSelector('.pl-composer textarea', { timeout: 15000 })
@@ -50,6 +52,7 @@ const ctx2 = await browser.newContext({
   deviceScaleFactor: 2,
   ...(httpCreds ? { httpCredentials: httpCreds } : {}),
 })
+if (httpCreds) await login(ctx2.request, base, httpCreds)
 const p2 = await ctx2.newPage()
 p2.on('console', (m) => {
   if (m.type() === 'error') console.log('[console.error]', m.text().slice(0, 160))
@@ -83,6 +86,7 @@ await ctx2.close()
 
 // --- Pass 3: archive API direct (context-bound request so remote basic-auth rides along).
 const api = (await browser.newContext({ ...(httpCreds ? { httpCredentials: httpCreds } : {}) })).request
+if (httpCreds) await login(api, base, httpCreds)
 const get = async (p) =>
   api
     .get(new URL(p, base).href)

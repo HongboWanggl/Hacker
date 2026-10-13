@@ -5,6 +5,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
+import { login } from './pp-login.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
 // PP_BASE/PP_USER/PP_PASS: drive a remote deployment (see pp-complex-full.mjs).
@@ -19,6 +20,7 @@ const ctx = await browser.newContext({
   acceptDownloads: true,
   ...(httpCreds ? { httpCredentials: httpCreds } : {}),
 })
+if (httpCreds) await login(ctx.request, base, httpCreds)
 const page = await ctx.newPage()
 
 // Pick the most recent single archive with a score (via the page itself so

@@ -5,6 +5,7 @@
 //   node pp-share-live.mjs
 import { readFileSync } from 'node:fs'
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
+import { login } from './pp-login.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
 const base = process.env.PP_BASE ?? 'http://127.0.0.1:4177/platform/'
@@ -18,6 +19,7 @@ const ctx = await browser.newContext({
   acceptDownloads: true,
   ...(httpCreds ? { httpCredentials: httpCreds } : {}),
 })
+if (httpCreds) await login(ctx.request, base, httpCreds)
 const page = await ctx.newPage()
 try {
   await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })

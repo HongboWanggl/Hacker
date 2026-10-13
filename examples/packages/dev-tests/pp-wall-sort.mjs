@@ -4,6 +4,7 @@
 // Asserts: 最高分 orders archive cards by mean pLDDT (non-increasing, unscored
 // last), 最新 restores the default order, and live cards always lead the wall.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
+import { login } from './pp-login.mjs'
 
 const base = process.env.PP_BASE ?? 'http://127.0.0.1:4177/platform/'
 const httpCreds = process.env.PP_USER
@@ -15,6 +16,7 @@ const page = await browser.newPage({
   viewport: { width: 1400, height: 1000 },
   ...(httpCreds ? { httpCredentials: httpCreds } : {}),
 })
+if (httpCreds) await login(page.request, base, httpCreds)
 await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForSelector('.pl-wall .pl-card', { timeout: 20000 })
 await page.waitForTimeout(300)

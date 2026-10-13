@@ -3,6 +3,7 @@
 // open result → Structure3D canvas + pLDDT curve render → screenshot.
 //   node pp-platform-live.mjs [--shots]
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
+import { login } from './pp-login.mjs'
 
 const SHOTS = process.argv.includes('--shots')
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
@@ -19,6 +20,7 @@ const page = await browser.newPage({
   deviceScaleFactor: 2,
   ...(httpCreds ? { httpCredentials: httpCreds } : {}),
 })
+if (httpCreds) await login(page.request, base, httpCreds)
 try {
   await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
   await page.waitForSelector('.pl-composer textarea', { timeout: 15000 })
