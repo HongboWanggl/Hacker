@@ -1,7 +1,8 @@
 # 交接文档：蛋白质平台迭代（2026-10-13）
 
-> 状态：**公网链路提速落地（SW app-shell 缓存，重复访问秒开）**；用户指示：停止新功能开发，
-> 只做既有前后端链路体验优化。前端大测试 15/15 PASS（§3）；服务器与 main 同步至 a5d2cdb。
+> 状态：**公网链路提速落地（SW app-shell 缓存，重复访问 100-180s → ~4s）**；用户指示：停止
+> 新功能开发，只做链路体验优化；**定时触发任务已删除（任务由用户手动驱动）**。
+> 前端大测试 15/15 PASS（§3）；服务器与 main 同步至 66d06a5，全部单元 active。
 
 ## 追加完成项（第 17 轮：批量 3D 页签 + 公网链路提速）
 
@@ -25,6 +26,14 @@
      cache-storage**（此前 100-180s）。
 3. 验证：远端 pp-tasks-filter / pp-guest-gate / pp-share-report + 本机 help/share-batch/
    tasks-filter 全 PASS。
+4. 收尾小改（66d06a5）：sw-register.js 也钉 ?v=hash + 进 Caddy immutable 名单（省掉每次
+   访问 ~541ms 白拉）；index.html 资产改写锚定 src=/href= 属性（防注释误匹配）。公网
+   immutable 头验证 + help/tasks-filter 远端回归 PASS。
+5. **重复访问耗时分解（优化后实测）**：整页 4.6s = 文档+资产 1.5s（资产全 cache 命中
+   transfer:0）+ config.json/api-archive/sw-register 各 ~0.5s + WS 建连与渲染 ~2s。
+   剩余优化空间很小；WS 建连无法缓存，冷首访受 DERP relay 带宽限制（换直连部署才能根治）。
+
+**当前状态：链路优化已收束，任务暂停等用户指令。**
 
 **链路优化候选（下轮可做）**：index.html no-store + config.json 每次往返是剩余大头；可考虑
 SW 对 config.json 做 stale-while-revalidate（URL 不带 hash，需小心）；public 冷首访仍受
