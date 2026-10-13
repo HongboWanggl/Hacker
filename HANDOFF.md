@@ -1,8 +1,40 @@
 # 交接文档：蛋白质平台迭代（2026-10-13）
 
-> 状态：**公网链路提速落地（SW app-shell 缓存，重复访问 100-180s → ~4s）**；用户指示：停止
-> 新功能开发，只做链路体验优化；**定时触发任务已删除（任务由用户手动驱动）**。
-> 前端大测试 15/15 PASS（§3）；服务器与 main 同步至 66d06a5，全部单元 active。
+> 状态：**腾讯云 VPS 直连部署上线（2026-10-13，第 18 轮）**——冷首访 100-180s（DERP 10-20KB/s）
+> → app.js 803KB 实测 1.4s（580KB/s），30-50 倍提升；platform live E2E PASS。试用地址
+> `http://118.25.194.247/platform/`（http 明文，basic-auth 账号 hongbo/guest，明文密码只在
+> VPS `~/agh-home/caddy-credentials.txt`）。用户指示不变：停止新功能，只做链路体验优化。
+
+## 追加完成项（第 18 轮：腾讯云 VPS 直连部署）
+
+1. **迁移动因**：Tailscale Funnel 走 DERP 中继是冷首访 100-180s 的根因（刻意的带宽限制，
+   换代码救不了）；用户拍板租云 VPS 直连（腾讯云轻量 2核2G Ubuntu 24.04，南京访问 ~30ms）。
+2. **新服务器**（`ssh ubuntu@118.25.194.247`，Mac 公钥已装，sudo 免密）：
+   - Node v24.10.0 在 `~/.local/node24`（npmmirror 下载；GitHub 直连被墙，大文件走
+     `https://ghfast.top/` 前缀代理或 Mac 中转）、pnpm@10.34.5、Caddy **2.10.2 官方二进制**
+     （Ubuntu 24.04 apt 自带 2.6.2 不认 `basic_auth` 指令和 `header_down >` 强替换前缀，
+     不能用！）；代码在 `~/agnes-harness`（git bundle 全量初始化，与 main 同步 03321c0）。
+   - systemd user 单元 agnes-daemon/agnes-web（模板从 WSL 老服务器抄，去掉
+     BOLTZ_LOCAL_BIN——VPS 无 GPU 无 boltz，预测走 ESMFold 公共 API）+ `enable-linger`。
+   - `~/agh-home`：data/secrets/{ark,agnes-ai}/default 从老服务器中转（不进聊天）；
+     profiles/local-dev/profile.yaml 用老服务器版（与 Mac 版只差一行 slot: primary）。
+   - Caddyfile：老配置去掉 TLS 改 `:80`、撤 access log，其余原样（双账号 bcrypt 哈希
+     **现造新密码**——老 caddy-credentials.txt 已陈旧，hongbo/guest 全对不上，别再考古）。
+3. **发布**：protein-platform（install 模式，`PP_SURFACE_WS_URL=ws://118.25.194.247/agnesd`，
+   注意新站无证书是 **ws:// 不是 wss://**）+ protein-predictor + protein-view 全部
+   install→trust→enable 绿。
+4. **踩坑记录**：
+   - agh-update-pkg.mts 写死 update → 首装必炸 E_DEP_MISSING；已修成 install/update 自适应
+     （03321c0，实战验证）。
+   - web 首启在 publish 之前 → surface 不挂载 /platform 404；**daemon+web 一起重启**即愈
+     （web 启动时要靠 daemon 报 surface）。
+   - Mac 的 awk 不认 `\s`（-F':\\s*' 静默失配）——解析凭据用 cut+sed 别用 awk -F。
+5. **验证**：公网 index/app.js(immutable)/config.json(wsUrl 钉对)/WS `/agnesd` 101 全过；
+   pp-help-smoke PASS、pp-platform-live E2E PASS（真预测+归档落盘）。pp-tasks-filter 在
+   **空归档**新站上不适用（.pl-filters 只在有任务时渲染，探针前置条件问题非 bug）。
+6. **已知限制**：http 无 secure context → **SW app-shell 缓存在新站不生效**（sw-register
+   会静默失败），但冷链路已快到不需要它；以后挂域名上 HTTPS 自动恢复。老 WSL 服务器仍在
+   原 address 服务，没动；正式切流/下线待用户拍板。
 
 ## 追加完成项（第 17 轮：批量 3D 页签 + 公网链路提速）
 
