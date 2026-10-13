@@ -13,7 +13,15 @@ const STATUS_BADGE: Record<string, string> = {
 
 // History rows from the surface archive: tasks completed on this machine whose
 // record outlived this browser's localStorage (or another device's tasks).
-function ArchivedRow({ m, onDeleted }: { m: ArchiveMeta; onDeleted: (taskId: string) => void }) {
+function ArchivedRow({
+  m,
+  canDelete,
+  onDeleted,
+}: {
+  m: ArchiveMeta
+  canDelete: boolean
+  onDeleted: (taskId: string) => void
+}) {
   const [confirming, setConfirming] = useState(false)
   const hasStructure = m.type === 'single' || m.type === 'complex' || m.type === 'compare'
   const remove = async (e: MouseEvent) => {
@@ -56,9 +64,11 @@ function ArchivedRow({ m, onDeleted }: { m: ArchiveMeta; onDeleted: (taskId: str
           <span className="pl-taskrow-unit">pLDDT</span>
         </div>
       )}
-      <button className={`pl-row-del${confirming ? ' armed' : ''}`} onClick={remove} title="删除归档">
-        {confirming ? '确认删除' : '✕'}
-      </button>
+      {canDelete && (
+        <button className={`pl-row-del${confirming ? ' armed' : ''}`} onClick={remove} title="删除归档">
+          {confirming ? '确认删除' : '✕'}
+        </button>
+      )}
     </a>
   )
 }
@@ -133,6 +143,22 @@ export function TasksView() {
   )
   const total = tasks.length + history.length
   const empty = total === 0
+  // Read-only visitors (guest/testers behind Caddy basic auth) get no delete
+  // affordance — and the server 403s the call regardless. Local dev (no
+  // forwarding header) defaults to owner.
+  const [canDelete, setCanDelete] = useState(true)
+  useEffect(() => {
+    let alive = true
+    fetch(new URL('api/whoami', location.href.split('#')[0]))
+      .then((r) => r.json())
+      .then((w) => {
+        if (alive) setCanDelete(!w.readOnly)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
   const types: Array<'all' | TaskType> = ['all', 'single', 'complex', 'batch', 'search', 'compare']
   const countFor = (k: 'all' | TaskType) =>
     k === 'all'
@@ -176,6 +202,7 @@ export function TasksView() {
                 <ArchivedRow
                   key={m.taskId}
                   m={m}
+                  canDelete={canDelete}
                   onDeleted={(id) => setArchived((list) => (list ?? []).filter((x) => x.taskId !== id))}
                 />
               ))}

@@ -86,6 +86,22 @@ function configJson(): string {
   })
 }
 
+// Destructive API access: Caddy's basic_auth identity arrives as
+// X-Forwarded-User (header_up {http.auth.user.id} in the server Caddyfile).
+// Only the owner account may delete archive history — every other credentialed
+// user (guest/testers) gets read-only access. No header at all = local dev /
+// loopback = owner.
+const ADMIN_USER = process.env.PROTEIN_PLATFORM_ADMIN_USER ?? 'hongbo'
+function forwardedUser(req: IncomingMessage): string | null {
+  const u = req.headers['x-forwarded-user']
+  const s = Array.isArray(u) ? u[0] : u
+  return s?.trim() || null
+}
+function isOwner(req: IncomingMessage): boolean {
+  const u = forwardedUser(req)
+  return !u || u === ADMIN_USER
+}
+
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://localhost')
   let pathname = decodeURIComponent(url.pathname)
@@ -104,6 +120,11 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   }
   if (rel === 'config.json') {
     send(res, 200, configJson())
+    return
+  }
+  if (rel === 'api/whoami') {
+    // The UI checks this to hide destructive controls for read-only visitors.
+    send(res, 200, JSON.stringify({ user: forwardedUser(req), readOnly: !isOwner(req) }))
     return
   }
   if (rel === 'api/task' && req.method === 'POST') {
@@ -192,6 +213,11 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       }
       if (req.method === 'DELETE' && taskId) {
         // History management: the UI offers a two-click confirm before calling.
+        // Server-side gate: only the owner may destroy archive history.
+        if (!isOwner(req)) {
+          send(res, 403, JSON.stringify({ error: 'read-only user' }))
+          return
+        }
         deleteArchive(taskId)
         send(res, 200, JSON.stringify({ ok: true }))
         return
