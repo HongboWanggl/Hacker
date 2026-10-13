@@ -48,7 +48,17 @@ for (const name of names) {
   const source = { type: 'file', ref: `file:./examples/packages/${name}` }
   const { preview } = await op('inspect', { source })
   console.log(`${name}: preview integrity ${preview.integrity.slice(0, 24)}`)
-  await op('update', { id: preview.id, source, expectedIntegrity: preview.integrity })
+  // First publish must use `install`: `update` on a not-yet-installed package
+  // throws E_DEP_MISSING, safely mapped to the misleading E_PACKAGE_SOURCE.
+  const installed = ((await pkg.list({ profile: common.profile })) as {
+    packages: { id: string }[]
+  }).packages.some((row) => row.id === preview.id)
+  await op(
+    installed ? 'update' : 'install',
+    installed
+      ? { id: preview.id, source, expectedIntegrity: preview.integrity }
+      : { source, expectedIntegrity: preview.integrity },
+  )
   await op('trust', {
     id: preview.id,
     expectedIntegrity: preview.integrity,
