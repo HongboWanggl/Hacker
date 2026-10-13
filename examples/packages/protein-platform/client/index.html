@@ -7,6 +7,19 @@
   <script src="theme.js"></script>
   <link rel="stylesheet" href="app.css" />
   <script type="module" src="app.js"></script>
+  <!-- App-shell SW: Chromium won't reuse disk-cache entries for basic-auth
+       responses, so repeat public visits re-downloaded the bundle. Register
+       only on secure/localhost origins (SW requirement anyway). -->
+  <script>
+    if (
+      'serviceWorker' in navigator &&
+      (location.protocol === 'https:' || location.hostname === '127.0.0.1' || location.hostname === 'localhost')
+    ) {
+      addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {})
+      })
+    }
+  </script>
 </head>
 <body>
   <div id="root"></div>

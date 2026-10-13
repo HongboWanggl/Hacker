@@ -58,6 +58,8 @@ writeFileSync(join(dist, 'app.css'), `${pvCss}\n${css}\n`)
 cpSync(join(pkg, 'client/index.html'), join(dist, 'index.html'))
 // Anti-flash theme boot: served as-is next to index.html (see the head script).
 cpSync(join(pkg, 'client/theme-boot.js'), join(dist, 'theme.js'))
+// App-shell Service Worker (see client/sw.js) — served from the surface root.
+cpSync(join(pkg, 'client/sw.js'), join(dist, 'sw.js'))
 renameSync(join(dist, 'server.js'), join(dist, 'server.mjs'))
 // Pin asset URLs to their content hash (?v=…): the public chain serves them
 // with a long immutable cache (Caddy header rule), so repeat visits skip the
