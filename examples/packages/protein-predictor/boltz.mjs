@@ -521,9 +521,9 @@ export const predictComplex = {
         const label = name.replace(/[^A-Za-z0-9_.-]/g, '_')
         // 算力路由第一档：GPU worker（家里机器经反向 SSH 隧道挂在回环端口）。
         // 任何失败（隧道断/忙/算错）都静默落回下面的原链路——保底语义，对前端透明。
+        const t0 = Date.now()
         const workerOut = await runWorkerBoltz({ proteins, smiles })
         if (workerOut) {
-          const t0 = Date.now()
           return finishBoltzResult({
             tctx,
             proteins,
@@ -542,7 +542,6 @@ export const predictComplex = {
         // No key → run the open-source weights locally when the CLI exists.
         if (!key) {
           if (!resolveLocalBoltz()) return fail(SETUP_HINT)
-          const t0 = Date.now()
           const out = await runLocalBoltz({ proteins, smiles, label, wait })
           if (out.missing) return fail(SETUP_HINT)
           if (out.error) return fail(out.error)
