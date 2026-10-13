@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { cpSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -58,4 +59,19 @@ cpSync(join(pkg, 'client/index.html'), join(dist, 'index.html'))
 // Anti-flash theme boot: served as-is next to index.html (see the head script).
 cpSync(join(pkg, 'client/theme-boot.js'), join(dist, 'theme.js'))
 renameSync(join(dist, 'server.js'), join(dist, 'server.mjs'))
+// Pin asset URLs to their content hash (?v=…): the public chain serves them
+// with a long immutable cache (Caddy header rule), so repeat visits skip the
+// ~200KB gzipped bundle re-download on the slow relayed link. The query keeps
+// filenames stable for the static handler — it's part of the cache key, and
+// index.html itself stays at max-age=300 so deploys propagate within minutes.
+const idx = readFileSync(join(dist, 'index.html'), 'utf8')
+const assetV = (name) =>
+  createHash('sha256').update(readFileSync(join(dist, name))).digest('base64url').slice(0, 10)
+writeFileSync(
+  join(dist, 'index.html'),
+  idx
+    .replace('theme.js', `theme.js?v=${assetV('theme.js')}`)
+    .replace('app.css', `app.css?v=${assetV('app.css')}`)
+    .replace('app.js', `app.js?v=${assetV('app.js')}`),
+)
 console.log('[protein-platform] build complete → dist/')
