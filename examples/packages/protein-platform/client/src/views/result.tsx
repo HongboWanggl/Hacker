@@ -82,7 +82,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
     title: string,
     type: TaskType,
     savedAt: string | number,
-    opts?: { savedTo?: string; resultJson?: string; archived?: boolean },
+    opts?: { savedTo?: string; resultJson?: string; archived?: boolean; structurePath?: string },
   ) => {
     if (sharing) return
     setSharing(true)
@@ -97,6 +97,15 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
         else if (opts?.archived) report = await archivedServices(id).call('protein.report', {})
       } catch {
         /* figures + header still make a useful report */
+      }
+      // Residue payload for the report's interactive 3D viewer — best-effort:
+      // on failure the report degrades to the static PNG snapshots alone.
+      let structure: unknown
+      try {
+        if (opts?.structurePath) structure = await getServices().call('protein.structure', { path: opts.structurePath })
+        else if (opts?.archived) structure = await archivedServices(id).call('protein.structure', {})
+      } catch {
+        /* viewer omitted */
       }
       const mean =
         typeof report?.meanPlddt === 'number'
@@ -119,6 +128,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
         verdict,
         report,
         figs,
+        ...(structure ? { structure } : {}),
       })
     } finally {
       setSharing(false)
@@ -490,7 +500,15 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
           <button
             className="pl-back"
             disabled={sharing}
-            onClick={() => void shareReport(task.id, task.title, task.type, task.createdAt, { savedTo, resultJson: task.resultJson })}
+            onClick={() =>
+              void shareReport(task.id, task.title, task.type, task.createdAt, {
+                savedTo,
+                resultJson: task.resultJson,
+                // Live residue fetch for the interactive viewer (any task that
+                // produced a PDB — single/complex; batch has per-target PDBs).
+                structurePath: Object.values(task.savedTo).find((p) => p.endsWith('.pdb')),
+              })
+            }
           >
             {sharing ? '生成报告中…' : '⇩ 分享报告（HTML）'}
           </button>

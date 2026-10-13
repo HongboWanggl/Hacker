@@ -28,7 +28,7 @@ AGH_HOME=$HOME/agh-home AGNES_PROFILE=local-dev \
 | 检索 | UniProt 关键词检索 → SearchCard hits 列表；行内 ▶ 一键预测该 hit，勾选后批条可「▶ 预测所选」（多选自动升级为批量任务，平台宿主独有；AGH 面板同组件仍是纯复制流） |
 | 指南 | 产品内使用指南（#/help）：三种输入方式、任务类型选择、pLDDT 色标与 PAE/AlphaFold 对比解读、工作台功能与常见问题；首页提示行与顶栏均可进入 |
 | 任务页 | 全部任务列表（运行中/已完成/失败/已取消徽标），自动合并 surface 归档历史；类型筛选 chips（带计数）+ 标题/ID 搜索；运行中行可两键取消（取消 → 确认取消，防误触） |
-| 结果页 | 3D 骨架画布（按 pLDDT 着色、自动旋转、全屏）+ 置信度曲线 + 序列条 + 分段统计 + PNG/CSV/PDB 导出；单体任务可一键发起 AlphaFold DB 对比；复合物任务附 PAE 误差热图（链边界 + 悬停读数）；失败任务可一键重新提交（按存储的原始输入重放，compare 自动重种 PDB；已取消任务同样可重放）；运行中任务可在阶段进度卡里取消（两键确认，取消后不自动重试）；「⇩ 分享报告」生成自包含 HTML（评分徽标 + 3D/曲线快照 + 完整报告 JSON，可直接进幻灯片/邮件） |
+| 结果页 | 3D 骨架画布（按 pLDDT 着色、自动旋转、全屏）+ 置信度曲线 + 序列条 + 分段统计 + PNG/CSV/PDB 导出；单体任务可一键发起 AlphaFold DB 对比；复合物任务附 PAE 误差热图（链边界 + 悬停读数）；失败任务可一键重新提交（按存储的原始输入重放，compare 自动重种 PDB；已取消任务同样可重放）；运行中任务可在阶段进度卡里取消（两键确认，取消后不自动重试）；「⇩ 分享报告」生成自包含 HTML（评分徽标 + 3D/曲线快照 + **可拖拽旋转/缩放的交互 3D 视图** + 完整报告 JSON，可直接进幻灯片/邮件） |
 | 历史归档 | 全部五类任务完成时落盘到 surface archive（单体/复合物：报告+模型+PAE；批量：汇总+逐目标 PDB；检索/对比：报告；对比还存参考模型供覆盖渲染）；换浏览器/清存储/重启 daemon 后结果页仍完整可交互；UniProt 来源的单体归档页可一键发起 AlphaFold DB 对比（PDB 从归档种入新会话，无需原任务在场）；任务页归档行可两键删除（✕ → 确认删除） |
 
 ## 使用示例
@@ -81,7 +81,8 @@ node ../../dev-tests/pp-archive-delete.mjs          # 归档删除：POST 造档
 node ../../dev-tests/pp-retry-smoke.mjs             # 失败重试：注入失败任务→重试按钮→新任务入列
 node ../../dev-tests/pp-cancel-smoke.mjs            # 任务取消：真实任务→列表/结果页两键取消→徽标「已取消」
 node ../../dev-tests/pp-help-smoke.mjs              # 使用指南：#/help 五段渲染→pLDDT 色标→首页链接点回
-node ../../dev-tests/pp-share-report.mjs            # 分享报告：归档页⇩→下载 HTML→断言内嵌图/评分/JSON
+node ../../dev-tests/pp-share-report.mjs            # 分享报告：归档页⇩→下载 HTML→断言内嵌图/评分/JSON→打开报告验证交互 3D（绘制/拖拽/缩放/自动旋转）
+node ../../dev-tests/pp-share-live.mjs              # 分享报告（实时分支）：真实提交→未归档时⇩→结构数据随报告内嵌
 node ../../dev-tests/pp-thumb-wall.mjs --shots      # 报告墙缩略图（批量卡=逐目标迷你迹线网格）
 node ../../dev-tests/pp-wall-sort.mjs               # 报告墙排序：最高分（pLDDT 降序）/最新还原
 node ../../dev-tests/pp-guest-gate.mjs              # guest 只读闸门：whoami/无删除钮/DELETE 403
