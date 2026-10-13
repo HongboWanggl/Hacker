@@ -22,7 +22,7 @@ AGH_HOME=$HOME/agh-home AGNES_PROFILE=local-dev \
 
 | 入口 | 说明 |
 | --- | --- |
-| 首页 | 极简输入框（FASTA / UniProt ID / 原始序列自动识别，输入时实时解析条提示识别结果与将被忽略的内容）+ 类型选择（单体 / 复合物 / 批量）+ 类型筛选 chips + 最近预测报告墙（归档卡带 Cα 主链缩略图，按 pLDDT 着色）+ 首次提交前的一次性自动化说明卡 |
+| 首页 | 极简输入框（FASTA / UniProt ID / 原始序列自动识别，输入时实时解析条提示识别结果与将被忽略的内容）+ 类型选择（单体 / 复合物 / 批量）+ 类型筛选 chips + 排序（最新 / 最高分）+ 最近预测报告墙（归档卡带 Cα 主链缩略图，按 pLDDT 着色）+ 首次提交前的一次性自动化说明卡 |
 | 复合物 | 每行一条链 + 可选配体 SMILES → predict_complex（Boltz-2）→ 界面置信度结果页 |
 | 批量 | 每行一个 UniProt ID（≤8）→ batch_predict → BatchCard 汇总，成功行可展开逐目标 3D 详情；展开的工具条带「⇄ 对比」——该目标一键发起 AlphaFold DB 对比（PDB 种入新对比会话，归档页同样可用） |
 | 检索 | UniProt 关键词检索 → SearchCard hits 列表；行内 ▶ 一键预测该 hit，勾选后批条可「▶ 预测所选」（多选自动升级为批量任务，平台宿主独有；AGH 面板同组件仍是纯复制流） |
@@ -83,6 +83,8 @@ node ../../dev-tests/pp-cancel-smoke.mjs            # 任务取消：真实任�
 node ../../dev-tests/pp-help-smoke.mjs              # 使用指南：#/help 五段渲染→pLDDT 色标→首页链接点回
 node ../../dev-tests/pp-share-report.mjs            # 分享报告：归档页⇩→下载 HTML→断言内嵌图/评分/JSON
 node ../../dev-tests/pp-thumb-wall.mjs --shots      # 报告墙缩略图（批量卡=逐目标迷你迹线网格）
+node ../../dev-tests/pp-wall-sort.mjs               # 报告墙排序：最高分（pLDDT 降序）/最新还原
+node ../../dev-tests/pp-guest-gate.mjs              # guest 只读闸门：whoami/无删除钮/DELETE 403
 ```
 
 除 platform-live 外均支持远端模式：`PP_BASE`/`PP_USER`/`PP_PASS`（httpCredentials 注入，
