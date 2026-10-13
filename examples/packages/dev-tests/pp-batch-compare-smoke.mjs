@@ -33,6 +33,14 @@ await page.waitForSelector('.pv-batch-row', { timeout: 20000 }).catch(() => fail
 await page.locator('.pv-batch-row', { has: page.locator('.pv-batch-caret') }).first().click()
 await page.waitForSelector('.pv-batch-detail', { timeout: 20000 }).catch(() => fail.push('drill-down did not open'))
 await page.waitForSelector('.pv-batch-detail canvas.pv-3d, .pv-batch-detail .pv-spinner', { timeout: 20000 }).catch(() => fail.push('detail content missing'))
+// The expanded row's accession — the table order is the report's, which need
+// not match the archive meta's jobPdbs order, so read it from the detail itself.
+const expandedAcc = await page
+  .locator('.pv-batch-detail .pv-section-title')
+  .first()
+  .textContent()
+  .then((t) => (t ?? '').trim().split(/\s+/)[0])
+if (!expandedAcc) fail.push('could not read expanded row accession')
 
 // The platform-only compare button must exist in the drill-down toolbar.
 const cmpBtn = page.locator('.pv-batch-detail button', { hasText: '⇄ 对比' }).first()
@@ -47,8 +55,8 @@ const newTask = (after.length > before ? after[0] : null) ?? after.find((t) => t
 if (!newTask) fail.push('no new compare task in task store')
 else {
   console.log(`new compare task: ${newTask.id} accession=${newTask.input?.accession} status=${newTask.status}`)
-  if (newTask.input?.accession?.toUpperCase() !== batch.jobPdbs[0].split('_')[0].replace(/\.pdb$/, '').toUpperCase())
-    fail.push(`compare accession mismatch: ${newTask.input?.accession}`)
+  if (expandedAcc && newTask.input?.accession?.toUpperCase() !== expandedAcc.toUpperCase())
+    fail.push(`compare accession mismatch: ${newTask.input?.accession} (want ${expandedAcc})`)
   // The archive write happens from the page on completion — closing the browser
   // now would orphan the turn. Wait for the seeded compare to actually finish
   // (a lost seed fails fast; a real comparison takes a couple of minutes).
