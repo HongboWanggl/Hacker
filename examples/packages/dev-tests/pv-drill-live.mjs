@@ -29,9 +29,18 @@ try {
   )
   await page.waitForTimeout(1000)
 
-  const candidates = ['batch_predict|批处理|一次预测|多个蛋白']
+  const candidates = ['批量预测|batch_predict|批处理|一次预测|多个蛋白']
   let opened = false
   for (const re of candidates) {
+    // The recent list is a windowed/virtualized sidebar: batch sessions sink
+    // past the first 100 titles as smokes accumulate. Scroll its scrollable
+    // ancestor to the tail first so the tail entries render.
+    await page.evaluate(() => {
+      let el = document.querySelector('.session-title')
+      while (el && el.scrollHeight <= el.clientHeight + 4) el = el.parentElement
+      if (el) el.scrollTop = el.scrollHeight
+    })
+    await page.waitForTimeout(1500)
     await page.evaluate((src) => {
       const el = [...document.querySelectorAll('.session-title, li, [role=button], span')].find(
         (e) => e.childElementCount === 0 && new RegExp(src).test((e.textContent ?? '').trim()),
@@ -77,6 +86,12 @@ try {
 
   const jump = page.locator('.pv-batch-detail .pv-jump').first()
   ok('drill-down exposes the jump box', (await jump.count()) > 0)
+  // The platform-only ⇄ 对比 hand-off must stay invisible on the AGH host
+  // (owner.onCompare is never set here) — guards the additive-patch contract.
+  ok(
+    'platform-only ⇄ 对比 button absent on AGH host',
+    (await page.locator('.pv-batch-detail button', { hasText: '⇄ 对比' }).count()) === 0,
+  )
   await jump.fill('3-6')
   await page.keyboard.press('Enter')
   await page.waitForTimeout(800)
