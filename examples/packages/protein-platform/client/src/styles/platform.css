@@ -208,6 +208,30 @@ html.dark .pl-composer textarea::placeholder {
   margin-top: 10px;
   flex-wrap: wrap;
 }
+/* Live parse strip: what the platform understood / will drop, shown as the
+   user types — before a task is committed. */
+.pl-inspect {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.pl-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12.5px;
+  line-height: 1;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgb(107 151 242 / 35%);
+  background: rgb(107 151 242 / 10%);
+  color: #3d6ac4;
+}
+.pl-chip.warn {
+  border-color: rgb(214 158 46 / 45%);
+  background: rgb(214 158 46 / 12%);
+  color: #9a6b0a;
+}
 .pl-type-tabs {
   display: flex;
   gap: 6px;
@@ -924,6 +948,16 @@ html.dark .pl-input-name:focus {
 }
 html.dark .pl-composer textarea::placeholder {
   color: #6f7a8e;
+}
+html.dark .pl-chip {
+  border-color: rgb(107 151 242 / 40%);
+  background: rgb(107 151 242 / 14%);
+  color: #8fb0f5;
+}
+html.dark .pl-chip.warn {
+  border-color: rgb(228 178 74 / 45%);
+  background: rgb(228 178 74 / 14%);
+  color: #e4b24a;
 }
 html.dark .pl-hint {
   color: #7f8a9c;

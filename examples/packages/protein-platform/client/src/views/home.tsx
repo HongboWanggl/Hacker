@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { analyzeInput, fastaRecords } from '../composer.ts'
 import { type ArchiveMeta, getServices, listArchive } from '../bff.ts'
 import { StructureThumb } from '../components/thumb.tsx'
 import { getTasks, runTask, subscribeTasks } from '../orchestrator.ts'
@@ -200,14 +201,9 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
       const letters = trimmed.replace(/[^A-Za-z]/g, '')
       const isFasta = trimmed.startsWith('>')
       const isSequence = !isFasta && letters.length >= 10 && /^[A-Za-z\s\n-]+$/.test(trimmed)
-      const seqOnly = isFasta
-        ? trimmed
-            .split('\n')
-            .filter((l) => !l.startsWith('>'))
-            .join('')
-            .replace(/\s/g, '')
-            .toUpperCase()
-        : null
+      // Multi-record FASTA: fold the first record only — concatenating records
+      // would fold a chimera (matches the guide's 「取首条」 wording).
+      const seqOnly = isFasta ? (fastaRecords(trimmed).find((s) => s.length > 0) ?? '').toUpperCase() : null
       const isAccession =
         !isSequence &&
         /^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9][A-Z][A-Z0-9]{2}[0-9])(?:-\d+)?$/i.test(
@@ -252,6 +248,17 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void submit()
           }}
         />
+        {/* Live parse feedback: what the platform understood, what gets dropped. */}
+        {analyzeInput(text, type).length > 0 && (
+          <div className="pl-inspect" aria-live="polite">
+            {analyzeInput(text, type).map((c, i) => (
+              <span key={i} className={`pl-chip ${c.tone}`}>
+                {c.tone === 'warn' ? '⚠ ' : ''}
+                {c.text}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="pl-composer-foot">
           <div className="pl-type-tabs">
             {(['single', 'complex', 'batch'] as TaskType[]).map((t) => (
