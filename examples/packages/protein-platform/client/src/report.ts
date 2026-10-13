@@ -15,10 +15,18 @@ type ShareInput = {
   // report embeds an interactive (draggable/zoomable) 3D viewer next to the
   // static PNG snapshots. Absent on failures/empty stages: degrades gracefully.
   structure?: { residues?: StructureResidue[]; ligandAtoms?: StructureLigand[] }
+  // Batch reports: one structure per job — the viewer grows a target tab bar.
+  structures?: StructureSet[]
 }
 
 type StructureResidue = { x: number; y: number; z: number; b: number; aa?: string; chain?: string }
 type StructureLigand = { el: string; x: number; y: number; z: number }
+export type StructureSet = {
+  name?: string
+  meanPlddt?: number
+  residues?: StructureResidue[]
+  ligandAtoms?: StructureLigand[]
+}
 
 const esc = (s: string) =>
   s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch] ?? ch)
@@ -78,33 +86,46 @@ export function downloadShareReport(input: ShareInput & { figs?: StageFig[] }): 
 
   // Interactive 3D: a self-contained canvas viewer (Cα trace + pLDDT-colored
   // residues, ligand balls) — drag rotate, wheel zoom, double-click reset,
-  // auto-rotate toggle. All vanilla JS inline; PNG figures above stay for print.
-  const res = input.structure?.residues ?? []
-  const lig = input.structure?.ligandAtoms ?? []
+  // auto-rotate toggle. Batch reports pass one set per job; the viewer grows
+  // a target tab bar. All vanilla JS inline; PNG figures above stay for print.
+  const sets: Array<{ name: string; meanPlddt?: number; residues: StructureResidue[]; ligands: StructureLigand[] }> = []
+  for (const s of input.structures ?? []) {
+    const residues = s.residues ?? []
+    if (residues.length > 0) sets.push({ name: s.name ?? '', meanPlddt: s.meanPlddt, residues, ligands: s.ligandAtoms ?? [] })
+  }
+  if (sets.length === 0 && input.structure) {
+    const residues = input.structure.residues ?? []
+    if (residues.length > 0) sets.push({ name: '', residues, ligands: input.structure.ligandAtoms ?? [] })
+  }
   const viewerHtml =
-    res.length > 0
+    sets.length > 0
       ? `<section class="viewer">
   <div class="viewer-head">
     <strong>可交互 3D 视图</strong>
     <span class="viewer-hint">拖拽旋转 · 滚轮缩放 · 双击复位</span>
     <button id="pv-spin" type="button">⏸ 暂停自动旋转</button>
   </div>
+  <div id="pv-tabs"></div>
   <canvas id="pv3d"></canvas>
 </section>
-<script id="pv-data" type="application/json">${JSON.stringify({ residues: res, ligands: lig })}</script>
+<script id="pv-data" type="application/json">${JSON.stringify({ sets })}</script>
 <script>
 (function () {
-  var data = JSON.parse(document.getElementById('pv-data').textContent)
-  var R = data.residues, L = data.ligands || []
+  var SETS = JSON.parse(document.getElementById('pv-data').textContent).sets
+  var cur = 0, R = SETS[0].residues, L = SETS[0].ligands || []
   var cv = document.getElementById('pv3d'), ctx2d = cv.getContext('2d')
   var spin = true, dragging = false, rx = -0.35, ry = 0.6, zoom = 1, lastX = 0, lastY = 0
   var cx = 0, cy = 0, cz = 0, rad = 1
-  for (var k = 0; k < R.length; k++) { cx += R[k].x; cy += R[k].y; cz += R[k].z }
-  cx /= R.length; cy /= R.length; cz /= R.length
-  for (k = 0; k < R.length; k++) {
-    var dx = R[k].x - cx, dy = R[k].y - cy, dz = R[k].z - cz
-    var d = Math.sqrt(dx*dx + dy*dy + dz*dz); if (d > rad) rad = d
+  function fit() {
+    cx = 0; cy = 0; cz = 0; rad = 1
+    for (var k = 0; k < R.length; k++) { cx += R[k].x; cy += R[k].y; cz += R[k].z }
+    cx /= R.length; cy /= R.length; cz /= R.length
+    for (k = 0; k < R.length; k++) {
+      var dx = R[k].x - cx, dy = R[k].y - cy, dz = R[k].z - cz
+      var d = Math.sqrt(dx*dx + dy*dy + dz*dz); if (d > rad) rad = d
+    }
   }
+  fit()
   function palette(b) { return b >= 90 ? '#0053D6' : b >= 70 ? '#65CBF3' : b >= 50 ? '#FFDB13' : '#FF7D45' }
   var LIGCOL = { C: '#8a929e', O: '#d9534f', N: '#3d6ac4', S: '#d4a017', P: '#7b5cd6' }
   function sizeCanvas() {
@@ -144,6 +165,23 @@ export function downloadShareReport(input: ShareInput & { figs?: StageFig[] }): 
       if (p.kind === 'line') { ctx2d.beginPath(); ctx2d.moveTo(p.x1, p.y1); ctx2d.lineTo(p.x2, p.y2); ctx2d.stroke() }
       else { ctx2d.beginPath(); ctx2d.arc(p.x, p.y, p.r, 0, 6.2832); ctx2d.fillStyle = p.c; ctx2d.fill() }
     }
+  }
+  // Batch reports: one tab per target. A single set leaves the bar empty.
+  var tabBar = document.getElementById('pv-tabs')
+  if (SETS.length > 1) {
+    SETS.forEach(function (s, i) {
+      var b = document.createElement('button')
+      b.type = 'button'
+      b.textContent = s.name || '目标 ' + (i + 1) + (typeof s.meanPlddt === 'number' ? ' · ' + s.meanPlddt.toFixed(1) : '')
+      if (i === 0) b.className = 'on'
+      b.addEventListener('click', function () {
+        cur = i; R = SETS[i].residues; L = SETS[i].ligands || []
+        var bs = tabBar.querySelectorAll('button')
+        for (var t = 0; t < bs.length; t++) bs[t].className = t === i ? 'on' : ''
+        fit(); draw()
+      })
+      tabBar.appendChild(b)
+    })
   }
   var btn = document.getElementById('pv-spin')
   btn.addEventListener('click', function () {
@@ -235,6 +273,10 @@ export function downloadShareReport(input: ShareInput & { figs?: StageFig[] }): 
   .viewer-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
   .viewer-head strong { font-size: 15px; }
   .viewer-hint { color: #6f7d96; font-size: 12.5px; flex: 1; }
+  #pv-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  #pv-tabs button { font-size: 12px; border: 1px solid #c9d4ee; background: #f1f4fb; color: #2b5fc7;
+                    border-radius: 999px; padding: 3px 12px; cursor: pointer; }
+  #pv-tabs button.on { background: #2b5fc7; border-color: #2b5fc7; color: #fff; }
   .viewer-head button { font-size: 12.5px; border: 1px solid #c9d4ee; background: #f1f4fb;
                         color: #2b5fc7; border-radius: 8px; padding: 4px 12px; cursor: pointer; }
   #pv3d { width: 100%; border-radius: 8px; background: #fff; cursor: grab; touch-action: none;

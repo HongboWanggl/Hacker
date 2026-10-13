@@ -90,6 +90,10 @@ if (checks.every(([, ok]) => ok)) {
   await rp.mouse.move(820, 300, { steps: 8 })
   await rp.mouse.up()
   const s1 = await sig()
+  // Wheel must land ON the canvas — use its bounding box, not page coords
+  // guessed from the drag (layout shifts move the canvas edge).
+  const box = await rp.locator('#pv3d').boundingBox()
+  await rp.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
   await rp.mouse.wheel(0, -240)
   await rp.waitForTimeout(300)
   const s2 = await sig()

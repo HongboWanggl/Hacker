@@ -1,7 +1,7 @@
 import { createElement as h, useCallback, useEffect, useMemo, useState } from 'react'
 import { archivedServices, getServices, type PvServices, setServicesSession } from '../bff.ts'
 import { getTask, subscribeTasks } from '../orchestrator.ts'
-import { downloadShareReport, snapshotStageFigures } from '../report.ts'
+import { downloadShareReport, snapshotStageFigures, type StructureSet } from '../report.ts'
 import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
 
 const STATUS_BADGE: Record<string, string> = {
@@ -107,6 +107,33 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
       } catch {
         /* viewer omitted */
       }
+      // Batch reports carry one PDB per job — fetch each (≤8) so the viewer
+      // gets a per-target tab bar. All-or-nothing per target, never fatal.
+      const jobs = Array.isArray(report?.jobs) ? (report.jobs as any[]) : []
+      const okJobs = jobs.filter(
+        (j) => j?.status === 'ok' && typeof j?.savedTo === 'string' && j.savedTo.endsWith('.pdb'),
+      )
+      let structures: StructureSet[] | undefined
+      if (okJobs.length > 0) {
+        const fetched = await Promise.all(
+          okJobs.slice(0, 8).map(async (j) => {
+            try {
+              const st = (opts?.archived
+                ? await archivedServices(id).call('protein.structure', { path: j.savedTo })
+                : await getServices().call('protein.structure', { path: j.savedTo })) as StructureSet
+              return {
+                name: typeof j.accession === 'string' ? j.accession : (j.name ?? ''),
+                meanPlddt: typeof j.meanPlddt === 'number' ? j.meanPlddt : undefined,
+                ...st,
+              }
+            } catch {
+              return null
+            }
+          }),
+        )
+        const ok = fetched.filter((s): s is NonNullable<typeof s> => !!s && (s.residues?.length ?? 0) > 0)
+        if (ok.length > 0) structures = ok
+      }
       const mean =
         typeof report?.meanPlddt === 'number'
           ? report.meanPlddt
@@ -128,7 +155,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
         verdict,
         report,
         figs,
-        ...(structure ? { structure } : {}),
+        ...(structures ? { structures } : structure ? { structure } : {}),
       })
     } finally {
       setSharing(false)
