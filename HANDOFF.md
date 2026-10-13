@@ -1,6 +1,22 @@
 # 交接文档：蛋白质平台迭代（2026-10-13）
 
-> 状态：**前端大测试 15/15 PASS 完成**（§3），服务器与 main 同步至 38d26d0，公网部署健康。
+> 状态：**分享报告内嵌交互 3D 已落地**（本文件顶部），前端大测试 15/15 PASS（§3），
+> 服务器与 main 同步至 ce0a870，公网部署健康。
+
+## 追加完成项（第 16 轮）
+
+- **分享报告内嵌可交互 3D 视图**（ce0a870，已上服务器双端验证）：
+  - `report.ts`：ShareInput 增 `structure?: { residues, ligandAtoms }`；模板内嵌 ~150 行
+    vanilla canvas 查看器（Cα 迹线 + pLDDT 着色球 + 配体元素色球；拖拽旋转/滚轮+双指缩放/
+    双击复位/自动旋转开关；DPR 适配）。残基数 0 时整块不输出，报告优雅降级为静态快照。
+  - `result.tsx`：shareReport 增 `structurePath` 分支——点击后（快照同步完成之后）尽力取
+    structure：live 走 `getServices().call('protein.structure',{path:pdbPath})`，archived 走
+    `archivedServices(id).call('protein.structure',{})`；失败静默。快照纪律未动（figs 仍同步取）。
+  - 探针：`pp-share-report.mjs` 扩展为下载后**打开报告文件**断言画布真的画出来（彩色像素>200）、
+    拖拽改变画面、滚轮缩放改变画面、默认自动旋转开；新增 `pp-share-live.mjs` 覆盖 live 分支
+    （真实提交 P69905 → 未归档页分享 → 断言 viewer+残差+评分）。本机+公网双端 PASS；
+    pp-wall-sort / pp-tasks-filter 公网回归 PASS。
+  - 文档：README 功能行+探针清单、docs/操作手册.md §5、桌面 md+PDF 均已同步。
 
 ## 追加完成项（第 14 轮，大测试之后）
 
