@@ -1,9 +1,43 @@
 # 交接文档：蛋白质平台迭代（2026-10-13）
 
-> 状态：**腾讯云 VPS 直连部署上线（2026-10-13，第 18 轮）**——冷首访 100-180s（DERP 10-20KB/s）
-> → app.js 803KB 实测 1.4s（580KB/s），30-50 倍提升；platform live E2E PASS。试用地址
-> `http://118.25.194.247/platform/`（http 明文，basic-auth 账号 hongbo/guest，明文密码只在
-> VPS `~/agh-home/caddy-credentials.txt`）。用户指示不变：停止新功能，只做链路体验优化。
+> 状态：**表单登录页 + guest 权限放开上线（2026-10-13，第 19 轮）**——Caddy basic-auth 已摘除，
+> 换 cookie 会话闸门（Caddy `forward_auth` → web `/login/check`），根治「WS 升级不带凭据 →
+> 反复弹登录框 → 开始预测点不了」；guest 开到**可提交、不可删**。全量验证绿（VPS + 本地回环）。
+> 试用地址 `http://118.25.194.247/platform/`，账号 hongbo/guest，明文密码只在
+> VPS `~/agh-home/caddy-credentials.txt`。用户指示不变：停止新功能，只做链路体验优化。
+
+## 追加完成项（第 19 轮：正式登录页 + guest 可提交不可删）
+
+1. **动机**（用户实测反馈）：basic-auth 弹窗丑且无法定制；浏览器对 WS 升级请求不重放
+   basic-auth 凭据 → Caddy 对 `/agnesd` 再次 401 质询 → 登录框弹不止一次、网关异常、
+   「开始预测」点不了。根因是凭证形态（401 challenge）而非权限。
+2. **实现**（commit 9c6ce8f）：
+   - `packages/web-server/src/session.ts`（新）：scrypt 密码哈希 + HMAC session token +
+     cookie 解析，零依赖。凭据源 `AGH_HOME/users.json`（0600，mtime 缓存），签名密钥
+     `AGH_HOME/session-secret`（0600 首启自动建；删它=全员登出）。
+   - `server.ts`：`/login`（内联 HTML 登录页，暗色适配、CSP 锁死、open-redirect 防护）、
+     `POST /login`（拒 cross-site、32KB body 上限、302+Set-Cookie）、`/login/check`
+     （200+X-Forwarded-User 或 302→/login?next=…）、`/logout`。cookie `agh_session`
+     HttpOnly SameSite=Lax 30d（http 试用无 Secure，上 TLS 后补）。
+   - `web-command.ts`：`authHome` 取 `AGH_HOME` 传入。回环直连（无 AGH_HOME）闸门惰性，
+     本地 dev 行为不变。
+   - VPS `/etc/caddy/Caddyfile`：`basic_auth` → `route { @gated not path /login* /logout;
+     forward_auth … }`。**必须删掉默认 handle 里旧的 `header_up X-Forwarded-User
+     {http.auth.user.id}`**（basic-auth 时代的空占位符会抹掉身份，全员变 owner）。
+   - 权限：平台 server `roleOf()`——owner（hongbo/无头回环）可提交可删；guest 可提交、
+     DELETE 403 原样保留；whoami 加 `role`/`canSubmit`。客户端提交路径从未被闸过，改动≈0。
+3. **部署踩坑（新）**：
+   - agh-update-platform.mts 在服务器上必须 `node --import tsx` 跑（node 原生 strip-types
+     不做 `.js`→`.ts` 解析重写，裸 node 报 ERR_MODULE_NOT_FOUND client.js）。
+   - **每次 republish 都要带 `PP_SURFACE_WS_URL`**——漏带会把 `ws://127.0.0.1:46119` 打进
+     surface 配置，浏览器直连本机端口 ERR_CONNECTION_REFUSED（本轮实测踩中，重发即愈）。
+4. **验证**：VPS curl 矩阵全绿（双角色登录/whoami/guest DELETE 403/owner DELETE 200/
+   guest 提交 ok/bad-login 错误页/logout 清 cookie/带 cookie WS 101/匿名 WS 302）；
+   浏览器探针 pp-guest-gate PASS（UI 登录、无删除钮、403）、pp-help-smoke PASS、
+   pp-platform-live E2E PASS（零弹窗）；本地回环三探针 PASS（owner 模式闸门惰性）。
+   pp-tasks-filter 仍属空归档不适用（见第 18 轮第 5 条）。
+5. **遗留**：无限流（试用可接受）；http 明文无 Secure flag（挂域名上 TLS 后一并补）；
+   探针 /tmp 凭据文件已清理。
 
 ## 追加完成项（第 18 轮：腾讯云 VPS 直连部署）
 
@@ -173,7 +207,10 @@ PP_SURFACE_WS_URL）+ cli dist 重建 + daemon/web 重启，config.json 钉 wss:
 - 发布平台：`cd examples/packages/protein-platform && node tools/build.mjs &&
   AGH_HOME=$HOME/agh-home AGNES_PROFILE=local-dev node --import tsx ../dev-tests/agh-update-platform.mts`
   （本地不带 PP_SURFACE_WS_URL 没关系；服务器必须带）。
-- 公网：https://hambobo.tail81da4f.ts.net/platform/（guest 只读闸门已上线）。
+- 公网：`http://118.25.194.247/platform/`（表单登录页，hongbo=owner 可删，guest=可提交不可删；
+  老 funnel 地址已不走）。发布平台服务器版：`PP_SURFACE_WS_URL=ws://118.25.194.247/agnesd
+  node --import tsx examples/packages/dev-tests/agh-update-platform.mts`（AGH_HOME/AGNES_PROFILE
+  指向服务器，daemon+web 一起重启）。
 - 凭据：任何密码不进聊天；gpw 读取命令模板在本文件 §3 和记忆 agh-server-deploy。
 - git：每轮收尾 commit main + push origin（HongboWanggl/Hacker），勿 push upstream；
   末尾 `Co-Authored-By: Claude Code <noreply@anthropic.com>`。

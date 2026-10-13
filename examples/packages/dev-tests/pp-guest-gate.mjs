@@ -23,8 +23,14 @@ const browser = await chromium.launch({
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } })
 if (httpCreds) await login(page.request, base, httpCreds)
 
-// 0. Gated endpoint without a session must bounce to /login (the gate is live).
-const anon = await page.request.get(`${base}api/whoami`, { maxRedirects: 0 }).catch(() => null)
+// 0. Gated endpoint without a session must bounce to /login (the gate is
+//    live). A FRESH context — the main page's request jar already holds the
+//    session cookie after login(), so it cannot represent "anonymous".
+const anonCtx = await browser.newContext()
+const anon = await anonCtx.request
+  .get(`${base}api/whoami`, { maxRedirects: 0 })
+  .catch(() => null)
+await anonCtx.close()
 if (httpCreds && anon && anon.status() !== 302)
   fail.push(`anonymous whoami not gated (HTTP ${anon.status()})`)
 
