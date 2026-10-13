@@ -165,9 +165,16 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
   const [wallFilter, setWallFilter] = useState<'all' | TaskType>('all')
   const liveF = tasks.filter((t) => wallFilter === 'all' || t.type === wallFilter)
   const liveIds = new Set(tasks.map((t) => t.id))
-  const historyF = archived.filter(
+  const historyPool = archived.filter(
     (m) => (wallFilter === 'all' || (m.type ?? 'single') === wallFilter) && !liveIds.has(m.taskId),
   )
+  // Score sort reorders the history pool by mean pLDDT (unscored archives —
+  // search/compare reports — sink to the end); live cards always lead the wall.
+  const [wallSort, setWallSort] = useState<'new' | 'score'>('new')
+  const historyF =
+    wallSort === 'score'
+      ? [...historyPool].sort((a, b) => (b.meanPlddt ?? -1) - (a.meanPlddt ?? -1))
+      : historyPool
 
   const submit = async () => {
     if (!ready || busy) return
@@ -361,6 +368,15 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
                 {k === 'all' ? '全部' : TASK_TYPE_LABEL[k]}
               </button>
             ))}
+            <span className="pl-sort-sep" aria-hidden>
+              ·
+            </span>
+            <button className={`pl-type-tab ${wallSort === 'new' ? 'on' : ''}`} onClick={() => setWallSort('new')}>
+              最新
+            </button>
+            <button className={`pl-type-tab ${wallSort === 'score' ? 'on' : ''}`} onClick={() => setWallSort('score')}>
+              最高分
+            </button>
           </div>
           <div className="pl-wall">
             {liveF.slice(0, 12).map((t) => (
