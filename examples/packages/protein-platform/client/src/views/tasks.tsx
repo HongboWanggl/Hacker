@@ -142,7 +142,10 @@ export function TasksView() {
       match(`${m.title ?? ''} ${m.taskId} ${m.accession ?? ''} ${m.verdict ?? ''}`),
   )
   const total = tasks.length + history.length
-  const empty = total === 0
+  // `archived === null` means the history fetch is still in flight — showing the
+  // empty state here flashes "还没有任务" on every visit before the list lands.
+  const loaded = archived !== null
+  const empty = loaded && total === 0
   // Read-only visitors (guest/testers behind Caddy basic auth) get no delete
   // affordance — and the server 403s the call regardless. Local dev (no
   // forwarding header) defaults to owner.
@@ -169,7 +172,9 @@ export function TasksView() {
       <div className="pl-wall-title">
         全部任务 <small>· {ql || filter !== 'all' ? `${liveF.length + historyF.length} / ${total}` : total}</small>
       </div>
-      {empty ? (
+      {!loaded ? (
+        <div className="pl-empty">正在加载历史归档…</div>
+      ) : empty ? (
         <div className="pl-empty">
           还没有任务 — 回<a href="#/">首页</a>提交第一个预测
         </div>
