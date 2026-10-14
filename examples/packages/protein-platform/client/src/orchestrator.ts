@@ -39,9 +39,38 @@ const LS_KEY = 'pp-tasks-v1'
 const listeners = new Set<() => void>()
 let tasks: Task[] = load()
 
+/** Did this task produce its PRODUCT — not merely any file?
+ *
+ *  A task whose fold failed still has `sequences/<acc>.fasta` in savedTo from
+ *  the fetch step, so "savedTo is non-empty" is NOT evidence of success. That
+ *  false positive is how the 2026-10-15 Q02388 run (2944 aa COL7A1: ESMFold
+ *  refused, the Boltz tier sat in the MSA step until the 20-min cap) settled as
+ *  已完成 with nothing behind it and could never auto-retry. The tests below
+ *  ask for the deliverable itself: a structure, or the report that stands in
+ *  for one on the paths that have no PDB of their own. */
+export function hasProductArtifact(t: Task): boolean {
+  // complex (API mode) and batch report inline — there is no file to check.
+  if (t.resultJson) return true
+  const paths = [...Object.values(t.savedTo), t.resultSavedTo].filter((p): p is string => !!p)
+  // compare/search deliver a report; their PDB (predicted or reference) is not
+  // the point of the task.
+  if (t.type === 'compare' || t.type === 'search') return paths.some((p) => /\.json$/.test(p))
+  return paths.some((p) => /\.pdb$/i.test(p))
+}
+
 function load(): Task[] {
   try {
-    return JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') as Task[]
+    const rows = JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') as Task[]
+    // Migrate records written under the old "savedTo non-empty" rule: a green ✓
+    // over an empty 3D slot is worse than an honest failure, and those rows are
+    // already in the user's browser — a code fix alone would never reach them.
+    for (const t of rows) {
+      if (t.status === 'done' && !hasProductArtifact(t)) {
+        t.status = 'failed'
+        t.error = t.lastError ?? '未产出结构（当时被误判为已完成）'
+      }
+    }
+    return rows
   } catch {
     return []
   }
@@ -174,6 +203,7 @@ function reduceLedgerEvent(
     // and its savedTo is the PDB itself — capture it too, or tasks where the
     // agent skips analyze_confidence render 没有可展示的结果 despite a good model.
     if (
+      !ev.isError && // an errored result must never masquerade as the report
       text.startsWith('{') &&
       (text.includes('"jobs"') ||
         text.includes('"predictionId"') ||
@@ -209,13 +239,15 @@ function reduceLedgerEvent(
   } else if (kind === 'turn/end') {
     patch(id, (t) => {
       if (ev.reason === 'completed') {
-        // The agent reports a tool error and stops → turn ends
-        // "completed" with zero artifacts. That is a failed task,
-        // not a fake done — otherwise the wall shows a green ✓ and
-        // the result page a bare 没有可展示的结果 with no reason.
-        if (!t.resultJson && Object.keys(t.savedTo).length === 0 && t.lastError) {
+        // The agent gave up (tool error) or simply stopped → the turn ends
+        // "completed" with no product. That is a failed task, not a fake done —
+        // otherwise the wall shows a green ✓ over an empty 3D slot and the
+        // result page a bare 没有可展示的结果 with no reason. The test is the
+        // task's own deliverable, not "any file appeared": a fetched FASTA is
+        // not a structure (Q02388, 2026-10-15).
+        if (!hasProductArtifact(t)) {
           t.status = 'failed'
-          t.error = t.lastError
+          t.error = t.lastError ?? '回合结束但没有产出结构或报告'
         } else {
           t.status = 'done'
           t.lastError = undefined
@@ -513,8 +545,10 @@ export async function runTask(
           n < MAX_ATTEMPTS &&
           !controller.signal.aborted &&
           t?.status === 'failed' &&
-          Object.keys(t.savedTo).length === 0 &&
-          !t.resultJson &&
+          // Product-aware, like the turn/end test above: a leftover fetched
+          // FASTA must not veto the retry of a failed fold (Q02388).
+          !!t &&
+          !hasProductArtifact(t) &&
           isTransientError(t.error ?? t.lastError)
         if (!retryable) break
         console.log(

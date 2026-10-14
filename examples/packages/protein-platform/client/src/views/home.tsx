@@ -112,8 +112,19 @@ function ArchiveCard({ m }: { m: ArchiveMeta }) {
 
 function TaskCard({ task }: { task: any }) {
   const running = task.status === 'running'
+  // A finished task that reached the archive gets the same Cα figure the history
+  // cards show. Without it the wall is two designs at once: this browser renders
+  // its own runs as flat band cards while the identical tasks appear as structure
+  // figures anywhere else (historyF drops ids that are already in localStorage).
+  // Only archived runs qualify — the thumb fetches api/archive/<id>/structure and
+  // a miss is cached for the session, so asking too early would blank it for good.
+  const showThumb =
+    task.status === 'done' &&
+    task.archived === true &&
+    (task.type === 'single' || task.type === 'complex' || task.type === 'compare')
   return (
-    <a className="pl-card" href={`#/task/${task.id}`}>
+    <a className={`pl-card${showThumb ? ' pl-card-fig' : ''}`} href={`#/task/${task.id}`}>
+      {showThumb && <StructureThumb taskId={task.id} />}
       <div className="pl-card-top">
         <span className="pl-card-type">{TASK_TYPE_LABEL[task.type]}</span>
         {running && <span className="pl-spinner" />}
