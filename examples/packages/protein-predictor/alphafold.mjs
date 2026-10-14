@@ -2,7 +2,7 @@
 // Resolves the canonical model URL via the AFDB REST API (/api/prediction/{acc},
 // field pdbUrl — the file version suffix changes over time, currently v6), then:
 //   - per-residue pLDDT agreement (mean absolute delta, worst-drifting segments)
-//   - CA-RMSD after superposition (Horn quaternion method; power iteration on the
+//   - CA-RMSD after superposition (Horn quaternion method; cyclic Jacobi on the
 //     4x4 Horn matrix avoids shipping an SVD implementation)
 // Both models must cover the same UniProt numbering for RMSD to be meaningful;
 // the tool only superposes the overlapping residue range and says so.
@@ -66,24 +66,60 @@ export function meanPlddt(map) {
   return Math.round((s / (map.size || 1)) * 10) / 10
 }
 
-// Dominant eigenvector of the 4x4 Horn matrix via power iteration (PSD matrix;
-// a mixed initial vector keeps us off any orthogonal starting point).
+// Dominant eigenvector of the symmetric 4x4 Horn matrix by cyclic Jacobi
+// rotations (same solver as protein-platform's bench lddt). Power iteration
+// stalls on near-planar/collinear point clouds — λ1 ≈ |λ4| and even 200 rounds
+// leave a mixed vector, which used to corrupt RMSD for extended/flat chains.
 function dominantQuaternion(S) {
-  let v = [0.55, 0.41, 0.29, 0.17]
-  let norm = Math.hypot(...v)
-  v = v.map((x) => x / norm)
-  for (let i = 0; i < 200; i++) {
-    const w = [
-      S[0][0] * v[0] + S[0][1] * v[1] + S[0][2] * v[2] + S[0][3] * v[3],
-      S[1][0] * v[0] + S[1][1] * v[1] + S[1][2] * v[2] + S[1][3] * v[3],
-      S[2][0] * v[0] + S[2][1] * v[1] + S[2][2] * v[2] + S[2][3] * v[3],
-      S[3][0] * v[0] + S[3][1] * v[1] + S[3][2] * v[2] + S[3][3] * v[3],
-    ]
-    norm = Math.hypot(...w)
-    if (norm < 1e-14) break
-    v = w.map((x) => x / norm)
+  const a = S.map((row) => [...row])
+  // Jacobi: zero the largest off-diagonal until the matrix is diagonal enough.
+  const acc = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] // rotation accumulator (row-major 4x4)
+  for (let sweep = 0; sweep < 50; sweep++) {
+    let p = 0
+    let q = 1
+    let big = 0
+    for (let i = 0; i < 4; i++)
+      for (let j = i + 1; j < 4; j++)
+        if (Math.abs(a[i][j]) > big) {
+          big = Math.abs(a[i][j])
+          p = i
+          q = j
+        }
+    if (big < 1e-12) break
+    const app = a[p][p]
+    const aqq = a[q][q]
+    const apq = a[p][q]
+    const theta = (aqq - app) / (2 * apq)
+    const t = Math.sign(theta || 1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1))
+    const c = 1 / Math.sqrt(t * t + 1)
+    const sn = t * c
+    // rotate rows/cols p,q of a
+    for (let k = 0; k < 4; k++) {
+      const akp = a[k][p]
+      const akq = a[k][q]
+      a[k][p] = c * akp - sn * akq
+      a[k][q] = sn * akp + c * akq
+    }
+    for (let k = 0; k < 4; k++) {
+      const apk = a[p][k]
+      const aqk = a[q][k]
+      a[p][k] = c * apk - sn * aqk
+      a[q][k] = sn * apk + c * aqk
+    }
+    // accumulate the rotation into acc (columns p,q)
+    for (let k = 0; k < 4; k++) {
+      const rkp = acc[k * 4 + p]
+      const rkq = acc[k * 4 + q]
+      acc[k * 4 + p] = c * rkp - sn * rkq
+      acc[k * 4 + q] = sn * rkp + c * rkq
+    }
   }
-  return v // [w, x, y, z] — quaternion rotating Q onto P
+  // column i of acc is the eigenvector for a[i][i]; pick the largest eigenvalue
+  let best = 0
+  for (let i = 1; i < 4; i++) if (a[i][i] > a[best][best]) best = i
+  const ev = [acc[best], acc[4 + best], acc[8 + best], acc[12 + best]]
+  const n2 = Math.hypot(...ev)
+  return ev.map((x) => x / (n2 || 1)) // [w, x, y, z] — quaternion rotating Q onto P
 }
 
 function quaternionToMatrix(q) {

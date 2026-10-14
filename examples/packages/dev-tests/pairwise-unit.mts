@@ -85,6 +85,23 @@ const res = await spec.execute(
 const r = res.structured
 const ok = (name: string, cond: boolean) => console.log(cond ? 'ok ' : 'FAIL', name)
 ok('not error', !res.isError)
+
+// Degenerate clouds (the reason the solver is cyclic Jacobi, not power iteration):
+// on planar/collinear sets λ1 ≈ |λ4| and power iteration stalls on a mixed vector,
+// corrupting the recovered rotation. Both must still superpose to ~0 RMSD.
+const rigid = (pts: number[][], Rm: number[][], tv: number[]) =>
+  pts.map((p) => Rm.map((r) => r[0] * p[0] + r[1] * p[1] + r[2] * p[2] + tv.reduce((s, v) => s + v, 0) / 3))
+ok('kabsch rigid RMSD ~0', k.rmsd < 0.01)
+const planar: number[][] = []
+for (let i = 0; i < 50; i++) planar.push([Math.cos(i * 0.5) * (1 + i * 0.1), Math.sin(i * 0.5) * (1 + i * 0.1), 0])
+const kp = kabsch(planar, rigid(planar, R, [3, -7, 2]))
+console.log('kabsch planar RMSD (expect ~0):', kp.rmsd)
+ok('kabsch planar RMSD ~0', kp.rmsd < 0.01)
+const collinear: number[][] = []
+for (let i = 0; i < 40; i++) collinear.push([i * 1.7 + Math.sin(i) * 0.001, 0, 0])
+const kc = kabsch(collinear, rigid(collinear, R, [-5, 8, 1]))
+console.log('kabsch collinear RMSD (expect ~0):', kc.rmsd)
+ok('kabsch collinear RMSD ~0', kc.rmsd < 0.01)
 ok('rigid RMSD ~0 (<0.01)', r.compared.caRmsd < 0.01)
 ok('overlap 60', r.compared.overlappingResidues === 60)
 ok('meanAbsDelta expected', Math.abs(r.compared.meanAbsPlddtDelta - 15.3) < 0.6)

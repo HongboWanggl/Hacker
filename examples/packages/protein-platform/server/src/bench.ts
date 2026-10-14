@@ -1,8 +1,8 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { parsePdbStructure } from '../../../protein-view/extensions/main/pdb-parse.mjs'
-import { getArchive, listArchive } from './archive.ts'
-import { scoreStructures, type ScoreRes } from './lddt.ts'
+import { getArchive, listArchive, tasksRoot } from './archive.ts'
+import { type ScoreRes, scoreStructures } from './lddt.ts'
 
 // The benchmark: CASP14 public targets whose experimental structures shipped in
 // the PDB. The manifest + trimmed reference PDBs are curated repo assets (the
@@ -100,9 +100,7 @@ function scoreTask(target: BenchTarget, taskId: string) {
 // artifacts directly — newest report wins (resubmissions supersede).
 type WorkspaceArtifacts = { taskId: string; report: Buffer; pdb: Buffer; meanPlddt?: number }
 function findWorkspaceArtifacts(target: BenchTarget): WorkspaceArtifacts | undefined {
-  const root =
-    process.env.PROTEIN_PLATFORM_TASKS_ROOT ??
-    join(process.env.AGH_HOME ?? process.env.HOME ?? '/tmp', 'protein-platform', 'tasks')
+  const root = tasksRoot()
   const prefix = `CASP14-${target.id}_`
   let best: WorkspaceArtifacts | undefined
   let bestMtime = 0
@@ -140,7 +138,12 @@ export function benchReport(): BenchReport {
   const rows: BenchRow[] = []
   const bins = new Map<number, { n: number; sum: number }>()
   let scored = 0
-  const pushScored = (target: BenchTarget, s: NonNullable<ReturnType<typeof scoreStructures>>, taskId: string, meanPlddt?: number) => {
+  const pushScored = (
+    target: BenchTarget,
+    s: NonNullable<ReturnType<typeof scoreStructures>>,
+    taskId: string,
+    meanPlddt?: number,
+  ) => {
     scored++
     for (const r of s.perResidue) {
       const bin = Math.min(9, Math.max(0, Math.floor(r.plddt / 10))) * 10
@@ -186,7 +189,11 @@ export function benchReport(): BenchReport {
         continue
       }
     }
-    rows.push({ ...target, status: 'pending', ...(hit ? { taskId: hit.taskId, meanPlddt: hit.meanPlddt } : {}) })
+    rows.push({
+      ...target,
+      status: 'pending',
+      ...(hit ? { taskId: hit.taskId, meanPlddt: hit.meanPlddt } : {}),
+    })
   }
   return {
     set: manifest().set,

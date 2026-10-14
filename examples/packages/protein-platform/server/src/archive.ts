@@ -1,5 +1,11 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
+import {
+  meanPool,
+  parseNpy,
+  readNpzEntries,
+  readNpzEntry,
+} from '../../../protein-view/extensions/main/npz-parse.mjs'
 import { parsePdbStructure } from '../../../protein-view/extensions/main/pdb-parse.mjs'
 
 // Completed-task archive: report JSON + PDB (+ PAE) persisted at task completion
@@ -43,6 +49,84 @@ function archiveRoot(): string {
   )
 }
 
+/** Task workspace root — shared with bench.ts's CASP14 fallback scanner (one
+ *  definition so the two roots cannot drift). Task dirs live at
+ *  <tasksRoot>/<taskId> (created by main.ts's api/task route). */
+export function tasksRoot(): string {
+  return (
+    process.env.PROTEIN_PLATFORM_TASKS_ROOT ??
+    join(process.env.AGH_HOME ?? process.env.HOME ?? '/tmp', 'protein-platform', 'tasks')
+  )
+}
+
+// --- Server-side workspace pulls ---------------------------------------------
+// The client used to ship every artifact as base64 through live BFF calls
+// (protein.report / protein.file / protein.pae) before POSTing the archive —
+// a multi-second window that a navigation or page close right after turn/end
+// silently killed (observed: ~half of a 10-target bench loop lost). Now the
+// client posts one small body of workspace-relative paths and the server reads
+// the files itself: no live session needed, nothing left to abort.
+
+/** Resolve a workspace-relative path under <tasksRoot>/<taskId> with a traversal
+ *  guard; returns the file contents, or undefined when it does not exist. */
+function readWorkspaceFile(taskId: string, rel: unknown): Buffer | undefined {
+  if (typeof rel !== 'string' || rel.length === 0 || rel.length > 500) return undefined
+  const base = resolve(join(tasksRoot(), taskId))
+  // Older tool versions emitted absolute savedTo paths; normalize one pointing
+  // inside this task's workspace back to relative before joining.
+  const clean = rel.startsWith(`${base}${sep}`) ? rel.slice(base.length + 1) : rel
+  const abs = resolve(join(base, clean))
+  if (abs !== base && !abs.startsWith(base + sep)) return undefined
+  try {
+    return readFileSync(abs)
+  } catch {
+    return undefined
+  }
+}
+
+/** Quantize a PAE .npz into the exact shape the protein.pae service returns
+ *  ({n, data: b64, scale?}) so archived and live panels render identically. */
+function quantizePae(npz: Buffer): { n: number; data: string; scale?: number } {
+  const npy = readNpzEntry(npz, 'pae.npy') ?? Object.values(readNpzEntries(npz))[0]
+  if (!npy) throw new Error('no pae array in npz')
+  const parsed = parseNpy(npy)
+  let { shape, fortran, float } = parsed
+  let n = shape[0]
+  if (!Number.isInteger(n) || n < 2 || n !== shape[1])
+    throw new Error(`pae matrix not square (${shape.join('x')})`)
+  let scale: number | undefined
+  if (n > 800) {
+    scale = Math.ceil(n / 800)
+    const pooled = meanPool(float, fortran, n, scale)
+    n = pooled.n
+    float = pooled.float
+    fortran = false
+  }
+  const out = Buffer.alloc(n * n)
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const v = float[fortran ? i + j * n : i * n + j]
+      out[i * n + j] = Math.max(0, Math.min(255, Math.round(((Number.isFinite(v) ? v : 32) / 32) * 255)))
+    }
+  }
+  return scale !== undefined
+    ? { n, data: out.toString('base64'), scale }
+    : { n, data: out.toString('base64') }
+}
+
+/** pLDDT is in the B-factor column of every model the pipeline writes; one
+ *  parse fills the wall-card score slot (same numbers the list backfill uses). */
+function plddtFromPdb(pdb: Buffer): number | undefined {
+  try {
+    const residues = parsePdbStructure(pdb.toString('utf8')).residues as Array<{ b?: number }>
+    const bs = residues.map((r) => r.b).filter((v) => Number.isFinite(v))
+    if (bs.length === 0) return undefined
+    return Math.round((bs.reduce((s, v) => s + v, 0) / bs.length) * 10) / 10
+  } catch {
+    return undefined
+  }
+}
+
 function taskDir(taskId: string): string {
   if (!/^[A-Za-z0-9_-]{1,80}$/.test(taskId)) throw new Error('bad taskId')
   return join(archiveRoot(), taskId)
@@ -59,10 +143,128 @@ export function putArchive(body: {
   pdbPath?: string
   jobPdbs?: string[]
   accession?: string
-  files: Record<string, string> // name -> base64
+  files?: Record<string, string> // name -> base64
+  /** Workspace-relative artifact paths: the server reads them from
+   *  <tasksRoot>/<taskId>/ itself, so the client's critical section shrinks to
+   *  one small POST (no live-session BFF round trips to be cut off). */
+  workspace?: {
+    report?: string // → report.json (verbatim)
+    pdb?: string // → model.pdb
+    pae?: string // PAE .npz → pae.json (quantized)
+    jobPdbs?: Record<string, string> // pdb basename → workspace path → pdb-<basename>
+  }
 }): ArchiveEntry {
   const dir = taskDir(body.taskId)
-  const total = Object.values(body.files ?? {}).reduce((n, b64) => n + Buffer.byteLength(b64, 'base64'), 0)
+  // Assemble files: client-supplied base64 first, then workspace pulls fill in
+  // the rest (explicit paths win; report JSON also drives derivations below).
+  const files: Record<string, Buffer> = {}
+  let reportBuf: Buffer | undefined
+  for (const [name, b64] of Object.entries(body.files ?? {})) {
+    if (!/^[A-Za-z0-9_.-]{1,64}$/.test(name)) continue
+    files[name] = Buffer.from(b64, 'base64')
+    if (name === 'report.json') reportBuf = files[name]
+  }
+  const ws = body.workspace ?? {}
+  if (ws.report && !files['report.json']) {
+    const buf = readWorkspaceFile(body.taskId, ws.report)
+    if (buf) {
+      files['report.json'] = buf
+      reportBuf = buf
+    }
+  }
+  let report: Record<string, unknown> | undefined
+  if (reportBuf) {
+    try {
+      report = JSON.parse(reportBuf.toString('utf8')) as Record<string, unknown>
+    } catch {
+      /* unparseable report stays verbatim; derivations below just skip */
+    }
+  }
+  if (ws.pdb && !files['model.pdb']) {
+    const buf = readWorkspaceFile(body.taskId, ws.pdb)
+    if (buf) files['model.pdb'] = buf
+  }
+  // Derive the model PDB from the report when the client could not name it:
+  // single reports carry file/savedTo; compare reports point at the prediction
+  // (model.pdb) and the AlphaFold reference (pdb-<basename>) separately.
+  if (!files['model.pdb'] && report) {
+    const rp =
+      body.type === 'compare' ? (report.prediction as { path?: unknown } | undefined)?.path : undefined
+    const cand = [rp, report.file, report.savedTo].find(
+      (p): p is string => typeof p === 'string' && p.endsWith('.pdb'),
+    )
+    if (cand) {
+      const buf = readWorkspaceFile(body.taskId, cand)
+      if (buf) files['model.pdb'] = buf
+    }
+  }
+  const refSavedTo = (report?.alphafold as { savedTo?: unknown } | undefined)?.savedTo
+  if (body.type === 'compare' && typeof refSavedTo === 'string') {
+    const base = refSavedTo.split('/').pop()
+    const refName = `pdb-${base}`
+    if (base && !files[refName]) {
+      const buf = readWorkspaceFile(body.taskId, refSavedTo)
+      if (buf) files[refName] = buf
+    }
+  }
+  if (ws.jobPdbs && body.type === 'batch') {
+    for (const [base, rel] of Object.entries(ws.jobPdbs).slice(0, 8)) {
+      const name = `pdb-${base}`
+      if (!/^[A-Za-z0-9_.-]{1,64}$/.test(base) || files[name]) continue
+      const buf = readWorkspaceFile(body.taskId, rel)
+      if (buf) files[name] = buf
+    }
+  }
+  // PAE heatmap: explicit workspace.pae, else the path inside the report.
+  if (!files['pae.json']) {
+    const paeRel =
+      ws.pae ??
+      (typeof (report as { paePath?: unknown } | undefined)?.paePath === 'string'
+        ? (report as { paePath: string }).paePath
+        : undefined)
+    const npz = paeRel ? readWorkspaceFile(body.taskId, paeRel) : undefined
+    if (npz) {
+      try {
+        files['pae.json'] = Buffer.from(JSON.stringify(quantizePae(npz)))
+      } catch {
+        /* heatmap optional — archive proceeds without it */
+      }
+    }
+  }
+  // Score the wall card at write time when the client could not: the stored
+  // model's B-factors hold mean pLDDT (same numbers the list backfill uses).
+  let meanPlddt = typeof body.meanPlddt === 'number' ? body.meanPlddt : undefined
+  const repPlddt = (report?.prediction as { meanPlddt?: unknown } | undefined)?.meanPlddt
+  if (meanPlddt === undefined && typeof repPlddt === 'number') meanPlddt = repPlddt
+  if (meanPlddt === undefined && files['model.pdb']) meanPlddt = plddtFromPdb(files['model.pdb'])
+  let verdict = body.verdict
+  if (!verdict && meanPlddt !== undefined) {
+    for (const [floor, label] of [
+      [90, '高置信结构'],
+      [70, '骨架可靠 · 局部待验证'],
+      [50, '置信偏低 · 谨慎解读'],
+    ] as Array<[number, string]>)
+      if (meanPlddt >= floor) {
+        verdict = label
+        break
+      }
+    verdict ??= '低置信 · 大概率含无序区'
+  }
+  const repVerdict = (report?.compared as { verdict?: unknown } | undefined)?.verdict
+  if (!verdict && typeof repVerdict === 'string') verdict = repVerdict
+  let total = Object.values(files).reduce((n, b) => n + b.length, 0)
+  if (total > MAX_TASK_BYTES) {
+    // Over budget: drop per-target PDBs (largest first) rather than failing the
+    // whole archive — the report itself is the irreplaceable part, and a row
+    // without 3D beats a run missing from the wall entirely.
+    for (const name of Object.keys(files)
+      .filter((n) => n.startsWith('pdb-'))
+      .sort((a, b) => files[b].length - files[a].length)) {
+      if (total <= MAX_TASK_BYTES) break
+      total -= files[name].length
+      delete files[name]
+    }
+  }
   if (total > MAX_TASK_BYTES) throw new Error(`archive payload too large (${total} bytes)`)
   mkdirSync(dir, { recursive: true })
   const meta: ArchiveEntry = {
@@ -71,17 +273,26 @@ export function putArchive(body: {
     type: body.type,
     title: body.title,
     savedAt: new Date().toISOString(),
-    ...(typeof body.meanPlddt === 'number' ? { meanPlddt: body.meanPlddt } : {}),
-    ...(body.verdict ? { verdict: body.verdict } : {}),
-    ...(body.reportPath ? { reportPath: body.reportPath } : {}),
-    ...(body.pdbPath ? { pdbPath: body.pdbPath } : {}),
+    ...(meanPlddt !== undefined ? { meanPlddt } : {}),
+    ...(verdict ? { verdict } : {}),
+    // Only point meta at files that actually landed — a dangling reportPath
+    // makes the archived result page 404 (任务不存在) instead of showing nothing.
+    ...(files['report.json'] ? { reportPath: body.reportPath ?? 'report.json' } : {}),
+    ...((body.pdbPath ?? files['model.pdb']) ? { pdbPath: body.pdbPath ?? 'model.pdb' } : {}),
     ...(Array.isArray(body.jobPdbs) && body.jobPdbs.length > 0 ? { jobPdbs: body.jobPdbs.slice(0, 8) } : {}),
     ...(body.accession ? { accession: body.accession } : {}),
   }
+  if (body.type === 'batch' && !(Array.isArray(body.jobPdbs) && body.jobPdbs.length > 0)) {
+    // jobPdbs basenames arrive via the workspace map; mirror them into meta so
+    // wall thumbnails and per-row 3D lookups work like client-shipped batches.
+    const bases = Object.keys(ws.jobPdbs ?? {})
+      .filter((b) => files[`pdb-${b}`])
+      .slice(0, 8)
+    if (bases.length > 0) meta.jobPdbs = bases
+  }
   writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta))
-  for (const [name, b64] of Object.entries(body.files ?? {})) {
-    if (!/^[A-Za-z0-9_.-]{1,64}$/.test(name)) continue
-    writeFileSync(join(dir, name), Buffer.from(b64, 'base64'))
+  for (const [name, buf] of Object.entries(files)) {
+    writeFileSync(join(dir, name), buf)
   }
   // Project the wall thumbnail(s) right away — new archives land on the wall
   // fully rendered, no per-row structure fetch, no lazy backfill pass.
@@ -263,7 +474,9 @@ function enrichThumbs(meta: ArchiveEntry, dir: string): boolean {
     }
   }
   if (meta.type === 'batch' && Array.isArray(meta.jobPdbs) && meta.jobPdbs.length > 0) {
-    const missing = meta.jobPdbs.filter((base) => !meta.thumbs?.[base] && existsSync(join(dir, `pdb-${base}`)))
+    const missing = meta.jobPdbs.filter(
+      (base) => !meta.thumbs?.[base] && existsSync(join(dir, `pdb-${base}`)),
+    )
     if (missing.length > 0) {
       const thumbs: Record<string, ThumbData> = { ...(meta.thumbs ?? {}) }
       for (const base of missing) {

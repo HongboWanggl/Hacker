@@ -1,4 +1,3 @@
-import { bffCall } from './bff.ts'
 import { buildPrompt, STAGE_LABEL, TASK_TYPE_LABEL, type TaskInput, type TaskType } from './prompts.ts'
 import { isTransientError } from './transient.ts'
 
@@ -107,16 +106,6 @@ export function cancelTask(id: string): boolean {
   if (!cancel) return false
   cancel()
   return true
-}
-
-const VERDICT_ZH: Array<[number, string]> = [
-  [90, '高置信结构'],
-  [70, '骨架可靠 · 局部待验证'],
-  [50, '置信偏低 · 谨慎解读'],
-]
-function verdictOf(mean: number): string {
-  for (const [floor, label] of VERDICT_ZH) if (mean >= floor) return label
-  return '低置信 · 大概率含无序区'
 }
 
 // User-cancel flags, shared by the live run loop and boot-time reattach so a
@@ -231,27 +220,34 @@ function reduceLedgerEvent(
 }
 
 // Persist a completed task into the surface archive (report JSON + PDB) so the
-// history survives browser storage loss and daemon restarts — the BFF needs a
-// live session in the daemon registry, the archive does not. Best-effort: a
-// failed write logs and leaves the task unarchived (retryable by re-render).
+// history survives browser storage loss and daemon restarts. The client posts
+// ONE small body of workspace-relative paths; the server reads the files itself
+// from <tasksRoot>/<taskId>/ — no live-session BFF round trips (the old flow
+// needed the session in the daemon registry and took seconds across several
+// calls, so a submit loop's page navigation silently dropped ~half the runs).
+// Best-effort: a failed write logs and leaves the task unarchived.
 async function archiveTask(id: string): Promise<void> {
   const t = getTask(id)
   if (!t?.sessionId) return
   const b64of = (s: string) => btoa(unescape(encodeURIComponent(s)))
   const post = async (files: Record<string, string>, extra: Record<string, unknown> = {}) => {
     const base = location.href.split('#')[0]
+    const body = JSON.stringify({
+      taskId: id,
+      sessionId: t!.sessionId,
+      type: t!.type,
+      title: t!.title,
+      reportPath: 'report.json',
+      ...extra,
+      files,
+    })
     const r = await fetch(new URL('api/archive', base.endsWith('/') ? base : `${base}/`), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        taskId: id,
-        sessionId: t!.sessionId,
-        type: t!.type,
-        title: t!.title,
-        reportPath: 'report.json',
-        ...extra,
-        files,
-      }),
+      body,
+      // Survive page-close-during-in-flight — but only under the ~64KB request
+      // body limit keepalive imposes in Chrome (inline resultJson b64 ≈ 43KB).
+      keepalive: body.length < 60000,
     })
     if (!r.ok) throw new Error(`archive: HTTP ${r.status}`)
     patch(id, (t2) => {
@@ -260,145 +256,64 @@ async function archiveTask(id: string): Promise<void> {
   }
   try {
     if (t.type === 'batch') {
-      // No on-disk summary: the inline ledger result IS the report. Persist it
-      // plus each successful target's PDB (budget-capped — the server rejects
-      // archives beyond 2 MiB) so the archived page can render rows in 3D.
+      // No on-disk summary: the inline ledger result IS the report (it only
+      // exists inline, so it still ships as base64). Per-target PDBs stay in
+      // the workspace — the server reads them via the savedTo path map.
       if (!t.resultJson) return
       const parsed = JSON.parse(t.resultJson) as {
         summary?: { total?: number; ok?: number; meanPlddt?: number }
         jobs?: Array<{ status?: string; savedTo?: string }>
       }
-      const files: Record<string, string> = { 'report.json': b64of(t.resultJson) }
-      const jobPdbs: string[] = []
-      let totalBytes = 0
+      const jobPdbs: Record<string, string> = {}
       for (const j of parsed.jobs ?? []) {
         if (j.status !== 'ok' || typeof j.savedTo !== 'string') continue
-        try {
-          const f = (await bffCall(t.sessionId, 'protein.file', { path: j.savedTo })) as { b64: string }
-          const bytes = Math.floor((f.b64.length * 3) / 4)
-          if (totalBytes + bytes > 1_400_000) break
-          totalBytes += bytes
-          const base = j.savedTo.split('/').pop()!
-          files[`pdb-${base}`] = f.b64
-          jobPdbs.push(base)
-        } catch {
-          /* one missing PDB degrades that row only */
-        }
+        const base = j.savedTo.split('/').pop()
+        if (base && !jobPdbs[base]) jobPdbs[base] = j.savedTo
       }
+      const bases = Object.keys(jobPdbs).slice(0, 8)
       const mean = typeof parsed.summary?.meanPlddt === 'number' ? parsed.summary.meanPlddt : undefined
-      await post(files, {
-        ...(mean !== undefined ? { meanPlddt: mean } : {}),
-        ...(jobPdbs.length > 0 ? { jobPdbs } : {}),
-        verdict: `${parsed.summary?.ok ?? '?'}/${parsed.summary?.total ?? '?'} 目标成功`,
-      })
+      await post(
+        { 'report.json': b64of(t.resultJson) },
+        {
+          workspace:
+            bases.length > 0 ? { jobPdbs: Object.fromEntries(bases.map((b) => [b, jobPdbs[b]])) } : undefined,
+          ...(mean !== undefined ? { meanPlddt: mean } : {}),
+          ...(bases.length > 0 ? { jobPdbs: bases } : {}),
+          verdict: `${parsed.summary?.ok ?? '?'}/${parsed.summary?.total ?? '?'} 目标成功`,
+        },
+      )
       return
     }
     if (t.type === 'search') {
-      // The hits report is a workspace file — archive it verbatim for offline
-      // SearchCard re-renders.
+      // The hits report is a workspace file — the server archives it verbatim
+      // for offline SearchCard re-renders.
       if (!t.resultSavedTo) return
-      const report = await bffCall(t.sessionId, 'protein.report', { path: t.resultSavedTo })
-      await post({ 'report.json': b64of(JSON.stringify(report)) })
+      await post({}, { workspace: { report: t.resultSavedTo } })
       return
     }
     if (t.type === 'compare') {
       // Compare reports live on disk ({compared, prediction, alphafold} shape);
-      // also persist both models so the archived Compare3D overlay works: the
-      // prediction as model.pdb (default /structure target) and the AlphaFold
-      // reference as pdb-<basename> (deep-linked via its savedTo path).
+      // the server derives both models (prediction → model.pdb, AlphaFold ref →
+      // pdb-<basename>) plus meanPlddt/verdict straight from the stored report.
       const reportPath =
         t.resultSavedTo ??
         (t.input.accession ? `reports/${t.input.accession.toUpperCase()}.vs-alphafold.json` : undefined)
       if (!reportPath) return
-      const report = (await bffCall(t.sessionId, 'protein.report', { path: reportPath })) as {
-        compared?: { verdict?: string }
-        prediction?: { path?: string; meanPlddt?: number }
-        alphafold?: { savedTo?: string }
-      }
-      const files: Record<string, string> = { 'report.json': b64of(JSON.stringify(report)) }
-      if (typeof report.prediction?.path === 'string') {
-        try {
-          const pdb = (await bffCall(t.sessionId, 'protein.file', { path: report.prediction.path })) as {
-            b64: string
-          }
-          files['model.pdb'] = pdb.b64
-        } catch {
-          /* overlay degrades to metrics-only */
-        }
-      }
-      if (typeof report.alphafold?.savedTo === 'string') {
-        try {
-          const ref = (await bffCall(t.sessionId, 'protein.file', { path: report.alphafold.savedTo })) as {
-            b64: string
-          }
-          files[`pdb-${report.alphafold.savedTo.split('/').pop()}`] = ref.b64
-        } catch {
-          /* overlay degrades to metrics-only */
-        }
-      }
-      await post(files, {
-        ...(typeof report.prediction?.meanPlddt === 'number'
-          ? { meanPlddt: report.prediction.meanPlddt }
-          : {}),
-        ...(report.compared?.verdict ? { verdict: report.compared.verdict } : {}),
-        ...(typeof report.prediction?.path === 'string' ? { pdbPath: report.prediction.path } : {}),
-      })
+      await post({}, { workspace: { report: reportPath } })
       return
     }
 
     // single / complex: confidence report + model PDB (+ optional PAE matrix).
-    let report: { file?: string; savedTo?: string; meanPlddt?: number; paePath?: string }
-    let reportJson: string
-    if (t.type === 'complex') {
-      if (!t.resultJson) return
-      reportJson = t.resultJson
-      report = JSON.parse(reportJson)
-    } else if (t.resultSavedTo) {
-      report = (await bffCall(t.sessionId, 'protein.report', { path: t.resultSavedTo })) as typeof report
-      reportJson = JSON.stringify(report)
-    } else if (t.resultJson) {
-      // predict_structure's report is the inline tool result (savedTo is the PDB,
-      // no confidence.json on disk when the agent skipped analyze_confidence).
-      reportJson = t.resultJson
-      report = JSON.parse(reportJson)
-    } else {
-      return
-    }
-    const pdbPath =
-      (typeof report.file === 'string' && report.file.endsWith('.pdb') ? report.file : undefined) ??
-      (typeof report.savedTo === 'string' && report.savedTo.endsWith('.pdb') ? report.savedTo : undefined) ??
-      Object.values(t.savedTo).find((p) => p.endsWith('.pdb'))
-    if (!pdbPath) throw new Error('no PDB path in report')
-    const pdb = (await bffCall(t.sessionId, 'protein.file', { path: pdbPath })) as { b64: string }
-    const files: Record<string, string> = { 'report.json': b64of(reportJson), 'model.pdb': pdb.b64 }
-    // Persist the PAE heatmap alongside the model when the report carries one —
-    // the quantized matrix is tiny and lets the archived page render the full panel.
-    if (report.paePath) {
-      try {
-        const pae = await bffCall(t.sessionId, 'protein.pae', { path: report.paePath })
-        files['pae.json'] = b64of(JSON.stringify(pae))
-      } catch {
-        /* heatmap is optional — archive without it */
-      }
-    }
-    let mean = typeof report.meanPlddt === 'number' ? report.meanPlddt : undefined
-    // Complex reports carry ipTM-family scores but no mean pLDDT. The archived
-    // PDB has it in the B-factor column (already normalized to 0-100 by the
-    // shared parser) — one extra read fills the wall card's score slot.
-    if (mean === undefined) {
-      try {
-        const st = (await bffCall(t.sessionId, 'protein.structure', { path: pdbPath })) as {
-          residues?: Array<{ b?: number }>
-        }
-        const bs = (st.residues ?? []).map((r) => r.b).filter((v): v is number => Number.isFinite(v))
-        if (bs.length > 0) mean = Math.round((bs.reduce((s, v) => s + v, 0) / bs.length) * 10) / 10
-      } catch {
-        /* score chip stays empty — archive proceeds */
-      }
-    }
-    await post(files, {
-      ...(mean !== undefined ? { meanPlddt: mean, verdict: verdictOf(mean) } : {}),
-      pdbPath,
+    // Inline-ledger results (complex, or single runs whose agent skipped
+    // analyze_confidence) still ship base64; everything on disk goes by path.
+    const inlineReport = t.type === 'complex' || !t.resultSavedTo ? t.resultJson : undefined
+    if (t.type !== 'complex' && !t.resultSavedTo && !t.resultJson) return
+    const pdbHint = Object.values(t.savedTo).find((p) => p.endsWith('.pdb'))
+    const workspace: { report?: string; pdb?: string } = {}
+    if (t.type !== 'complex' && t.resultSavedTo) workspace.report = t.resultSavedTo
+    if (pdbHint) workspace.pdb = pdbHint
+    await post(inlineReport ? { 'report.json': b64of(inlineReport) } : {}, {
+      workspace: Object.keys(workspace).length > 0 ? workspace : undefined,
       ...(t.input.accession ? { accession: t.input.accession } : {}),
     })
   } catch (e) {
