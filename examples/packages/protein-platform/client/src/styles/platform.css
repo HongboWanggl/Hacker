@@ -784,6 +784,24 @@ html.dark .pl-composer textarea::placeholder {
   color: var(--pl-muted);
   padding: 80px 0;
 }
+.pl-more {
+  display: block;
+  margin: 18px auto 0;
+  padding: 10px 28px;
+  font-size: 13.5px;
+  color: var(--pl-muted);
+  background: var(--pl-card);
+  border: 1px solid var(--pl-line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.pl-more:hover {
+  color: var(--pl-ink);
+  border-color: var(--pl-muted);
+}
+html.dark .pl-more {
+  background: transparent;
+}
 .pl-error-banner {
   background: #fdeaea;
   color: #8f2f2f;

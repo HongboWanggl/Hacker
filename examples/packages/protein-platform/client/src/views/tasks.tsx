@@ -141,6 +141,16 @@ export function TasksView() {
       (filter === 'all' || (m.type ?? 'single') === filter) &&
       match(`${m.title ?? ''} ${m.taskId} ${m.accession ?? ''} ${m.verdict ?? ''}`),
   )
+  // Render window: the archive grows unboundedly, so the list shows the newest
+  // PAGE history rows behind a 加载更多 expander. Filters/search/counts still
+  // operate on the FULL pool — only the DOM is windowed (the server list is a
+  // few dozen meta.json reads with write-back enrichment; the render cost was
+  // the part that would not scale).
+  const PAGE = 30
+  const [shown, setShown] = useState(PAGE)
+  useEffect(() => {
+    setShown(PAGE)
+  }, [filter, q])
   const total = tasks.length + history.length
   // `archived === null` means the history fetch is still in flight — showing the
   // empty state here flashes "还没有任务" on every visit before the list lands.
@@ -204,7 +214,7 @@ export function TasksView() {
               {liveF.map((t) => (
                 <LiveRow key={t.id} t={t} />
               ))}
-              {historyF.map((m) => (
+              {historyF.slice(0, shown).map((m) => (
                 <ArchivedRow
                   key={m.taskId}
                   m={m}
@@ -213,6 +223,11 @@ export function TasksView() {
                 />
               ))}
             </div>
+          )}
+          {historyF.length > shown && (
+            <button className="pl-more" onClick={() => setShown((n) => n + PAGE)}>
+              加载更多 · 还有 {historyF.length - shown} 条
+            </button>
           )}
           {liveF.length === 0 && historyF.length === 0 && (
             <div className="pl-empty">没有匹配的任务 — 换个关键词或类型试试</div>
