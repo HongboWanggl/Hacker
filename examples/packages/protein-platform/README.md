@@ -78,6 +78,7 @@ node ../../dev-tests/pp-batch-smoke.mjs             # 批量：2 个 accession�
 node ../../dev-tests/pp-search-smoke.mjs            # 检索：uniprot_search→SearchCard→归档→新上下文重建
 node ../../dev-tests/pp-compare-smoke.mjs           # AlphaFold 对比：一键发起→CompareCard→归档→新上下文重建
 node ../../dev-tests/pp-archive-delete.mjs          # 归档删除：POST 造档→任务页两键删除→服务端 404
+node ../../dev-tests/pp-archive-paginate.mjs        # 归档分页：注入 45 条→渲染窗口 30+加载更多→计数全量精确→搜索复位
 node ../../dev-tests/pp-retry-smoke.mjs             # 失败重试：注入失败任务→重试按钮→新任务入列
 node ../../dev-tests/pp-auto-retry.mjs              # 瞬时失败自动重试：首次 api/task 503→自动第 2 次尝试→已完成+canvas
 node ../../dev-tests/pp-transient-unit.mts          # 瞬时判据单测：isTransientError 正反例 37 断言

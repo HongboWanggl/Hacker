@@ -1,8 +1,27 @@
 # 交接文档：蛋白质平台迭代（2026-10-13）
 
-> 状态：**瞬时失败自动重试上线，本机+公网真测绿（2026-10-14，第 23 轮）**——
-> 第 21/22 轮两次「瞬时故障」复诊后，本轮把事后手动 ↻ 升级为有界自动重试：
-> 最多 2 次重试（共 3 次尝试）、退避 3s/8s，判据统一抽到 transient.ts。
+> 状态：**归档列表分页上线，本机+公网真测绿（2026-10-14，第 24 轮）**——
+> 第 23 轮瞬时失败自动重试（transient.ts + 有界重试）已全链验证；
+> 本轮任务页归档列表改渲染窗口 30 条 + 加载更多，筛选/计数保持全量精确。
+
+## 追加完成项（第 24 轮：归档列表分页）
+
+1. **客户端窗口分页**（63f0842）：listArchive 仍取全量——服务端 meta 惰性回填已有
+   write-back 缓存，开销在 DOM 不在取数；且任务页的类型 chips/搜索/计数都建立在
+   全量列表上，服务端分页会破坏计数语义。historyF 渲染窗口 30 条，「加载更多 ·
+   还有 N 条」每次 +30；filter/q 变化窗口复位。报告墙保持 12 条 cap 预览不变。
+2. **探针 pp-archive-paginate**：playwright route 拦截 GET api/archive 注入 45 条合成
+   归档（每条带预计算 thumb → StructureThumb 零请求），断言 窗口=30/最新序/还有 15 条/
+   chip 计数=45（全量非窗口）/展开=45 且按钮消失/搜索复位窗口。无需真实归档数据，
+   空档新站可跑。本机+公网 PASS；回归 pp-tasks-filter/pp-wall-sort/
+   pp-archive-roundtrip/pp-guest-gate 全绿。
+3. **部署**：bundle ff → 63f0842，VPS republish（integrity 69597938）+ daemon/web
+   双重启；公网探针 paginate/help-smoke/tasks-filter/switch-page PASS。
+   纯客户端资产改动 republish 后立即生效（web 直接服务 deployment 静态文件，
+   ?v=hash 换新即拉新，无需重启——本轮实测，重启只是保险）。
+4. **探针教训（重犯提示）**：公网跑任何 pp-* 探针都必须带 PP_USER/PP_PASS——漏带
+   匿名被登录门 302 到 /login，探针在等 .pl-taskrow 超时，表现为「页面空白」假象
+   （第 23 轮登录字段坑之后本轮又踩了一次漏带凭据）。
 
 ## 追加完成项（第 23 轮：瞬时失败自动重试）
 
