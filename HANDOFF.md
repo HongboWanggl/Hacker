@@ -1,9 +1,36 @@
 # 交接文档：蛋白质平台迭代（2026-10-13）
 
-> 状态：**切页恢复 + 内联报告 + 自然语言输入，公网全链验证通过（2026-10-14，第 22 轮）**——
-> 用户报的「有的预测不显示结构」「切页面任务就挂」两个 bug 已修；自然语言一句话描述 →
-> UniProt 候选 → 确认后预测 全流程在公网站点真测绿。用户上一轮疑问的 NL 候选预测「失败」
-> 复诊为瞬时故障：同一流程重跑全绿（检索→候选▶→预测已完成→PDB/置信度落盘→canvas 渲染）。
+> 状态：**瞬时失败自动重试上线，本机+公网真测绿（2026-10-14，第 23 轮）**——
+> 第 21/22 轮两次「瞬时故障」复诊后，本轮把事后手动 ↻ 升级为有界自动重试：
+> 最多 2 次重试（共 3 次尝试）、退避 3s/8s，判据统一抽到 transient.ts。
+
+## 追加完成项（第 23 轮：瞬时失败自动重试）
+
+1. **transient.ts（新，client/src）**：`isTransientError()` 单一判据。覆盖网关/传输类
+   （STALL_WATCHDOG、TRANSPORT、事件流中断、ECONN/EAI_AGAIN/EPIPE、socket hang up、
+   fetch failed）+ 服务类（HTTP 5xx/429、rate limit、overloaded、E_SERVICE、busy、
+   task dir: HTTP 5）。**显式不匹配**：通用 timeout/timed out（boltz 20min 工具超时是
+   确定性失败，重试白烧 20 分钟 GPU；网关挂起由 STALL_WATCHDOG 自己的标记覆盖）、
+   401/403、会话不存在。
+2. **orchestrator 重试循环**：原「仅 1 次重试 + 只认网关错误」升级为最多 2 次重试
+   （退避 3s → 8s），每次全新 session。重试门四条：failed + **无任何产出**
+   （savedTo/resultJson 全空）+ 非用户取消 + 判据命中。**有产出的失败不自动重试**
+   ——部分结果 + 手动 ↻ 优于抹掉已产出的 PDB 重跑同一预测。假完成分支（completed+
+   零产出+lastError）的 tool 层瞬时错误（API 5xx/限流/worker busy）首次被覆盖——
+   第 21/22 轮的「瞬时故障」正是这一类，此前只有网关层错误才重试。
+3. **验证**：`pp-transient-unit.mts` 37 断言全过（含反例：boltz 超时/403/序列非法
+   不重试）；新探针 `pp-auto-retry.mjs` 用 playwright route 拦截把首次 POST api/task
+   打成 503 → 断言恰好 2 次尝试 + 最终已完成 + canvas 出图。**探针竞态教训**：失败
+   徽章在 3s 退避期就出现，必须先等第 2 次 api/task post 再断言最终态（首版读早了
+   假 FAIL，重试实际成功了）。本机回归 pp-help-smoke/pp-cancel-smoke（取消不被重试）/
+   pp-retry-smoke/pp-platform-live 全 PASS。
+4. **部署**：bundle 同步 489c599→03dc5998 到 VPS，agh-update-platform（integrity
+   ed4a7753 与本地一致）+ daemon/web 双重启。公网探针 pp-auto-retry / pp-switch-page /
+   pp-nl-search / pp-help-smoke / pp-guest-gate（guest 身份）全 PASS。
+5. **登录调试踩坑（记入记忆）**：POST /login 表单字段是 `user` 不是 `username`（错字段
+   名 = 200 重发登录页，看似密码错）；caddy-credentials.txt 格式 `账号: 密码` 冒号后
+   有空格，cut -d: -f2- 要再 sed 掉前导空格。另：Caddy basic_auth 密码与 users.json
+   scrypt 哈希已核对一致，密码本身没错。
 
 ## 追加完成项（第 22 轮：切页恢复 + 内联结构 + 自然语言输入）
 

@@ -79,6 +79,8 @@ node ../../dev-tests/pp-search-smoke.mjs            # 检索：uniprot_search→
 node ../../dev-tests/pp-compare-smoke.mjs           # AlphaFold 对比：一键发起→CompareCard→归档→新上下文重建
 node ../../dev-tests/pp-archive-delete.mjs          # 归档删除：POST 造档→任务页两键删除→服务端 404
 node ../../dev-tests/pp-retry-smoke.mjs             # 失败重试：注入失败任务→重试按钮→新任务入列
+node ../../dev-tests/pp-auto-retry.mjs              # 瞬时失败自动重试：首次 api/task 503→自动第 2 次尝试→已完成+canvas
+node ../../dev-tests/pp-transient-unit.mts          # 瞬时判据单测：isTransientError 正反例 37 断言
 node ../../dev-tests/pp-cancel-smoke.mjs            # 任务取消：真实任务→列表/结果页两键取消→徽标「已取消」
 node ../../dev-tests/pp-help-smoke.mjs              # 使用指南：#/help 五段渲染→pLDDT 色标→首页链接点回
 node ../../dev-tests/pp-share-report.mjs            # 分享报告：归档页⇩→下载 HTML→断言内嵌图/评分/JSON→打开报告验证交互 3D（绘制/拖拽/缩放/自动旋转）
