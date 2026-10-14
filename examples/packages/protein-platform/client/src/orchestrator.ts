@@ -359,10 +359,15 @@ export async function runTask(
     // the tool's own timeout (predict_complex 1300s / batch 900s in the preset), or it
     // kills perfectly healthy predictions mid-flight.
     const STALL_MS = type === 'complex' || type === 'batch' ? 1_400_000 : 180_000
+    // A single-type task can fall back to Boltz-2 (agent calls predict_complex after
+    // ESMFold 413s on 400+ aa chains) — that fold runs with zero events for minutes,
+    // so the moment it is observed the window widens to the complex value; the 180s
+    // single window otherwise kills the healthy fallback mid-flight (CASP14 T1024).
+    let stallMs = STALL_MS
     let lastActivity = Date.now()
     let stalled = false
     const watchdog = setInterval(() => {
-      if (Date.now() - lastActivity > STALL_MS) {
+      if (Date.now() - lastActivity > stallMs) {
         stalled = true
         clearInterval(watchdog)
         controller.abort()
@@ -403,6 +408,13 @@ export async function runTask(
           const isCancelled = () => controller.signal.aborted && !stalled
           for await (const row of session.events({ preview: true })) {
             lastActivity = Date.now()
+            const env = (row as { event?: unknown })?.event ?? row
+            const data = ((env as { data?: Record<string, unknown> }).data ?? env) as { name?: string }
+            if (
+              (env as { type?: string })?.type === 'tool/call' &&
+              (data.name === 'predict_complex' || data.name === 'batch_predict')
+            )
+              stallMs = 1_400_000
             if (reduceLedgerEvent(id, row, isCancelled)) return
           }
         } catch (e) {
@@ -451,7 +463,7 @@ export async function runTask(
         if (t.status === 'running') {
           t.status = /abort/i.test(String(e?.name ?? e)) && !stalled ? 'cancelled' : 'failed'
           t.error = stalled
-            ? `STALL_WATCHDOG：超过 ${(STALL_MS / 1000) | 0}s 无任何事件，会话已中止重试`
+            ? `STALL_WATCHDOG：超过 ${(stallMs / 1000) | 0}s 无任何事件，会话已中止重试`
             : String(e?.message ?? e).slice(0, 300)
         }
       })
