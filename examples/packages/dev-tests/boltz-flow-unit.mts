@@ -4,7 +4,16 @@
 // success parsing (metrics scaled to 0-100, verdict), failed-job surfacing,
 // and the "complexes only" guard.
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { predictComplex } from '../protein-predictor/boltz.mjs'
+
+// Isolate from the compute-routing tier: runWorkerBoltz probes BOLTZ_WORKER_URL
+// with the GLOBAL fetch (outside the tctx.net mock), and on a dev box with a
+// live worker tunnel (127.0.0.1:7610) the test would silently run real GPU
+// predictions. Pin the worker to a dead loopback port BEFORE importing
+// boltz.mjs (WORKER_URL is captured at module load) — connection-refused is
+// instant, and the fall-through to the API chain is exactly what this file
+// mocks and asserts.
+process.env.BOLTZ_WORKER_URL = 'http://127.0.0.1:9'
+const { predictComplex } = await import('../protein-predictor/boltz.mjs')
 
 // Structural types for the mocked tool surface (tsx strips these; they exist
 // so `biome check` passes without any-casts on dev-test stubs).

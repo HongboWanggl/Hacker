@@ -16,8 +16,12 @@
 3. **代码整理**：NPZ/NPY 读取抽到 `protein-view/extensions/main/npz-parse.mjs`，由 protein.pae 服务与
    平台归档共用，输出形状不再漂移。
 4. **验证**：`dev-tests/archive-put.mts` 13 断言全绿（单体/穿越/批量/超预算/绝对路径）；typecheck 干净，
-   改动文件 biome 0 error。**已知遗留**：`boltz-flow-unit.mts` 在 HEAD 即失败（`calls[0].init` undefined，
-   第 99 行）——已用 git stash 基线确认非本轮回归，待单独修。
+   改动文件 biome 0 error。`boltz-flow-unit.mts` 的既有失败（`calls[0].init` undefined）也已修：
+   根因是算力路由第一档 `runWorkerBoltz` 用**全局 fetch** 探测 `BOLTZ_WORKER_URL`（默认 127.0.0.1:7610），
+   排在 API 分支之前且不受测试的 tctx.net mock 管——开发机上有活的 worker 隧道时，单测会**静默跑真 GPU
+   预测**然后整条 API 断言全空。修法：测试在 import boltz.mjs 前把 `BOLTZ_WORKER_URL` 钉到死端口
+   （模块级 const 在加载时取值，须先设 env 再动态 import）；连接拒绝是瞬时的，顺带真实覆盖了
+   「worker 失败→落回原链路」的分发语义。全部断言 PASS，exit 0。
 5. **部署**：VPS 仓库 5a2cc277 → 3d648c50（thin bundle，base 必须是 VPS 实际 HEAD）；
    `agh-update-platform.mts` 重新发布（integrity sha256-5c5d1ba83e7309491，安装 dist 含新特性串）；
    daemon + web 双重启，公网 302 登录门正常。
