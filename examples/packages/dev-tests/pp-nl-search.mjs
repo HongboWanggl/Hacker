@@ -62,7 +62,15 @@ const lookup = async (query, label) => {
   await page
     .waitForSelector('.pl-candidates .pv-root .pv-search-row', { timeout: 150000 })
     .then(() => console.log(`${label}: candidate rows rendered in place`))
-    .catch(() => fail.push(`${label}: no candidate rows within 150s`))
+    .catch(async () => {
+      // Print what the panel is actually showing — "still spinning" and "honest
+      // error text" both fail this step, and they need different fixes.
+      const text = (await page.textContent('.pl-candidates').catch(() => null)) ?? '(no panel)'
+      const msg = `${label}: no candidate rows within 150s — panel shows: ${JSON.stringify(text.slice(0, 200))}`
+      fail.push(msg)
+      console.log('DIAG', msg)
+      await page.screenshot({ path: `/tmp/pp-nl-fail-${label}.png` }).catch(() => {})
+    })
 
   // No trace: a lookup is not a task, and it writes nothing to the archive store.
   const after = { tasks: (await tasks()).length, archive: await archiveCount() }
@@ -94,6 +102,7 @@ const waitDone = async (label, timeout = 300000) => {
 // --- single-select: the description a user actually types -------------------
 await lookup('人类血红蛋白 α 链', 'single')
 await page.screenshot({ path: '/tmp/pp-nl-candidates.png' })
+if (fail.length === 0) {
 const beforeSingle = (await tasks()).filter((t) => t.type === 'single').length
 await page.click('.pl-candidates .pv-root .pv-search-predict')
 await page
@@ -118,8 +127,10 @@ if ((await waitDone('single prediction')) === '已完成') {
     .catch(() => fail.push('no canvas after candidate prediction'))
   await page.screenshot({ path: '/tmp/pp-nl-single.png' })
 }
+}
 
 // --- multi-select: tick two rows, use the batch bar -------------------------
+if (fail.length === 0) {
 await lookup('hemoglobin human', 'batch')
 const beforeBatch = (await tasks()).filter((t) => t.type === 'batch').length
 await page.locator('.pv-search-row .pv-search-check').nth(0).click()
@@ -149,6 +160,7 @@ if (afterBatch !== beforeBatch + 1) fail.push(`expected exactly 1 new batch task
 await page.waitForSelector('.pl-tasklist a.pl-taskrow', { timeout: 20000 })
 await waitDone('batch prediction')
 await page.screenshot({ path: '/tmp/pp-nl-batch.png' })
+}
 
 await browser.close()
 if (fail.length) {
