@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { type ArchiveMeta, getServices, listArchive } from '../bff.ts'
 import { StructureThumb } from '../components/thumb.tsx'
 import { analyzeInput, classifySingle } from '../composer.ts'
-import { getTasks, runTask, subscribeTasks } from '../orchestrator.ts'
+import { clearFailedTasks, getTasks, runTask, subscribeTasks } from '../orchestrator.ts'
 import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
 
 const runningStage = (t: { stages: Array<{ label: string; status: string }> }) =>
@@ -149,6 +149,21 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
   })
   const tasks = getTasks()
   const latest = tasks[0]
+  // Failed/cancelled rows are this browser's own scratch — the surface archive
+  // only ever holds completed tasks. The cleanup used to exist only on the 任务
+  // page, so a failed card on the wall read as "you never deleted it". Same
+  // two-click arming as everywhere else; nothing server-side is touched.
+  const failCount = tasks.filter((t) => t.status === 'failed' || t.status === 'cancelled').length
+  const [clearArmed, setClearArmed] = useState(false)
+  const clearFailed = () => {
+    if (!clearArmed) {
+      setClearArmed(true)
+      setTimeout(() => setClearArmed(false), 4000)
+      return
+    }
+    setClearArmed(false)
+    clearFailedTasks()
+  }
   // History from the surface archive (tasks completed elsewhere / storage lost).
   const [archived, setArchived] = useState<ArchiveMeta[]>([])
   useEffect(() => {
@@ -367,6 +382,16 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
         <>
           <div className="pl-wall-title">
             最近预测 <small>· {tasks.length + archived.length} 个任务</small>
+            {failCount > 0 && (
+              <button
+                type="button"
+                className={`pl-row-del pl-clear-failed${clearArmed ? ' armed' : ''}`}
+                onClick={clearFailed}
+                title="失败/取消的记录只存在于本机浏览器（服务器只归档已完成任务）；这是本机清理，服务器归档不受影响"
+              >
+                {clearArmed ? '确认清除' : `清除失败记录 ×${failCount}`}
+              </button>
+            )}
           </div>
           {/* Same filter row as the tasks page — the wall is a capped preview,
               but "show me my complexes" works the same way everywhere. */}
