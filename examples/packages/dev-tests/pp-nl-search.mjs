@@ -53,6 +53,14 @@ if (outcome !== '已完成') {
 } else {
   await page.click('a.pl-taskrow')
   await page.waitForSelector('.pl-result', { timeout: 15000 })
+  // The shortlist must say it is a shortlist: without this callout a candidate
+  // list reads as the (empty) answer. Asserted here because the live and the
+  // archived branch each render it, and the archived one is what a history card
+  // opens — the branch users kept landing on.
+  await page
+    .waitForSelector('.pl-callout', { timeout: 20000 })
+    .then(() => console.log('next-step callout present'))
+    .catch(() => fail.push('no .pl-callout above the candidate table'))
   // SearchCard rows carry one-click predict buttons (the confirmation step).
   await page
     .waitForSelector('.pv-root .pv-search-predict', { timeout: 60000 })
