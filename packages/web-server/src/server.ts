@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { extname, isAbsolute, join, posix } from 'node:path'
+import { LOGIN_ART } from './login-art.js'
 import {
   loadSecret,
   mintSessionToken,
@@ -317,66 +318,164 @@ function htmlResponse(response: ServerResponse, status: number, body: string): v
 
 function renderLoginPage(next: string, error?: string): string {
   const attr = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
+  // The figures are this platform's own archived predictions (login-art.ts is
+  // generated from real archive files), drawn from Cα coordinates and coloured
+  // by pLDDT band. Nothing here is a stock image, and the page stays one
+  // self-contained document: no request can fail before the user has a session.
+  const fig = (a: (typeof LOGIN_ART)[number], hero = false) => `
+        <figure class="fig${hero ? ' fig-hero' : ''}">
+          <svg viewBox="${a.bounds.join(' ')}" aria-hidden="true">${a.paths
+            .map(([d, c, depth]) => `<path class="d${depth}" d="${d}" stroke="${c}"/>`)
+            .join('')}</svg>
+          <figcaption><b>${attr(a.name)}</b><span>${attr(a.detail)}</span>${
+            hero
+              ? '<div class="kern">Cα 轨迹，按 pLDDT 着色、按深度分层<br>由本平台自身流程预测产出，非示意图</div>'
+              : ''
+          }</figcaption>
+        </figure>`
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>登录 · 蛋白质结构预测平台</title>
+<meta name="color-scheme" content="dark">
+<title>ProteinLens 蛋白透镜 · 登录</title>
 <style>
-  :root { color-scheme: light dark; }
   * { box-sizing: border-box; margin: 0; }
+  :root {
+    --fg: #e8eefb; --dim: #93a3bd; --line: rgba(150, 180, 235, .16);
+    --accent: #4f7cff; --accent2: #56d4c4;
+  }
   body {
-    min-height: 100vh; display: flex; align-items: center; justify-content: center;
-    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-    background: #f3f6fb; color: #1c2430; padding: 24px;
+    min-height: 100vh; color: var(--fg);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    background:
+      radial-gradient(1100px 620px at 82% -8%, rgba(79, 124, 255, .22), transparent 60%),
+      radial-gradient(760px 520px at 6% 108%, rgba(86, 212, 196, .14), transparent 60%),
+      linear-gradient(170deg, #080d18 0%, #0c1425 45%, #0a1120 100%);
+    background-attachment: fixed;
+    display: flex; align-items: center; justify-content: center; padding: 40px 28px;
   }
-  .card {
-    width: 100%; max-width: 360px; padding: 36px 32px; border-radius: 16px;
-    background: #fff; border: 1px solid #e3e9f2;
-    box-shadow: 0 8px 30px rgba(28, 36, 48, .08);
+  .wrap {
+    width: 100%; max-width: 1180px; display: grid; gap: 56px;
+    grid-template-columns: minmax(0, 1.02fr) minmax(0, .98fr); align-items: center;
   }
-  .mark { font-size: 40px; line-height: 1; }
-  h1 { font-size: 18px; margin: 14px 0 4px; }
-  .sub { font-size: 13px; color: #6b7686; margin-bottom: 26px; }
-  label { display: block; font-size: 12px; color: #6b7686; margin: 14px 0 6px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 14px; letter-spacing: .12em; }
+  .brand b { font-weight: 650; }
+  .brand span { color: var(--dim); letter-spacing: .3em; }
+  .brand i {
+    width: 26px; height: 26px; border-radius: 8px; display: inline-block;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    box-shadow: 0 0 22px rgba(79, 124, 255, .45);
+  }
+  h1 { font-size: clamp(30px, 3.5vw, 44px); line-height: 1.18; margin: 26px 0 14px; letter-spacing: -.02em; }
+  h1 em { font-style: normal; background: linear-gradient(100deg, #7ea2ff, #6fe3d2); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { color: var(--dim); font-size: 15px; line-height: 1.75; max-width: 46ch; }
+  .facts { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 26px 0 30px; }
+  .facts li { border-left: 2px solid var(--line); padding: 2px 0 2px 12px; }
+  .facts b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .facts span { display: block; color: var(--dim); font-size: 11.5px; line-height: 1.5; margin-top: 4px; }
+  form.card {
+    border: 1px solid var(--line); border-radius: 16px; padding: 26px 24px 22px;
+    background: linear-gradient(180deg, rgba(24, 34, 54, .82), rgba(15, 22, 36, .82));
+    backdrop-filter: blur(10px); box-shadow: 0 24px 60px rgba(3, 7, 16, .55);
+    max-width: 420px;
+  }
+  form.card .head { font-size: 13px; color: var(--dim); margin-bottom: 18px; }
+  label { display: block; font-size: 12px; color: var(--dim); margin: 0 0 6px; letter-spacing: .04em; }
   input {
-    width: 100%; padding: 10px 12px; font-size: 14px; border-radius: 8px;
-    border: 1px solid #cdd6e2; background: #fbfcfe; color: inherit; outline: none;
+    width: 100%; padding: 11px 13px; font-size: 14px; border-radius: 10px; color: inherit;
+    border: 1px solid rgba(150, 180, 235, .22); background: rgba(8, 13, 24, .72); outline: none;
+    transition: border-color .15s, box-shadow .15s;
   }
-  input:focus { border-color: #4f7cff; box-shadow: 0 0 0 3px rgba(79, 124, 255, .15); }
+  input + label { margin-top: 15px; }
+  input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79, 124, 255, .22); }
   button {
-    width: 100%; margin-top: 24px; padding: 11px; font-size: 14px; font-weight: 600;
-    border: 0; border-radius: 8px; background: #4f7cff; color: #fff; cursor: pointer;
+    width: 100%; margin-top: 22px; padding: 12px; font-size: 14.5px; font-weight: 650; letter-spacing: .06em;
+    border: 0; border-radius: 10px; color: #05101f; cursor: pointer;
+    background: linear-gradient(100deg, #7ea2ff, #6fe3d2);
   }
-  button:hover { background: #3f6af0; }
-  .error {
-    margin-top: 16px; padding: 9px 12px; font-size: 13px; border-radius: 8px;
-    background: #fdecec; color: #b3261e;
+  button:hover { filter: brightness(1.06); }
+  .error { margin-top: 16px; padding: 10px 13px; font-size: 13px; border-radius: 10px; background: rgba(220, 80, 70, .16); border: 1px solid rgba(255, 141, 134, .35); color: #ffb3ad; }
+  .foot { color: #6b7c96; font-size: 12px; margin-top: 22px; }
+  .art { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
+  .fig { margin: 0; --w: 1.15; padding: 14px; border-radius: 16px; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(20, 30, 48, .6), rgba(11, 17, 30, .6)); }
+  .fig svg { display: block; width: 100%; height: auto; max-height: 132px; filter: drop-shadow(0 0 6px rgba(79, 124, 255, .35)); animation: float 9s ease-in-out infinite; }
+  /* Depth cue: strand distance from the viewer drives width and brightness.
+     Bands come from the third principal axis of the real Cα coordinates. */
+  .fig path { fill: none; stroke-linecap: round; stroke-width: calc(var(--w) * .55); opacity: .34; }
+  .fig path.d1 { stroke-width: calc(var(--w) * .75); opacity: .52; }
+  .fig path.d2 { stroke-width: var(--w); opacity: .7; }
+  .fig path.d3 { stroke-width: calc(var(--w) * 1.3); opacity: .86; }
+  .fig path.d4 { stroke-width: calc(var(--w) * 1.65); opacity: 1; }
+  .fig figcaption { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+  .fig figcaption b { font-size: 12.5px; font-weight: 600; }
+  .fig figcaption span { color: var(--dim); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  /* The hero trace is near-square, so a full-width card would letterbox it with
+     ~130px of dead air either side. Give the caption its own column instead. */
+  .fig-hero { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) 212px; gap: 20px; align-items: center; padding: 20px 22px; }
+  .fig-hero svg { max-height: 300px; }
+  .fig-hero figcaption { display: block; margin: 0; }
+  .fig-hero figcaption b { display: block; font-size: 15px; }
+  .fig-hero figcaption span { display: block; margin-top: 7px; line-height: 1.6; }
+  .fig-hero .kern { color: var(--dim); font-size: 11.5px; line-height: 1.6; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+  @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+  /* Offset the phases so the three traces do not bob in lockstep. */
+  .fig:nth-child(2) svg { animation-delay: -3s; }
+  .fig:nth-child(3) svg { animation-delay: -6s; }
+  @media (prefers-reduced-motion: reduce) { .fig svg { animation: none; } }
+  @media (max-width: 900px) {
+    body { padding: 28px 20px; }
+    .wrap { grid-template-columns: 1fr; gap: 34px; }
+    h1 { font-size: 30px; }
+    form.card { max-width: none; }
+    .fig-hero { grid-template-columns: 1fr; gap: 6px; }
+    .fig-hero svg { max-height: 220px; }
+    .fig-hero .kern { margin-top: 12px; }
   }
-  @media (prefers-color-scheme: dark) {
-    body { background: #10151d; color: #e6ebf3; }
-    .card { background: #1a212c; border-color: #2a3342; box-shadow: 0 8px 30px rgba(0, 0, 0, .4); }
-    .sub, label { color: #93a0b4; }
-    input { background: #121822; border-color: #34405a; }
-    input:focus { border-color: #6d95ff; box-shadow: 0 0 0 3px rgba(109, 149, 255, .2); }
-    .error { background: #3a2226; color: #ff8d86; }
+  /* Phones: three stat columns squeeze the labels into three-word lines, and
+     side-by-side figures wrap their captions — stack both. */
+  @media (max-width: 560px) {
+    .facts { grid-template-columns: 1fr; gap: 10px; }
+    .facts li { display: flex; gap: 12px; align-items: baseline; }
+    .facts b { min-width: 72px; }
+    .facts span { margin-top: 0; }
+    .art { grid-template-columns: 1fr; }
+    .fig svg { max-height: 180px; }
   }
 </style>
 </head>
 <body>
-  <form class="card" method="post" action="/login">
-    <div class="mark">🧬</div>
-    <h1>蛋白质结构预测平台</h1>
-    <div class="sub">请登录后继续</div>
-    <label for="user">账号</label>
-    <input id="user" name="user" autocomplete="username" autofocus required>
-    <label for="password">密码</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" required>
-    <input type="hidden" name="next" value="${attr(next)}">
-    <button type="submit">登录</button>
-    ${error ? `<div class="error">${attr(error)}</div>` : ''}
-  </form>
+  <div class="wrap">
+    <section>
+      <div class="brand"><i></i><b>ProteinLens</b><span>蛋白透镜</span></div>
+      <h1>把蛋白质结构预测，<br>变成<em>一句话</em>的事</h1>
+      <p class="lead">
+        输入 UniProt ID、原始序列、FASTA，或直接说「人类血红蛋白 α 链」——候选当场列出，选中即预测。
+        不需要命令行、Python 或 GPU 环境；每个结果都自带置信度判读：逐残基 pLDDT 着色、置信度曲线、
+        复合物 ipTM 与 PAE 热图，并接受 CASP14 公开靶集的外部打分检验。
+      </p>
+      <ul class="facts">
+        <li><b>0.952</b><span>CASP14 T1025<br>Cα-lDDT（实测）</span></li>
+        <li><b>±0.6</b><span>自报 pLDDT 与<br>实测 lDDT 校准</span></li>
+        <li><b>3 级</b><span>算力路由：自建 GPU<br>→ 托管 API → 本地权重</span></li>
+      </ul>
+      <form class="card" method="post" action="/login">
+        <div class="head">请登录后继续 · 右侧为平台真实预测产出</div>
+        <label for="user">账号</label>
+        <input id="user" name="user" autocomplete="username" autofocus required>
+        <label for="password">密码</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <input type="hidden" name="next" value="${attr(next)}">
+        <button type="submit">登录</button>
+        ${error ? `<div class="error">${attr(error)}</div>` : ''}
+      </form>
+      <div class="foot">Agnes Harness 科研智能体底座 · 南京大学</div>
+    </section>
+    <section class="art" aria-label="平台真实预测结构">
+      ${LOGIN_ART.map((a, i) => fig(a, i === 0)).join('')}
+    </section>
+  </div>
 </body>
 </html>`
 }
