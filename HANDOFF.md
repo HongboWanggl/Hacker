@@ -1,8 +1,61 @@
 # 交接文档：蛋白质平台迭代（2026-10-13）
 
-> 状态：**归档列表分页上线，本机+公网真测绿（2026-10-14，第 24 轮）**——
-> 第 23 轮瞬时失败自动重试（transient.ts + 有界重试）已全链验证；
-> 本轮任务页归档列表改渲染窗口 30 条 + 加载更多，筛选/计数保持全量精确。
+> 状态：**平台基准化上线——CASP14 十靶标走真实管线，本机+公网真测绿（2026-10-14，第 25 轮）**——
+> 新增「基准」页（#/bench）：服务端 Cα-lDDT/Cα-RMSD 打分 + pLDDT 校准直方图，9/10 靶标完成打分。
+
+## 追加完成项（第 25 轮：平台基准化 · CASP14）
+
+1. **打分数学**（server/src/lddt.ts，纯函数零依赖）：
+   - NW 全局比对（match +2/mismatch −1/gap −2，Int32Array 行主序 DP）→ 共享残基对；
+   - **Cα-lDDT**（Mariani et al. 2013，CASP/CAMEO 口径）：参考 15 Å 包含半径内距离对在
+     0.5/1/2/4 Å 四阈值下的保留比例均值；平台全链 Cα/B-factor 基，故为 Cα-lDDT，UI 已披露；
+   - **CA-RMSD**：Horn 四元数最优叠合。**坑**：predictor 的幂迭代 kabsch 在近共面/共线点云上
+     λ1≈|λ4| 退化（200 轮留混合向量，测试螺旋链 rmsd 0.976）；bench 侧改用**循环 Jacobi 4×4
+     特征向量**求主特征向量（50 sweep 零最大非对角元 + acc 累积旋转）。⚠️ 生产
+     protein-predictor/alphafold.mjs 的 kabsch 仍是幂迭代、同样的潜在退化**未修**（本轮不扩散
+     战线），留待后续轮次。
+2. **基准数据**（server/bench/，随 build 进 dist/bench）：CASP14 十靶标 manifest（targets.json，
+   65–408 aa 升序）+ 十个 RCSB 参考结构（T*.pdb， curator 时经 NW 裁剪到同一性匹配残基、
+   逐靶 REMARK 记来源；巨链 cryo-EM 要先按链序取连续残基 run 再过滤，否则残基号撞车）。
+   序列来自 predictioncenter.org 官方 CASP14 seq 文件（WebFetch 被域验证挡，curl 直下）。
+3. **打分服务**（server/src/bench.ts + main.ts `GET api/bench`）：
+   - 归档标题契约：runner 提交 FASTA 时 `.pl-input-name = CASP14-<id>` → 归档 meta.title 带前缀，
+     服务端按 `CASP14-<id>` 前缀匹配、savedAt 最新者胜（重提覆盖旧attempt）；
+   - 打分按需 + memoize（taskId → 结果）；392 残基打分 ~7ms；
+   - **归档写盘静默丢失回退**：客户端归档是 best-effort（bffCall 需会话仍在 daemon 注册表），
+     提交循环下 ~半数运行归档失败（未根因，疑似会话注册表逐出竞态）→ bench.ts 加
+     findWorkspaceArtifacts 回退：扫 `PROTEIN_PLATFORM_TASKS_ROOT ?? $AGH_HOME/protein-platform/tasks`
+     下 `CASP14-<id>_*.json/.pdb`，报告 mtime 最新者胜。**勿删这条回退，公网/批量跑分靠它。**
+4. **基准页**（client/src/views/bench.tsx，#/bench，导航「基准」）：分数表（靶标/名称/RCSB
+   深链/残基/平均 pLDDT/Cα-lDDT 带/Cα-RMSD）+ pLDDT 校准 SVG（十桶柱 + 虚线理想对角）；
+   配色沿用 AF pLDDT 色带（b-hi/b-ok/b-lo/b-bad）；待运行行诚实显示。
+5. **探针**：
+   - pp-lddt-unit.mts：22 断言纯数学（NW 恒等/缺残基/悬空、identity lddt=1、**刚体运动不变性**、
+     噪声单调退化、局部 20 残基位移在 per-residue 显形、gappy 比对、<5 对拒打分、乱坐标塌缩）；
+   - pp-bench-page.mjs：route 注入 api/bench（2 done + 1 pending），锁表格/pill/PDB 链接/校准 SVG/导航；
+   - pp-bench-run.mjs：可续跑提交器——先拉 api/bench 组 doneIds 跳过已打分靶标，逐靶 composer
+     提交（30 min 天花板），终局 scoreboard 打印。重跑实测幂等（9 skip + T1024 重试仍失败）。
+6. **真跑结果**（家里 4060，小靶标 1–2 min/个，全部走真实管线）：
+   | 靶标 | 长度 | Cα-lDDT | CA-RMSD |
+   |---|---|---|---|
+   | T1025 | 93 | **0.952** | 0.65 Å |
+   | T1030 | 103 | 0.943 | 2.82 Å |
+   | T1046s2 | 108 | 0.859 | 1.71 Å |
+   | T1056 | 125 | 0.817 | 3.36 Å |
+   | T1027 | 284 | 0.518 | 14.52 Å |
+   | T1029 | 125 | 0.472 | 10.91 Å |
+   | T1038 | 238 | 0.409 | 14.54 Å |
+   | T1049 | 141 | 0.311 | 15.39 Å |
+   | T1064 | 106 | 0.291 | 14.08 Å |
+   T1024（408aa 膜蛋白 LmrP）本地**确定性失败**（含第 23 轮自动重试，工作区零产物）→ 诚实「待运行」。
+   **pLDDT 校准近理想**：90→0.955、80→0.873、70→0.752、30→0.307——模型置信度诚实，低置信靶标
+   真的错误折叠；这是比单看 lDDT 更有说服力的数据点。
+7. **验证**：typecheck 干净、新文件 biome 干净；lddt-unit/bench-page/archive-paginate/
+   help-smoke/archive-roundtrip/switch-page PASS；**部署**：bundle ff → 5a2cc27，VPS republish
+   （integrity sha256-07591e9416afbf9d4，脚本自带 build，dist/bench 随包）+ daemon/web 双重启；
+   公网 bench-page PASS + help-smoke/paginate 回归 PASS。公网 api/bench 0/10 属实（公网站点
+   未跑过 CASP14，全部诚实显示待运行——要在公网出分需在公网跑 pp-bench-run，但 VPS 无 GPU，
+   ESMFold 链路慢，未执行）。
 
 ## 追加完成项（第 24 轮：归档列表分页）
 
