@@ -1,3 +1,4 @@
+import type { DaemonLink } from './agnes.ts'
 import { buildPrompt, STAGE_LABEL, TASK_TYPE_LABEL, type TaskInput, type TaskType } from './prompts.ts'
 import { isTransientError } from './transient.ts'
 
@@ -334,9 +335,12 @@ async function archiveTask(id: string): Promise<void> {
 
 // Drives one task end-to-end. The browser cannot mkdir, so the surface server
 // creates the task dir, we register it as a workspace, then open the session.
+// `sdk` is the DaemonLink (see agnes.ts), not a raw client: every call that has
+// to reach the daemon goes through withClient() so a restart mid-flight is a
+// rebuild, never a `transport closed: closed` handed to the user.
 export async function runTask(
   cfg: { tasksRoot: string },
-  sdk: any,
+  sdk: DaemonLink,
   type: TaskType,
   input: TaskInput,
   opts?: { seedFiles?: Record<string, string> }, // relPath -> b64, written into the fresh workspace
@@ -393,8 +397,13 @@ export async function runTask(
       })
       if (!r.ok) throw new Error(`task dir: HTTP ${r.status}`)
       const cwd = `${cfg.tasksRoot}/${id}`
-      await sdk.workspace.add(cwd)
-      const session = await sdk.session.new({ cwd, preset: 'standard' })
+      // Through the link, not the raw client: a daemon restart in the seconds
+      // between the HTTP mkdir above and this call would otherwise hand the user
+      // `transport closed: closed` for a submission that never started.
+      const session = await sdk.withClient(async (c) => {
+        await c.workspace.add(cwd)
+        return await c.session.new({ cwd, preset: 'standard' })
+      })
       patch(id, (t) => {
         t.sessionId = session.id
       })
@@ -532,13 +541,15 @@ export async function runTask(
   }
 }
 
-// Boot-time recovery for tasks stranded by a page switch/reload/tab close: the
-// run loop lived in the old page, but the daemon-side session kept going (or
-// already finished). Reattach and replay the journal through the same reducer —
-// the task lands on its true outcome, archives what the dead page never could,
-// and live events keep flowing if the turn is still running. Sessions that no
-// longer exist (daemon restart) settle failed honestly instead of spinning.
-export async function reattachRunningTasks(sdk: any): Promise<void> {
+// Recovery for tasks stranded by a page switch/reload/tab close — and now by a
+// daemon restart too, since main.tsx re-runs this whenever the link replaces a
+// client the SDK latched closed: the run loop lived in the old page (or on the
+// dead client), but the daemon-side session kept going (or already finished).
+// Reattach and replay the journal through the same reducer — the task lands on
+// its true outcome, archives what the dead page never could, and live events
+// keep flowing if the turn is still running. Sessions that no longer exist
+// (daemon restart) settle failed honestly instead of spinning.
+export async function reattachRunningTasks(sdk: DaemonLink): Promise<void> {
   const stranded = getTasks().filter((t) => t.status === 'running')
   for (const t of stranded) {
     const id = t.id
@@ -558,7 +569,7 @@ export async function reattachRunningTasks(sdk: any): Promise<void> {
       // live before the attach round-trip, so the replay lands in the queue.
       // load also re-establishes the daemon-side session for later BFF reads
       // (archive), and rejects unknown sessions honestly.
-      const session = await sdk.session.load(t.sessionId)
+      const session = await sdk.withClient((c) => c.session.load(t.sessionId))
       // Replay from zero re-derives every stage/artifact; start clean so the
       // old page's partial ledger can't duplicate rows or shadow real results.
       patch(id, (t2) => {
