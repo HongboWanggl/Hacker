@@ -105,13 +105,46 @@ export function downloadShareReport(input: ShareInput & { figs?: StageFig[] }): 
         `<figure><img src="${f.data}" alt="${esc(f.caption)}" /><figcaption>${esc(f.caption)}</figcaption></figure>`,
     )
     .join('\n')
-  const figureBlock =
-    figsHtml ||
-    `<p class="meta">${esc(input.figureNote ?? '本报告未包含结构图快照（该任务没有可快照的结构视图）')}</p>`
-
   const reportHtml = input.report
     ? `<details><summary>完整报告数据（JSON）</summary><pre>${esc(JSON.stringify(input.report, null, 2))}</pre></details>`
     : ''
+
+  // A UniProt search task's whole product IS its hit list, so a report for one has
+  // to carry it: without this the share HTML for a 检索 task was a title and a
+  // collapsed JSON — which is what "报告是空白" was really describing.
+  type Hit = { accession?: string; id?: string; proteinName?: string; organism?: string; length?: number }
+  const rawHits = (input.report as { hits?: unknown } | undefined)?.hits
+  const hits: Hit[] = Array.isArray(rawHits) ? (rawHits as Hit[]) : []
+  const searchQuery = (input.report as { query?: unknown } | undefined)?.query
+  const hitsHtml =
+    hits.length > 0
+      ? `<section class="hits">
+  <h2>候选条目 · ${hits.length} 条${typeof searchQuery === 'string' ? `（检索式 <code>${esc(searchQuery)}</code>）` : ''}</h2>
+  <table>
+    <thead><tr><th>Accession</th><th>蛋白</th><th>物种</th><th>长度</th></tr></thead>
+    <tbody>
+      ${hits
+        .map(
+          (x) =>
+            `<tr><td>${x.accession ? `<a href="https://www.uniprot.org/uniprotkb/${encodeURIComponent(x.accession)}">${esc(x.accession)}</a>` : '—'}</td>` +
+            `<td>${esc(x.proteinName ?? x.id ?? '')}</td>` +
+            `<td>${esc(x.organism ?? '')}</td>` +
+            `<td>${x.length != null ? `${x.length} aa` : '—'}</td></tr>`,
+        )
+        .join('\n      ')}
+    </tbody>
+  </table>
+  <p class="meta">把 Accession 粘回首页即可预测该条目的结构。</p>
+</section>`
+      : ''
+
+  // A search report has its candidates instead of figures — saying "no structure
+  // image" there would just be a second way of looking empty.
+  const figureBlock =
+    figsHtml ||
+    (hitsHtml
+      ? ''
+      : `<p class="meta">${esc(input.figureNote ?? '本报告未包含结构图快照（该任务没有可快照的结构视图）')}</p>`)
 
   // Interactive 3D: a self-contained canvas viewer (Cα trace + pLDDT-colored
   // residues, ligand balls) — drag rotate, wheel zoom, double-click reset,
@@ -305,6 +338,14 @@ export function downloadShareReport(input: ShareInput & { figs?: StageFig[] }): 
   footer { color: #9aa5b5; font-size: 12px; margin-top: 26px; text-align: center; }
   .viewer { background: #fff; border: 1px solid #e6e9ef; border-radius: 14px; margin: 18px 0;
             padding: 16px; }
+  .hits { background: #fff; border: 1px solid #e6e9ef; border-radius: 14px; margin: 18px 0; padding: 16px 18px; }
+  .hits h2 { font-size: 15px; margin: 0 0 10px; }
+  .hits code { background: #f1f4fb; border-radius: 5px; padding: 1px 6px; font-size: 12px; }
+  .hits table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .hits th { text-align: left; color: #6f7d96; font-weight: 600; font-size: 12px;
+             border-bottom: 1px solid #e6e9ef; padding: 6px 8px; }
+  .hits td { border-bottom: 1px solid #f1f3f7; padding: 7px 8px; vertical-align: top; }
+  .hits a { color: #2b5fc7; text-decoration: none; font-variant-numeric: tabular-nums; }
   .viewer-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
   .viewer-head strong { font-size: 15px; }
   .viewer-hint { color: #6f7d96; font-size: 12.5px; flex: 1; }
@@ -327,8 +368,9 @@ export function downloadShareReport(input: ShareInput & { figs?: StageFig[] }): 
     <span class="badge">${esc(input.typeLabel)}</span>
   </header>
   <div class="meta">任务 ${esc(input.taskId)} · ${esc(when)} · 由蛋白质预测工作台生成</div>
-  <div class="hero">${scoreBlock}</div>
+  ${scoreBlock ? `<div class="hero">${scoreBlock}</div>` : ''}
   ${viewerHtml}
+  ${hitsHtml}
   ${figureBlock}
   ${reportHtml}
   <footer>pLDDT 置信度色标：≥90 很高（深蓝）· 70–90 高（浅蓝）· 50–70 中（黄）· &lt;50 低（橙）</footer>
