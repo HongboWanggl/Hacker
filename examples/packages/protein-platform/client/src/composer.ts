@@ -25,6 +25,46 @@ export function fastaRecords(text: string): string[] {
   return records
 }
 
+export type SingleKind = 'fasta' | 'accession' | 'sequence' | 'short' | 'junk' | 'description'
+
+// Single-mode input classification, shared by the inspect strip (what the user
+// sees) and the submit path (what actually runs) so the two can never drift.
+// Natural language lands as 'description': English prose almost always contains
+// letters outside the 20-aa alphabet (insulin → u/l, hemoglobin → b/g/l/o) and
+// CJK has none, so the alphabet check is what separates "hemoglobin alpha
+// chain" from a foldable polymer. Known blind spot: an English word spelled
+// entirely from AA letters (chain, data) reads as a too-short sequence — the
+// inspect strip shows that reading, so the user can rephrase.
+export function classifySingle(text: string): {
+  kind: SingleKind
+  seqOnly?: string
+  accession?: string
+  letters?: string
+  extras?: number
+} {
+  const trimmed = text.trim()
+  if (trimmed.startsWith('>')) {
+    const records = fastaRecords(trimmed).filter((s) => s.length > 0)
+    return {
+      kind: 'fasta',
+      seqOnly: (records[0] ?? '').toUpperCase(),
+      extras: records.length - 1,
+    }
+  }
+  const compact = trimmed.replace(/\s/g, '')
+  if (ACCESSION.test(compact)) return { kind: 'accession', accession: compact.toUpperCase() }
+  const letters = trimmed.replace(/[^A-Za-z]/g, '')
+  const AA = /^[ACDEFGHIKLMNPQRSTVWY]+$/i
+  if (/^[A-Za-z\s\n-]+$/.test(trimmed) && letters.length >= 10) {
+    return AA.test(letters) ? { kind: 'sequence', letters: letters.toUpperCase() } : { kind: 'description' }
+  }
+  if (letters.length >= 10) return { kind: 'junk' }
+  // A short pure-AA token is a too-short sequence, not a search query.
+  const bare = trimmed.replace(/[\s\n-]/g, '')
+  if (bare.length >= 5 && AA.test(bare)) return { kind: 'short', letters: bare.toUpperCase() }
+  return { kind: 'description' }
+}
+
 export function analyzeInput(text: string, type: 'single' | 'complex' | 'batch'): Chip[] {
   const trimmed = text.trim()
   if (!trimmed) return []
@@ -40,9 +80,12 @@ export function analyzeInput(text: string, type: 'single' | 'complex' | 'batch')
   }
 
   if (type === 'complex') {
-    const lines = trimmed
-      .split('\n')
-      .map((l) => l.replace(/^>.*$/, '').replace(/[^A-Za-z]/g, '').toUpperCase())
+    const lines = trimmed.split('\n').map((l) =>
+      l
+        .replace(/^>.*$/, '')
+        .replace(/[^A-Za-z]/g, '')
+        .toUpperCase(),
+    )
     const usable = lines.filter((s) => s.length >= 5)
     const short = lines.filter((s) => s.length > 0 && s.length < 5).length
     const chips: Chip[] = []
@@ -63,22 +106,19 @@ export function analyzeInput(text: string, type: 'single' | 'complex' | 'batch')
     const chips: Chip[] = []
     if (records.length > 0) {
       chips.push({ tone: 'ok', text: `FASTA · ${records[0].length} aa` })
-      if (extras > 0) chips.push({ tone: 'warn', text: `共 ${records.length} 条记录，其余 ${extras} 条将忽略` })
+      if (extras > 0)
+        chips.push({ tone: 'warn', text: `共 ${records.length} 条记录，其余 ${extras} 条将忽略` })
     } else {
       chips.push({ tone: 'warn', text: 'FASTA 中未检测到序列' })
     }
     return chips
   }
 
-  const letters = trimmed.replace(/[^A-Za-z]/g, '')
-  if (ACCESSION.test(trimmed.replace(/\s/g, ''))) {
-    return [{ tone: 'ok', text: `UniProt ID · ${trimmed.replace(/\s/g, '').toUpperCase()}` }]
-  }
-  if (letters.length >= 10 && /^[A-Za-z\s\n-]+$/.test(trimmed)) {
-    return [{ tone: 'ok', text: `原始序列 · ${letters.length} aa` }]
-  }
-  if (letters.length >= 10) {
-    return [{ tone: 'warn', text: '含数字或特殊字符，无法识别为序列' }]
-  }
+  const cls = classifySingle(trimmed)
+  if (cls.kind === 'accession') return [{ tone: 'ok', text: `UniProt ID · ${cls.accession}` }]
+  if (cls.kind === 'sequence') return [{ tone: 'ok', text: `原始序列 · ${cls.letters!.length} aa` }]
+  if (cls.kind === 'short') return [{ tone: 'warn', text: `序列过短（${cls.letters!.length} aa，需 ≥10）` }]
+  if (cls.kind === 'junk') return [{ tone: 'warn', text: '含数字或特殊字符，无法识别为序列' }]
+  if (cls.kind === 'description') return [{ tone: 'ok', text: '自然语言描述 · 将检索 UniProt 候选' }]
   return [{ tone: 'warn', text: '无法识别：请输入 UniProt ID、FASTA 或 ≥10 aa 的序列' }]
 }

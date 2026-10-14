@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { analyzeInput, fastaRecords } from '../composer.ts'
 import { type ArchiveMeta, getServices, listArchive } from '../bff.ts'
 import { StructureThumb } from '../components/thumb.tsx'
+import { analyzeInput, classifySingle } from '../composer.ts'
 import { getTasks, runTask, subscribeTasks } from '../orchestrator.ts'
 import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
 
@@ -214,28 +214,25 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
         setName('')
         return
       }
-      const letters = trimmed.replace(/[^A-Za-z]/g, '')
-      const isFasta = trimmed.startsWith('>')
-      const isSequence = !isFasta && letters.length >= 10 && /^[A-Za-z\s\n-]+$/.test(trimmed)
-      // Multi-record FASTA: fold the first record only — concatenating records
-      // would fold a chimera (matches the guide's 「取首条」 wording).
-      const seqOnly = isFasta ? (fastaRecords(trimmed).find((s) => s.length > 0) ?? '').toUpperCase() : null
-      const isAccession =
-        !isSequence &&
-        /^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9][A-Z][A-Z0-9]{2}[0-9])(?:-\d+)?$/i.test(
-          trimmed.replace(/\s/g, ''),
-        )
-      const input = isFasta
-        ? {
-            sequence: seqOnly,
-            name: name.trim() || trimmed.split('\n')[0].slice(1).split('|')[0].trim() || undefined,
-          }
-        : isAccession
-          ? { accession: trimmed.toUpperCase(), name: name.trim() || trimmed.toUpperCase() }
-          : isSequence
-            ? { sequence: letters.toUpperCase(), name: name.trim() || undefined }
-            : { accession: trimmed, name: name.trim() || undefined } // let uniprot_fetch validate
-      await runTask(cfg, sdk, type, input)
+      // One classifier drives both the inspect strip and this submit: natural
+      // language becomes a search task (candidate list → user picks → predict),
+      // everything else stays the direct pipeline it always was.
+      const cls = classifySingle(trimmed)
+      const taskType = cls.kind === 'description' ? 'search' : type
+      const input =
+        cls.kind === 'fasta'
+          ? {
+              sequence: cls.seqOnly,
+              name: name.trim() || trimmed.split('\n')[0].slice(1).split('|')[0].trim() || undefined,
+            }
+          : cls.kind === 'accession'
+            ? { accession: cls.accession, name: name.trim() || cls.accession }
+            : cls.kind === 'sequence'
+              ? { sequence: cls.letters, name: name.trim() || undefined }
+              : cls.kind === 'description'
+                ? { query: trimmed, name: name.trim() || undefined }
+                : { accession: trimmed, name: name.trim() || undefined } // short/junk — let uniprot_fetch reject with a clear error
+      await runTask(cfg, sdk, taskType, input)
       setText('')
       setName('')
     } finally {
@@ -256,7 +253,7 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
               ? '每行一条链序列（按 A、B、C… 顺序），如：\nMVLSPADKTNVKAAWGKVGAHAGEYGAEAL\nVHLTPEEKSAVTALWGKVNVDEVGGEALGR\n（可另填配体 SMILES）'
               : type === 'batch'
                 ? '每行一个 UniProt ID（≤8 个）：\nP69905\nP68871\nP04637'
-                : '粘贴氨基酸序列（如 MKTAYIAKQRQISFVK…）\n或输入 UniProt ID（如 P04637）\n或直接粘贴 FASTA'
+                : '粘贴氨基酸序列（如 MKTAYIAKQRQISFVK…）\n或输入 UniProt ID（如 P04637）\n或直接粘贴 FASTA\n或一句话描述：如「人类血红蛋白 α 链」'
           }
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -325,11 +322,14 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
           <>批量模式：最多 8 个 UniProt ID 逐个预测，完成后汇总质量分布卡片</>
         ) : (
           <>
-            支持 <code>FASTA</code> · <code>UniProt ID</code> · <code>原始序列</code>，⌘/Ctrl + Enter 快速提交
+            支持 <code>FASTA</code> · <code>UniProt ID</code> · <code>原始序列</code> ·{' '}
+            <code>自然语言描述</code>（自动检索候选，选一条再预测），⌘/Ctrl + Enter 快速提交
           </>
         )}
         {' · '}
-        <a href="#/help" className="pl-hint-link">使用指南</a>
+        <a href="#/help" className="pl-hint-link">
+          使用指南
+        </a>
       </p>
 
       {!consent && (
@@ -364,17 +364,27 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
               but "show me my complexes" works the same way everywhere. */}
           <div className="pl-filters pl-filters-wall">
             {(['all', 'single', 'complex', 'batch', 'search', 'compare'] as const).map((k) => (
-              <button key={k} className={`pl-type-tab ${wallFilter === k ? 'on' : ''}`} onClick={() => setWallFilter(k)}>
+              <button
+                key={k}
+                className={`pl-type-tab ${wallFilter === k ? 'on' : ''}`}
+                onClick={() => setWallFilter(k)}
+              >
                 {k === 'all' ? '全部' : TASK_TYPE_LABEL[k]}
               </button>
             ))}
             <span className="pl-sort-sep" aria-hidden>
               ·
             </span>
-            <button className={`pl-type-tab ${wallSort === 'new' ? 'on' : ''}`} onClick={() => setWallSort('new')}>
+            <button
+              className={`pl-type-tab ${wallSort === 'new' ? 'on' : ''}`}
+              onClick={() => setWallSort('new')}
+            >
               最新
             </button>
-            <button className={`pl-type-tab ${wallSort === 'score' ? 'on' : ''}`} onClick={() => setWallSort('score')}>
+            <button
+              className={`pl-type-tab ${wallSort === 'score' ? 'on' : ''}`}
+              onClick={() => setWallSort('score')}
+            >
               最高分
             </button>
           </div>
@@ -382,11 +392,9 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
             {liveF.slice(0, 12).map((t) => (
               <TaskCard key={t.id} task={t} />
             ))}
-            {historyF
-              .slice(0, Math.max(0, 12 - Math.min(liveF.length, 12)))
-              .map((m) => (
-                <ArchiveCard key={m.taskId} m={m} />
-              ))}
+            {historyF.slice(0, Math.max(0, 12 - Math.min(liveF.length, 12))).map((m) => (
+              <ArchiveCard key={m.taskId} m={m} />
+            ))}
           </div>
         </>
       )}

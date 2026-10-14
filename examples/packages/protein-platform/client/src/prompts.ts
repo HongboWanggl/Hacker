@@ -46,9 +46,10 @@ ${chains}
 1) 调用 batch_predict，accessions 参数为 [${accs}]
 2) 用两三句话总结整体质量分布。`
   }
-  return `检索 UniProt 数据库。严格按步骤执行，不要询问任何问题：
-1) 调用 uniprot_search，query 参数为 "${(input.query ?? '').trim()}"
-2) 简要列出最相关的前几条（accession、名称、物种、长度）。`
+  return `检索 UniProt 蛋白质数据库。用户输入：「${(input.query ?? '').trim()}」——它可能是自然语言描述（中文或英文），也可能是检索词。严格按步骤执行，不要询问任何问题：
+1) 把用户输入转成合适的检索词（基因名 / 蛋白名 / 物种），调用 uniprot_search（可用 gene:、organism_id: 等字段语法，必要时换词多检几次）
+2) 优先呈现 reviewed（Swiss-Prot）条目，列出前 5-8 条候选：accession、蛋白名、基因、物种、序列长度
+3) 不要调用任何预测工具 —— 用户会从候选中选择后再预测。`
 }
 
 function comparePrompt(input: TaskInput): string {
