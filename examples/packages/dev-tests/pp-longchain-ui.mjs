@@ -70,9 +70,31 @@ const cases = [
     useless: USELESS,
   },
   { id: 'ui2-pasted-2944', label: '粘贴原始序列 2944 aa', text: syn(2944), want: /1000/, useless: USELESS },
+  // The capstone for "is the ceiling a blanket ban?": androgen receptor P10275
+  // at 920 aa sits UNDER it, so this run must reach 已完成 with a real
+  // structure. It is the case that distinguishes "we refuse what the folding
+  // engines cannot do" from "we refuse anything large", and it is the only case
+  // here that spends real GPU time (ESMFold 413s above ~400 aa, so the agent
+  // falls back to a local Boltz-2 run — minutes, not seconds).
+  {
+    id: 'ui3-under-ceiling-920',
+    label: 'UniProt ID P10275（雄激素受体 920 aa，天花板之下）',
+    text: 'P10275',
+    want: /1000/,
+    useless: USELESS,
+    mustSucceed: true,
+  },
 ]
 
-for (const c of cases) {
+// Optional case-id filter: `node pp-longchain-ui.mjs ui3-under-ceiling-920`
+const only = process.argv.slice(2)
+const selected = only.length ? cases.filter((c) => only.includes(c.id)) : cases
+if (!selected.length) {
+  console.error(`no such case. known: ${cases.map((c) => c.id).join(', ')}`)
+  process.exit(2)
+}
+
+for (const c of selected) {
   const before = (await tasks()).length
   await page.goto(`${base}#/`, { waitUntil: 'domcontentloaded' })
   await page.waitForSelector('.pl-home textarea', { timeout: 30_000 })
@@ -126,6 +148,14 @@ for (const c of cases) {
   // — since approvals flow again the agent can take the domain-split route it
   // was previously refused, so a long chain may legitimately finish as done.
   ok(`${c.id}: a 已完成 row renders a structure`, !done || figs > 0, `status=${row.status} figs=${figs}`)
+  // …except for the under-ceiling case, where folding IS the product: a 920-aa
+  // chain that ends 失败 means the ceiling has become a blanket ban.
+  if (c.mustSucceed)
+    ok(
+      `${c.id}: a chain under the ceiling actually folds`,
+      done && figs > 0,
+      `status=${row.status} figs=${figs}`,
+    )
   // A run with nothing behind it must say why, and say something USEFUL.
   ok(`${c.id}: carries a reason`, typeof reason === 'string' && reason.trim().length > 0)
   ok(
