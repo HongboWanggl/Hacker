@@ -16,25 +16,18 @@ export type TaskInput = {
 export function buildPrompt(type: TaskType, input: TaskInput): string {
   if (type === 'compare') return comparePrompt(input)
   const name = input.name?.trim() || 'structure'
+  // Note: a natural-language description never reaches this branch — home.tsx
+  // routes it to a `search` task (candidate list → user confirms → predict, the
+  // flow pp-nl-search.mjs asserts), so `query` only ever travels with
+  // type==='search'. If that routing ever changes, this prompt needs the search
+  // step added back or it asks for "以下序列" with nothing attached.
   if (type === 'single') {
-    const query = input.query?.trim()
     const seq = input.accession
       ? `1) 调用 uniprot_fetch 获取 ${input.accession} 的正式序列
 2) 调用 predict_structure 预测该序列（name: ${name}）
 3) 调用 analyze_confidence 分析置信度并识别低置信区段
 4) 用一句话给出结论。`
-      : query
-        ? // Natural-language description (composer chip: 「自然语言描述 · 将检索 UniProt 候选」).
-          // Without this branch the user's text never reached the agent at all — the
-          // prompt asked for "以下序列" with an empty sequence, so the promise the
-          // composer made ("检索候选") was not the pipeline that ran.
-          `用户用自然语言描述想要的结构：「${query}」
-1) 调用 uniprot_search 检索该描述（中文名称先译成英文蛋白名/基因名，可用 gene:、organism_id: 等字段语法，必要时换词多检几次），从中选定唯一一条最匹配的 reviewed（Swiss-Prot）条目
-2) 调用 uniprot_fetch 获取该 accession 的正式序列
-3) 调用 predict_structure 预测该序列（name: ${name}）
-4) 调用 analyze_confidence 分析置信度并识别低置信区段
-5) 用一句话给出结论，并说明你选定了哪个 accession 与蛋白名。`
-        : `1) 调用 predict_structure 预测以下序列（name: ${name}）
+      : `1) 调用 predict_structure 预测以下序列（name: ${name}）
 2) 调用 analyze_confidence 分析置信度并识别低置信区段
 3) 用一句话给出结论。`
     return `预测蛋白质三维结构。严格按步骤执行，不要询问任何问题：

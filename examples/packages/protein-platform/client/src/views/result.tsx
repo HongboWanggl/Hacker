@@ -544,6 +544,15 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
           onPredict={handlePredict}
         />
       )}
+      {!running && task.type === 'search' && (
+        // A description routed here is not the answer, it is the shortlist: the
+        // prediction happens when the user picks one. Say so above the table —
+        // otherwise the candidate list reads as "the platform gave me nothing".
+        <div className="pl-callout" style={{ marginTop: 14 }}>
+          这是候选列表（描述型输入的第一步）：点表格每行末尾的 <b>▶</b> 预测该条目，得到结构 + 置信度报告；
+          也可点行首复制 accession，回<a href="#/">首页</a>预测，或用勾选框批量预测多个。
+        </div>
+      )}
       {!running && task.type !== 'batch' && task.type !== 'complex' && (savedTo || task.resultJson) && (
         <ToolViewStage
           toolName={viewTool}

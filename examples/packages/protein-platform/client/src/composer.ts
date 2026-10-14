@@ -121,9 +121,11 @@ export function analyzeInput(text: string, type: 'single' | 'complex' | 'batch')
   if (cls.kind === 'short')
     return [{ tone: 'warn', text: `序列过短（${(cls.letters as string).length} aa，需 ≥10）` }]
   if (cls.kind === 'junk') return [{ tone: 'warn', text: '含数字或特殊字符，无法识别为序列' }]
-  // What actually runs (prompts.ts): search for the best-matching reviewed entry,
-  // fetch it, then predict — the chip says so instead of stopping at "检索候选".
+  // What actually runs (home.tsx): a description becomes a search task — candidates
+  // first, then the user confirms one and it is predicted. Say the confirmation out
+  // loud: a chip that stops at 「检索候选」 left the next step to be discovered, and
+  // users read the candidate list as the (empty) answer.
   if (cls.kind === 'description')
-    return [{ tone: 'ok', text: '自然语言描述 · 先检索最佳匹配条目，再预测结构' }]
+    return [{ tone: 'ok', text: '自然语言描述 · 先检索候选，选定后点 ▶ 预测结构' }]
   return [{ tone: 'warn', text: '无法识别：请输入 UniProt ID、FASTA 或 ≥10 aa 的序列' }]
 }
