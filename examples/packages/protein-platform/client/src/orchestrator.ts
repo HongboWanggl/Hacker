@@ -1,5 +1,6 @@
 import { bffCall } from './bff.ts'
 import { buildPrompt, STAGE_LABEL, TASK_TYPE_LABEL, type TaskInput, type TaskType } from './prompts.ts'
+import { isTransientError } from './transient.ts'
 
 // Task = one agent session. Progress is a ledger reduction: tool/call opens a
 // stage, tool/result closes it (savedTo captured), turn/end finishes the task.
@@ -545,19 +546,31 @@ export async function runTask(
   }
 
   void (async () => {
+    // Bounded auto-retry for transient failures: the model gateway drops large
+    // agent rounds (TRANSPORT), the watchdog kills hung turns, and tool-level
+    // flakiness (boltz API 5xx, rate limits, worker busy) surfaces as a
+    // "completed" turn with zero artifacts and a recorded error. Each retry is
+    // a fresh session; the checkpoint below is the single arbiter via
+    // isTransientError. Tasks that DID produce artifacts never auto-retry —
+    // a partial result plus the manual ↻ resubmit beats wiping a finished PDB
+    // to re-roll the same prediction.
+    const MAX_ATTEMPTS = 3
     try {
-      await attempt()
-      // The model gateway intermittently drops large agent rounds (TRANSPORT, no status).
-      // One fresh-session retry turns that from a failed task into a slower success.
-      await new Promise((r) => setTimeout(r, 3000))
-      const t = getTask(id)
-      if (
-        !controller.signal.aborted &&
-        t?.status === 'failed' &&
-        /STALL_WATCHDOG|TRANSPORT|TURN_ERROR|turn (abort|blocked)|status=\?|事件流中断|ECONN|EAI_AGAIN|socket hang up|fetch failed|reset/i.test(
-          t.error ?? '',
+      for (let n = 1; ; n++) {
+        await attempt()
+        const t = getTask(id)
+        const retryable =
+          n < MAX_ATTEMPTS &&
+          !controller.signal.aborted &&
+          t?.status === 'failed' &&
+          Object.keys(t.savedTo).length === 0 &&
+          !t.resultJson &&
+          isTransientError(t.error ?? t.lastError)
+        if (!retryable) break
+        console.log(
+          `[platform] attempt ${n} failed transiently (${(t!.error ?? '').slice(0, 120)}), auto-retrying`,
         )
-      ) {
+        await new Promise((r) => setTimeout(r, n === 1 ? 3000 : 8000))
         patch(id, (t2) => {
           t2.status = 'running'
           t2.error = undefined
@@ -567,7 +580,6 @@ export async function runTask(
           t2.resultJson = undefined
           t2.previewTail = ''
         })
-        await attempt()
       }
     } finally {
       runners.delete(id)
