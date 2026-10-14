@@ -9,6 +9,7 @@
 import { execFile } from 'node:child_process'
 import { accessSync, constants as fsConstants, readdirSync, readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -239,6 +240,32 @@ async function writePaeBestEffort(tctx, label, bytes) {
 // caller falls through to the legacy chain (hosted API → local CLI → hint) —
 // the worker is an accelerator, never a dependency.
 const WORKER_URL = process.env.BOLTZ_WORKER_URL ?? 'http://127.0.0.1:7610'
+// POST via node:http, not fetch: undici (global fetch) defaults headersTimeout
+// and bodyTimeout to 300s, and a queued GPU fold routinely outlives that — the
+// response headers only arrive when the fold finishes, so the request dies at
+// exactly 5min while the GPU keeps running (observed twice on the 408aa
+// T1024 retry, 2026-10-14, durationMs 300717/300730). node:http has no such
+// default; the AbortSignal below is the only deadline.
+function workerPost(path, body, headers, totalMs) {
+  return new Promise((resolve, reject) => {
+    const { hostname, port, pathname } = new URL(`${WORKER_URL}${path}`)
+    const req = httpRequest(
+      { hostname, port, path: pathname, method: 'POST', headers },
+      (res) => {
+        let data = ''
+        res.setEncoding('utf8')
+        res.on('data', (c) => {
+          data += c
+          if (data.length > 32 * 1024 * 1024) req.destroy(new Error('worker response too large'))
+        })
+        res.on('end', () => resolve({ status: res.statusCode, body: data }))
+      },
+    )
+    req.setTimeout(totalMs, () => req.destroy(new Error(`worker request timed out after ${totalMs}ms`)))
+    req.on('error', reject)
+    req.end(body)
+  })
+}
 export async function runWorkerBoltz({ proteins, smiles }) {
   try {
     const health = await fetch(`${WORKER_URL}/health`, { signal: AbortSignal.timeout(1500) })
@@ -254,17 +281,23 @@ export async function runWorkerBoltz({ proteins, smiles }) {
     if (token) headers.authorization = `Bearer ${token}`
     // 22 min > the worker's own 20 min per-job cap, so the worker always gets
     // to answer (even with a compute error) before the client gives up.
-    const res = await fetch(`${WORKER_URL}/predict`, {
-      method: 'POST',
+    const res = await workerPost(
+      '/predict',
+      JSON.stringify({ proteins, smiles }),
       headers,
-      body: JSON.stringify({ proteins, smiles }),
-      signal: AbortSignal.timeout(22 * 60_000),
-    })
-    if (!res.ok) return undefined // 5xx compute error → legacy chain takes it
-    const out = await res.json()
+      22 * 60_000,
+    )
+    if (res.status !== 200) {
+      // 5xx compute error → legacy chain takes it, but keep the reason visible:
+      // the old silent return made worker failures masquerade as "needs API key".
+      console.warn(`[boltz] worker /predict ${res.status}: ${res.body.slice(0, 200)}`)
+      return undefined
+    }
+    const out = JSON.parse(res.body)
     if (!out.pdb) return undefined
     return { pdbContent: out.pdb, paeNpzB64: out.paeNpzB64, conf: out.conf ?? {}, aff: out.aff ?? {} }
-  } catch {
+  } catch (e) {
+    console.warn(`[boltz] worker path failed: ${String(e?.message ?? e).slice(0, 200)}`)
     return undefined
   }
 }
