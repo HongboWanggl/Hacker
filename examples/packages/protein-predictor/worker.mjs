@@ -99,3 +99,10 @@ server.listen(PORT, '127.0.0.1', () => {
   accessSync(BIN, fsConstants.X_OK) // Loud failure at boot if the venv is gone.
   console.log(`[boltz-worker] listening on 127.0.0.1:${PORT} bin=${BIN} token=${token ? 'on' : 'off'}`)
 })
+// Node ≥18 destroys any in-flight request after 300s by default — a queued
+// GPU run routinely outlives that, so the tunnel client sees the response die
+// at exactly 5min while the fold keeps running server-side (observed on the
+// 408aa T1024 retry, 2026-10-14). Long jobs are already bounded by the client's
+// 22min fetch window and runLocalBoltz's own 20min cap, so lift the HTTP limit.
+server.requestTimeout = 0
+
