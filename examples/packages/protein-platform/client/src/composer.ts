@@ -121,11 +121,11 @@ export function analyzeInput(text: string, type: 'single' | 'complex' | 'batch')
   if (cls.kind === 'short')
     return [{ tone: 'warn', text: `序列过短（${(cls.letters as string).length} aa，需 ≥10）` }]
   if (cls.kind === 'junk') return [{ tone: 'warn', text: '含数字或特殊字符，无法识别为序列' }]
-  // What actually runs (home.tsx): a description becomes a search task — candidates
-  // first, then the user confirms one and it is predicted. Say the confirmation out
-  // loud: a chip that stops at 「检索候选」 left the next step to be discovered, and
-  // users read the candidate list as the (empty) answer.
+  // What actually runs (home.tsx): a description opens the inline candidate panel under
+  // the box — no task is created until the user picks one. Say both where the candidates
+  // appear and what happens next: a chip that stopped at 「检索候选」 left the next step to
+  // be discovered, and users read the candidate list as the (empty) answer.
   if (cls.kind === 'description')
-    return [{ tone: 'ok', text: '自然语言描述 · 先检索候选，选定后点 ▶ 预测结构' }]
+    return [{ tone: 'ok', text: '自然语言描述 · 就在下方列出候选，点 ▶ 预测该条' }]
   return [{ tone: 'warn', text: '无法识别：请输入 UniProt ID、FASTA 或 ≥10 aa 的序列' }]
 }

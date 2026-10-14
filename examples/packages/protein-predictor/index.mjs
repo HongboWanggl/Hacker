@@ -6,6 +6,11 @@ import { compareAlphafold } from './alphafold.mjs'
 import { batchPredictor } from './batch.mjs'
 import { predictComplex } from './boltz.mjs'
 import { compareStructures } from './pairwise.mjs'
+import { fetchRetry, searchUniprot, slugForQuery, UNIPROT_BASE, UniprotError } from './uniprot.mjs'
+
+// fetchRetry is re-exported because dev-tests/retry-unit.mts imports it from this
+// entry point; the platform server reaches the same search code through uniprot.mjs.
+export { fetchRetry }
 
 const Kind = Symbol.for('TypeBox.Kind')
 
@@ -14,7 +19,7 @@ const num = (desc, extra = {}) => ({ [Kind]: 'Number', type: 'number', descripti
 
 const AA_RE = /^[ACDEFGHIKLMNPQRSTVWYBXZUO]+$/i
 const ESMFOLD_URL = 'https://api.esmatlas.com/foldSequence/v1/pdb/'
-const UNIPROT = 'https://rest.uniprot.org/uniprotkb'
+const UNIPROT = UNIPROT_BASE
 
 const readOnlyMeta = {
   isReadOnly: true,
@@ -47,23 +52,9 @@ const result = (structured, _s) => ({
 })
 const fail = (s) => ({ ...text(s), isError: true })
 
-// One retry after a short backoff for transient upstream failures — the free
-// shared ESMFold/UniProt endpoints occasionally return 5xx or drop connections.
-// Retries network errors and 5xx/429 only; a 4xx (bad accession, bad sequence)
-// fails immediately. The second attempt's result (or error) is returned as-is.
-export async function fetchRetry(fetchFn, url, opts = {}) {
-  try {
-    const res = await fetchFn(url, opts)
-    if (res.status >= 500 || res.status === 429) {
-      await new Promise((r) => setTimeout(r, 1500))
-      return fetchFn(url, opts)
-    }
-    return res
-  } catch {
-    await new Promise((r) => setTimeout(r, 1500))
-    return fetchFn(url, opts)
-  }
-}
+// fetchRetry — the one-retry policy the network tools share — moved to uniprot.mjs
+// so the platform's /api/uniprot route can reach the same search code, and is
+// re-exported at the top of this file.
 
 // ---------------------------------------------------------------------------
 // Parse a FASTA header: >sp|P04637|P53_HUMAN Cellular tumor antigen p53 OS=Homo sapiens OX=9606 GN=TP53 PE=1 SV=4
@@ -124,25 +115,29 @@ export const uniprotSearch = {
       },
       meta: readOnlyMeta,
       async execute({ query, limit = 5 }, tctx) {
-        const url = `${UNIPROT}/search?query=${encodeURIComponent(query)}&format=tsv&fields=accession,id,protein_name,organism_name,length&size=${limit}`
-        const res = await fetchRetry(tctx.net.fetch, url, { timeoutMs: 30000 })
-        if (!res.ok) return fail(`UniProt search failed: HTTP ${res.status}`)
-        const body = await res.text()
-        const lines = body.trim().split('\n')
-        if (lines.length <= 1) return result({ query, hits: [] }, 'no hits')
-        const hits = lines.slice(1).map((l) => {
-          const [accession, id, proteinName, organism, length] = l.split('\t')
-          return { accession, id, proteinName, organism, length: Number(length) }
-        })
+        let hits
+        try {
+          ;({ hits } = await searchUniprot(tctx.net.fetch, {
+            query,
+            limit,
+            retry: true,
+            fetchOpts: { timeoutMs: 30000 },
+          }))
+        } catch (e) {
+          // Upstream said no (4xx/5xx): report the status the way this tool always
+          // has. Transport failures still propagate as before.
+          if (e instanceof UniprotError && e.reason === 'http') {
+            return fail(`UniProt search failed: HTTP ${e.status}`)
+          }
+          throw e
+        }
+        if (!hits.length) return result({ query, hits: [] }, 'no hits')
         // Save the full report and put savedTo FIRST in the structured result: the
         // transcript clips resultPreview at 4096 chars, and with >20 hits the JSON tail
         // (where savedTo would land) is cut — the panel then cannot find the full copy.
-        const slug =
-          query
-            .replace(/[^A-Za-z0-9._-]+/g, '_')
-            .replace(/^_+|_+$/g, '')
-            .slice(0, 60) || 'query'
-        const reportPath = `reports/search_${slug}.json`
+        // The platform's lookup fallback depends on the same ordering to recover
+        // savedTo from a clipped transcript.
+        const reportPath = `reports/search_${slugForQuery(query)}.json`
         await tctx.fs.write(reportPath, JSON.stringify({ query, hits }, null, 2))
         return result(
           { savedTo: reportPath, query, hits },

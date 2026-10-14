@@ -101,7 +101,8 @@ export function HelpView() {
       <Section title="④ 工作台能做的事">
         <ul className="pl-help-list">
           <li>
-            <b>检索 → 预测</b>：「检索」页搜关键词（如 hemoglobin），行内 ▶ 一键预测；勾选多个可批量。
+            <b>检索 → 预测</b>：首页描述框或「检索」页搜关键词（如 hemoglobin），候选表就在下方， 行内 ▶
+            一键预测；勾选多个可批量。检索本身不产生任务，只留下你选择的那次预测。
           </li>
           <li>
             <b>任务管理</b>

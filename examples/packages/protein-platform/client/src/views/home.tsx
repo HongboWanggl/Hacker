@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { type ArchiveMeta, getServices, listArchive } from '../bff.ts'
+import { CandidatePanel, useCandidates } from '../components/candidates.tsx'
 import { StructureThumb } from '../components/thumb.tsx'
 import { analyzeInput, classifySingle } from '../composer.ts'
 import { clearFailedTasks, getTasks, runTask, subscribeTasks } from '../orchestrator.ts'
-import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
+import { MAX_BATCH_ACCESSIONS, TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
 
 const runningStage = (t: { stages: Array<{ label: string; status: string }> }) =>
   t.stages.find((s) => s.status === 'running')?.label
@@ -137,6 +138,8 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
   const [type, setType] = useState<TaskType>('single')
   const [text, setText] = useState('')
   const [name, setName] = useState('')
+  // Description → candidate lookup, right under the box the user typed in.
+  const cand = useCandidates(cfg, sdk)
   const [ligand, setLigand] = useState('')
   const [busy, setBusy] = useState(false)
   // One-time consent explainer: what the automated session will (and won't) do.
@@ -225,16 +228,22 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
           .split(/[\n,;\s]+/)
           .filter((s) => /^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9][A-Z][A-Z0-9]{2}[0-9])$/i.test(s))
         if (accs.length === 0) return
-        await runTask(cfg, sdk, 'batch', { accessions: accs.slice(0, 8).map((a) => a.toUpperCase()) })
+        await runTask(cfg, sdk, 'batch', {
+          accessions: accs.slice(0, MAX_BATCH_ACCESSIONS).map((a) => a.toUpperCase()),
+        })
         setText('')
         setName('')
         return
       }
-      // One classifier drives both the inspect strip and this submit: natural
-      // language becomes a search task (candidate list → user picks → predict),
-      // everything else stays the direct pipeline it always was.
       const cls = classifySingle(trimmed)
-      const taskType = cls.kind === 'description' ? 'search' : type
+      // A one-line description is not a prediction request yet — it is a lookup, and
+      // it resolves right here: the candidates appear under the box and the user picks
+      // from them. No task row and no archive are created for the lookup itself.
+      // The text stays in the box so a retry is one more click.
+      if (cls.kind === 'description') {
+        cand.start(trimmed)
+        return
+      }
       const input =
         cls.kind === 'fasta'
           ? {
@@ -245,10 +254,8 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
             ? { accession: cls.accession, name: name.trim() || cls.accession }
             : cls.kind === 'sequence'
               ? { sequence: cls.letters, name: name.trim() || undefined }
-              : cls.kind === 'description'
-                ? { query: trimmed, name: name.trim() || undefined }
-                : { accession: trimmed, name: name.trim() || undefined } // short/junk — let uniprot_fetch reject with a clear error
-      await runTask(cfg, sdk, taskType, input)
+              : { accession: trimmed, name: name.trim() || undefined } // short/junk — let uniprot_fetch reject with a clear error
+      await runTask(cfg, sdk, type, input)
       setText('')
       setName('')
     } finally {
@@ -337,6 +344,7 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
           </button>
         </div>
       </div>
+      <CandidatePanel state={cand.state} onClose={cand.reset} name={name} cfg={cfg} sdk={sdk} />
       <p className="pl-hint">
         {type === 'complex' ? (
           <>复合物模式：每行一条链（≥2 条效果最佳），Boltz-2 联合预测界面与配体结合</>
@@ -345,7 +353,7 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
         ) : (
           <>
             支持 <code>FASTA</code> · <code>UniProt ID</code> · <code>原始序列</code> ·{' '}
-            <code>自然语言描述</code>（自动检索候选，选一条再预测），⌘/Ctrl + Enter 快速提交
+            <code>自然语言描述</code>（就在下方列出候选，点 ▶ 直接预测），⌘/Ctrl + Enter 快速提交
           </>
         )}
         {' · '}

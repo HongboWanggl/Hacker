@@ -1,100 +1,53 @@
-// Search smoke: uniprot_search → SearchCard renders hits with accessions.
+// Search-page smoke: 检索页 now runs the same inline candidate lookup as the home box
+// — results appear under the input, no 检索 task is created, no archive is written.
+// (Coverage for the legacy 检索 task/archive rendering lives in pp-archive-search.mjs.)
+//   PP_BASE/PP_USER/PP_PASS as usual.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
-import { login } from './pp-login.mjs'
+import { httpCredsFromEnv, login } from './pp-login.mjs'
 
 const exe = `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`
-// PP_BASE/PP_USER/PP_PASS: drive a remote deployment (see pp-complex-full.mjs).
 const base = process.env.PP_BASE ?? 'http://127.0.0.1:4177/platform/'
-const httpCreds = process.env.PP_USER
-  ? { username: process.env.PP_USER, password: process.env.PP_PASS ?? '' }
-  : undefined
+const creds = httpCredsFromEnv()
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const page = await browser.newPage({
-  viewport: { width: 1400, height: 1000 },
-  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
-})
-if (httpCreds) await login(page.request, base, httpCreds)
+const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } })
+if (creds) await login(page.request, base, creds)
+page.on('pageerror', (e) => fail.push(`pageerror: ${String(e).slice(0, 160)}`))
+
+const tasks = () => page.evaluate(() => JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]'))
+
 await page.goto(`${base}#/search`, { waitUntil: 'domcontentloaded', timeout: 60000 })
-await page.waitForSelector('.pl-input-name', { timeout: 15000 })
+await page.waitForSelector('.pl-input-name', { timeout: 20000 })
+const before = (await tasks()).length
+const archivesBefore = await page.request.get(`${base}api/archive`).then((r) => r.json().then((b) => (Array.isArray(b) ? b.length : -1)))
+
 await page.fill('.pl-input-name', 'hemoglobin human')
 await page.click('.pl-submit')
-await page.goto(`${base}#/tasks`, { timeout: 15000 })
-const outcome = await page
-  .waitForSelector(
-    '.pl-tasklist a.pl-taskrow:first-child .pl-badge.done, .pl-tasklist a.pl-taskrow:first-child .pl-badge.failed',
-    {
-      timeout: 180000,
-      state: 'attached',
-    },
-  )
-  .then((el) => el.textContent())
-  .catch(() => null)
-if (outcome !== '已完成') fail.push(`search outcome: ${outcome}`)
-// Archive write runs in-page after turn/end — hold the tab open until it lands.
-const taskId = await page.getAttribute('a.pl-taskrow', 'href').then((h) => h?.split('/').pop() ?? '')
+await page
+  .waitForSelector('.pl-candidates .pv-root .pv-search-row', { timeout: 60000 })
+  .then(() => console.log('inline candidates rendered on the search page'))
+  .catch(() => fail.push('no inline candidate rows on the search page'))
+const hash = await page.evaluate(() => location.hash)
+if (hash !== '#/search') fail.push(`search submit navigated away: ${hash}`)
+
+const body = (await page.textContent('.pl-candidates').catch(() => '')) ?? ''
+if (!/P6\d{4}|HBB|HBA/.test(body)) fail.push(`candidates lack accessions: ${body.slice(0, 150)}`)
+if ((await tasks()).length !== before) fail.push('search page lookup added a task row')
+const archivesAfter = await page.request.get(`${base}api/archive`).then((r) => r.json().then((b) => (Array.isArray(b) ? b.length : -1)))
+if (archivesAfter !== archivesBefore) fail.push(`lookup wrote an archive entry (${archivesBefore} → ${archivesAfter})`)
+await page.screenshot({ path: '/tmp/pp-search-smoke.png' })
+
+// The confirmation step: row ▶ hands the accession to a single prediction.
+const singles = (await tasks()).filter((t) => t.type === 'single').length
+await page.click('.pl-candidates .pv-search-predict')
 await page
   .waitForFunction(
-    async (id) => {
-      try {
-        return (await fetch(`api/archive/${id}/meta`)).ok
-      } catch {
-        return false
-      }
-    },
-    taskId,
-    { timeout: 45000 },
+    (n) => JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]').filter((t) => t.type === 'single').length > n,
+    singles,
+    { timeout: 20000 },
   )
-  .then(() => console.log('archive: landed'))
-  .catch(() => fail.push('archive did not land within 45s'))
-await page.click('a.pl-taskrow')
-await page.waitForSelector('.pv-root', { timeout: 60000 })
-// Card data arrives via a later BFF roundtrip — wait until hits render (the
-// component first shows the raw preview as a fallback).
-await page
-  .waitForFunction(() => /P6\d{4}|HBB|HBA/.test(document.querySelector('.pl-result')?.innerText ?? ''), {
-    timeout: 60000,
-  })
-  .catch(() => {})
-const body = (await page.textContent('.pl-result').catch(() => '')) ?? ''
-if (!/P6\d{4}|HBB|HBA/.test(body)) fail.push(`SearchCard missing accessions: ${body.slice(0, 150)}`)
-await page.screenshot({ path: '/tmp/pp-search-smoke.png' })
-// Fresh context: the archived search page must rebuild SearchCard from the
-// archived report.json alone.
-const page2 = await browser.newPage({
-  viewport: { width: 1400, height: 1000 },
-  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
-})
-if (httpCreds) await login(page2.request, base, httpCreds)
-await page2.goto(`${base}#/task/${taskId}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
-await page2.waitForSelector('.pv-root', { timeout: 60000 })
-await page2
-  .waitForFunction(() => /P6\d{4}|HBB|HBA/.test(document.querySelector('.pl-result')?.innerText ?? ''), {
-    timeout: 30000,
-  })
-  .catch(() => {})
-const body2 = (await page2.textContent('.pl-result').catch(() => '')) ?? ''
-if (!/P6\d{4}|HBB|HBA/.test(body2)) fail.push('archived search page missing accessions')
-if (!/历史归档/.test(body2)) fail.push('archived search page lacks archive badge')
-// One-click predict hand-off (platform host only): hit-row ▶ starts a single
-// task verbatim from the accession. Assert on the archived page — proves the
-// hand-off works without the live task, like a researcher on another device.
-const predBtn = page2.locator('.pv-search-predict').first()
-await predBtn
-  .waitFor({ timeout: 15000, state: 'visible' })
-  .catch(() => fail.push('predict ▶ missing on search card'))
-if (fail.length === 0) {
-  await predBtn.click()
-  await page2
-    .waitForFunction(
-      () => {
-        const t = JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]')
-        return t.length >= 1 && t[0].type === 'single' && t[0].status === 'running'
-      },
-      { timeout: 30000 },
-    )
-    .catch(() => fail.push('predict ▶ click did not start a single task'))
-}
+  .catch(() => fail.push('predict ▶ click did not start a single task'))
+
 await browser.close()
 if (fail.length) {
   console.error('FAIL:', fail.join(' | '))

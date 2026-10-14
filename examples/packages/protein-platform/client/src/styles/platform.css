@@ -525,6 +525,53 @@ html.dark .pl-composer textarea::placeholder {
   color: var(--pl-ink);
 }
 
+/* Candidate panel: the description box's answer, directly under it (home + 检索).
+   No task, no archive — so it has to look like part of the composer, not like
+   another page to navigate to. */
+.pl-candidates {
+  max-width: 900px;
+  margin: 0 auto 14px;
+  padding: 14px 16px;
+  background: var(--pl-card);
+  border: 1px solid var(--pl-line);
+  border-radius: 18px;
+  box-shadow: var(--pl-shadow-lg);
+}
+.pl-candidates-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.pl-candidates-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pl-ink);
+}
+.pl-candidates-head .pl-back {
+  margin-left: auto;
+  cursor: pointer;
+  font-family: inherit;
+}
+.pl-candidates-sub {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--pl-muted);
+  margin-bottom: 10px;
+}
+.pl-candidates-sub b {
+  color: var(--pl-ink);
+}
+.pl-candidates .pl-callout {
+  margin-bottom: 10px;
+}
+/* The table is already inside a card — a second shadow around it reads as a
+   nested dialog. */
+.pl-candidates .pl-stage-wrap {
+  box-shadow: none;
+  border-radius: 14px;
+}
+
 .pl-card-top {
   display: flex;
   align-items: center;

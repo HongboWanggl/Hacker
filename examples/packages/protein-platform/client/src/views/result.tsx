@@ -1,7 +1,8 @@
-import { createElement as h, useCallback, useEffect, useMemo, useState } from 'react'
-import { archivedServices, getServices, type PvServices, setServicesSession } from '../bff.ts'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { archivedServices, getServices, setServicesSession } from '../bff.ts'
+import { ToolViewStage } from '../components/stage.tsx'
 import { getTask, subscribeTasks } from '../orchestrator.ts'
-import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
+import { MAX_BATCH_ACCESSIONS, TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
 import { captureStageFigures, downloadShareReport, type StructureSet } from '../report.ts'
 
 const STATUS_BADGE: Record<string, string> = {
@@ -205,11 +206,15 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
   const handlePredict = useCallback(
     (accs: string[]) => {
       if (!cfg || !sdk || accs.length === 0) return
+      // batch_predict rejects more than 8 accessions outright, so an over-long
+      // selection used to start a task that could only fail. Cap it here — the same
+      // number the batch tab and the candidate panel use.
+      const picked = accs.slice(0, MAX_BATCH_ACCESSIONS)
       void (async () => {
         try {
           const { runTask } = await import('../orchestrator.ts')
-          if (accs.length === 1) await runTask(cfg, sdk, 'single', { accession: accs[0] })
-          else await runTask(cfg, sdk, 'batch', { accessions: accs })
+          if (picked.length === 1) await runTask(cfg, sdk, 'single', { accession: picked[0] })
+          else await runTask(cfg, sdk, 'batch', { accessions: picked })
           location.hash = '#/tasks'
         } catch (e) {
           console.warn('[platform] predict hand-off failed:', (e as Error)?.message)
@@ -608,40 +613,4 @@ function SearchNextStep() {
       也可点行首复制 accession，回<a href="#/">首页</a>预测，或用勾选框批量预测多个。
     </div>
   )
-}
-
-function ToolViewStage({
-  toolName,
-  savedTo,
-  services,
-  preview,
-  onPredict,
-  onCompare,
-}: {
-  toolName: string
-  savedTo: string
-  services: PvServices
-  preview?: string
-  onPredict?: (accessions: string[]) => void
-  onCompare?: (job: { accession: string; savedTo?: string }) => void
-}) {
-  // biome-ignore lint/suspicious/noExplicitAny: compare result shape comes from the compare toolview, untyped by design
-  const [comp, setComp] = useState<any>(null)
-  useEffect(() => {
-    let alive = true
-    // Capture the protein-view components bound to our BFF-backed services.
-    import('../pv.ts').then(({ bindProteinToolViews, ownerProps }) => {
-      if (!alive) return
-      const map = bindProteinToolViews(services)
-      setComp({
-        comp: map.get(toolName),
-        props: ownerProps(toolName, savedTo, services, preview, onPredict, onCompare),
-      })
-    })
-    return () => {
-      alive = false
-    }
-  }, [toolName, savedTo, services, onPredict, onCompare])
-  if (!comp?.comp) return <div className="pl-empty">加载视图组件…</div>
-  return <div className="pl-stage-wrap">{h(comp.comp, comp.props)}</div>
 }

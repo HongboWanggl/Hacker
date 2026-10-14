@@ -14,6 +14,7 @@ import {
   putArchive,
 } from './archive.ts'
 import { benchReport } from './bench.ts'
+import { uniprotLookup } from './uniprot.ts'
 
 // AGH Surface: serves the platform SPA + archive API under the mount prefix
 // (default /platform). The daemon allocates the loopback PORT and passes the
@@ -167,6 +168,25 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
         canSubmit: true,
       }),
     )
+    return
+  }
+  if (rel === 'api/uniprot' && req.method === 'GET') {
+    // Candidate lookup for the description box. Runs here because the surface CSP
+    // (`connect-src 'self'`) forbids the browser from reaching UniProt directly.
+    // Everything except a missing query is a 200 with {ok:false,reason}: the client
+    // distinguishes "no such protein" from "upstream down" by reading that field,
+    // and a 5xx would only look like the whole platform is broken.
+    const q = (url.searchParams.get('q') ?? '').trim()
+    if (!q) {
+      send(res, 400, JSON.stringify({ ok: false, reason: 'missing-q' }))
+      return
+    }
+    try {
+      send(res, 200, JSON.stringify(await uniprotLookup(q, url.searchParams.get('limit'))))
+    } catch (e) {
+      console.warn(`[protein-platform] uniprot route error: ${(e as Error).message}`)
+      send(res, 200, JSON.stringify({ ok: false, reason: 'internal' }))
+    }
     return
   }
   if (rel === 'api/task' && req.method === 'POST') {

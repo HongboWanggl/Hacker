@@ -11,16 +11,22 @@ export type TaskInput = {
   predictionPath?: string // compare: predicted PDB (workspace-relative)
 }
 
+/** batch_predict hard-fails above this many accessions — the batch tab, the
+ *  candidate panel and the result page's hand-off all cap at the same number. */
+export const MAX_BATCH_ACCESSIONS = 8
+
 // Prompt templates are the product logic: strict, no-questions scripts so the
 // agent just executes the pipeline and every tool lands a savedTo result.
 export function buildPrompt(type: TaskType, input: TaskInput): string {
   if (type === 'compare') return comparePrompt(input)
   const name = input.name?.trim() || 'structure'
-  // Note: a natural-language description never reaches this branch — home.tsx
-  // routes it to a `search` task (candidate list → user confirms → predict, the
-  // flow pp-nl-search.mjs asserts), so `query` only ever travels with
-  // type==='search'. If that routing ever changes, this prompt needs the search
-  // step added back or it asks for "以下序列" with nothing attached.
+  // Note: a natural-language description no longer reaches a prediction branch.
+  // home.tsx / search.tsx run the candidate lookup (lookup.ts) without starting
+  // any task, so `query` only ever travels with type==='search' — and that task
+  // type is now produced by nothing but the hidden fallback turn inside the
+  // lookup itself. If a description ever gets routed to `single` again, this
+  // prompt needs the search step added back or it asks for "以下序列" with
+  // nothing attached.
   if (type === 'single') {
     const seq = input.accession
       ? `1) 调用 uniprot_fetch 获取 ${input.accession} 的正式序列
@@ -52,7 +58,7 @@ ${chains}
 2) 用两三句话总结整体质量分布。`
   }
   return `检索 UniProt 蛋白质数据库。用户输入：「${(input.query ?? '').trim()}」——它可能是自然语言描述（中文或英文），也可能是检索词。严格按步骤执行，不要询问任何问题：
-1) 把用户输入转成合适的检索词（基因名 / 蛋白名 / 物种），调用 uniprot_search（可用 gene:、organism_id: 等字段语法，必要时换词多检几次）
+1) 把用户输入转成合适的检索词（基因名 / 蛋白名 / 物种），调用 uniprot_search（limit 8，可用 gene:、organism_id: 等字段语法，必要时换词多检几次）
 2) 优先呈现 reviewed（Swiss-Prot）条目，列出前 5-8 条候选：accession、蛋白名、基因、物种、序列长度
 3) 不要调用任何预测工具 —— 用户会从候选中选择后再预测。`
 }

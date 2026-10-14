@@ -23,6 +23,7 @@ live() { echo "--- [live] $1"; node "$1" || exit 1; }
 
 echo "=== unit (backend, mocked fs/net) ==="
 run retry-unit.mts
+run pp-lookup-unit.mts
 run pairwise-unit.mts
 run pairwise-overlap.mts
 run boltz-flow-unit.mts

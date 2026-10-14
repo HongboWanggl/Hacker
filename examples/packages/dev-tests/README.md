@@ -28,6 +28,7 @@ chrome-headless-shell（live E2E 用，位于 playwright 缓存目录）。
 | 脚本 | 层 | 覆盖内容 |
 |---|---|---|
 | `retry-unit.mts` | 工具单元 | fetchRetry：5xx/429 重试、4xx 快速失败、网络错误重试、二次失败抛出 |
+| `pp-lookup-unit.mts` | 服务/工具单元 | uniprot.mjs 共享检索：URL 编码与列、TSV 解析（仅表头=0 命中）、reviewed 优先两档回退、http/network/timeout/aborted 归因、预中止不重试、size 被忽略时按 limit 截断 |
 | `pairwise-unit.mts` | 工具单元 | compare_structures：刚性变换 RMSD=0、ΔpLDDT、标签、报告落盘、缺文件/过少残基拒绝 |
 | `pairwise-overlap.mts` | 工具单元 | 残基编号不重叠时明确拒绝 |
 | `boltz-flow-unit.mts` | 工具单元 | predict_complex 全生命周期（mock net.fetch）：wait=false 提交、Bearer→x-api-key 回退、轮询→下载→metrics 解析、失败任务透出、复合物守卫 |

@@ -22,10 +22,10 @@ AGH_HOME=$HOME/agh-home AGNES_PROFILE=local-dev \
 
 | 入口 | 说明 |
 | --- | --- |
-| 首页 | 极简输入框（FASTA / UniProt ID / 原始序列自动识别，输入时实时解析条提示识别结果与将被忽略的内容）+ 类型选择（单体 / 复合物 / 批量）+ 类型筛选 chips + 排序（最新 / 最高分）+ 最近预测报告墙（归档卡带 Cα 主链缩略图，按 pLDDT 着色）+ 首次提交前的一次性自动化说明卡 |
+| 首页 | 极简输入框（FASTA / UniProt ID / 原始序列 / **一句话描述**自动识别，输入时实时解析条提示识别结果与将被忽略的内容）+ 类型选择（单体 / 复合物 / 批量）+ 类型筛选 chips + 排序（最新 / 最高分）+ 最近预测报告墙（归档卡带 Cα 主链缩略图，按 pLDDT 着色）+ 首次提交前的一次性自动化说明卡。描述类输入（如「人类血红蛋白 α 链」）**不建任务**：候选表当场出现在输入框下方，选定/勾选后直接触发预测 |
 | 复合物 | 每行一条链 + 可选配体 SMILES → predict_complex（Boltz-2）→ 界面置信度结果页 |
 | 批量 | 每行一个 UniProt ID（≤8）→ batch_predict → BatchCard 汇总，成功行可展开逐目标 3D 详情；展开的工具条带「⇄ 对比」——该目标一键发起 AlphaFold DB 对比（PDB 种入新对比会话，归档页同样可用） |
-| 检索 | UniProt 关键词检索 → SearchCard hits 列表；行内 ▶ 一键预测该 hit，勾选后批条可「▶ 预测所选」（多选自动升级为批量任务，平台宿主独有；AGH 面板同组件仍是纯复制流） |
+| 检索 | 与首页描述框同一套内联候选（`client/src/lookup.ts`）：关键词或一句话 → 候选表出现在输入框下方；行内 ▶ 一键预测该 hit，勾选后批条可「▶ 预测所选」（多选自动升级为批量任务，平台宿主独有；AGH 面板同组件仍是纯复制流）。**检索本身不留痕**：不建任务、不写归档（旧版每次检索都会留下一条没有预览图的归档卡） |
 | 指南 | 产品内使用指南（#/help）：三种输入方式、任务类型选择、pLDDT 色标与 PAE/AlphaFold 对比解读、工作台功能与常见问题；首页提示行与顶栏均可进入 |
 | 任务页 | 全部任务列表（运行中/已完成/失败/已取消徽标），自动合并 surface 归档历史；类型筛选 chips（带计数）+ 标题/ID 搜索；运行中行可两键取消（取消 → 确认取消，防误触） |
 | 结果页 | 3D 骨架画布（按 pLDDT 着色、自动旋转、全屏）+ 置信度曲线 + 序列条 + 分段统计 + PNG/CSV/PDB 导出；单体任务可一键发起 AlphaFold DB 对比；复合物任务附 PAE 误差热图（链边界 + 悬停读数）；失败任务可一键重新提交（按存储的原始输入重放，compare 自动重种 PDB；已取消任务同样可重放）；运行中任务可在阶段进度卡里取消（两键确认，取消后不自动重试）；「⇩ 分享报告」生成自包含 HTML（评分徽标 + 3D/曲线快照 + **可拖拽旋转/缩放的交互 3D 视图**（批量报告逐目标页签）+ 完整报告 JSON，可直接进幻灯片/邮件） |
@@ -41,13 +41,26 @@ AGH_HOME=$HOME/agh-home AGNES_PROFILE=local-dev \
 | FASTA 多条记录 | 直接粘贴 FASTA，取首条序列；标题行作任务名 |
 | 两链复合物 + 配体 | 切到「复合物预测」，每行一条链序列，配体 SMILES 填进输入框（如 `CC(=O)OC1=CC=CC=C1C(=O)O` 阿司匹林）→ ipTM/配体结合置信度 + PAE 热图 |
 | 一批同源蛋白 | 切到「批量预测」，每行一个 UniProt ID（≤8），完成后逐行展开 3D 详情 |
-| 查蛋白再预测 | 「检索」页搜 `hemoglobin` → SearchCard 行内点 ▶ 直接预测该 hit；或勾选多个 → 「▶ 预测所选」批量预测 |
+| 查蛋白再预测 | 首页输入框直接写 `人类血红蛋白 α 链`（或「检索」页搜 `hemoglobin`）→ 候选表出现在框下 → 行内点 ▶ 直接预测该 hit；或勾选多个 → 「▶ 批量预测所选（N）」 |
 | 验证预测质量 | 单体结果页点「⇄ 与 AlphaFold DB 对比」→ 参考结构 RMSD / 差值轮廓，核心区 ~0.3 Å 即高度一致 |
 
 ## 架构
 
 - **Surface**（`agnes.surfaces`，挂载 `/platform`）：node 进程静态伺服 SPA +
-  `config.json`（wsUrl/profile/rowId/bffPath）+ archive API + `api/task`（代建任务目录）。
+  `config.json`（wsUrl/profile/rowId/bffPath）+ archive API + `api/task`（代建任务目录）
+  + `api/uniprot`（候选检索代理，见下）。
+- **候选检索**（`server/src/uniprot.ts` + `client/src/lookup.ts`）：Surface CSP 是
+  `connect-src 'self'`，浏览器出不了网，所以检索由 surface 自己代查
+  `GET api/uniprot?q=&limit=`（10 分钟 TTL 缓存，8s 超时，**一律 200 + `{ok:false,reason}`**，
+  绝不 5xx——客户端靠 reason 区分「没这个蛋白」和「上游挂了」）。快速档 0 命中时回退
+  **一次隐藏 agent 回合**把中文描述翻成 UniProt 语法（面板显示进度 + 取消，45s 上限）；
+  该回合的会话建在共享草稿目录 `<tasksRoot>/_lookup`，用**每次唯一**的 `sessionKey`
+  （同 cwd 同 key 会被 daemon 当成恢复旧会话而不是新回合），取到 hits 后立刻
+  `session.cancel()` + `archive(id,true)`。候选表复用 protein-view 的 SearchCard：
+  把 hits 序列化成 `resultPreview` 传进去（可解析 JSON → 组件当完整报告消费），
+  因而排序/勾选/全选/行内 ▶/批量条/CSV 全部零改动可用，且**零 service 调用**。
+  残留（UI 不可见）：每次回退在 daemon 侧留一条已归档会话 + `_lookup/reports/search_*.json`；
+  daemon 侧 GC 不在本期范围。
 - **编排**（`client/src/orchestrator.ts`）：一任务一会话。`session/new {cwd: <tasksRoot>/<taskId>}`
   → 模板化 prompt（`prompts.ts`）→ ledger 归约（tool/call 开阶段、tool/result 收 savedTo、
   turn/end 定状态）。180s 无事件看门狗中止重试（STALL_WATCHDOG）。`onPermissionRequest` 自动
@@ -57,8 +70,10 @@ AGH_HOME=$HOME/agh-home AGNES_PROFILE=local-dev \
   派发 protein-view 的 4 个服务（structure/report/pae/file）。归档任务走 `api/archive/*` 同形
   假服务，pv 组件无感知。
 - **可视化**：直接 import protein-view 的 toolview 组件（`bindProteinToolViews` shim 捕获 +
-  `ownerProps` 伪 owner——resultPreview 必须是**截断 JSON**，可解析 JSON 会使组件跳过 report
-  重取）。解析器共享自 `protein-view/extensions/main/pdb-parse.mjs`（B-factor = pLDDT）。
+  `ownerProps` 伪 owner）。`resultPreview` 传**截断 JSON** 时组件回落到 BFF 重取完整报告
+  （活任务路径，report 太大不适合塞进事件流）；传**可解析 JSON** 时组件直接当完整报告消费、
+  不发任何 service 调用——候选面板正是走后者（`components/candidates.tsx`）。
+  解析器共享自 `protein-view/extensions/main/pdb-parse.mjs`（B-factor = pLDDT）。
 - **归档**（`server/src/archive.ts`；客户端单次 POST 工作区相对路径，服务端 `putArchive` 自行从 `<tasksRoot>/<taskId>/` 拉取，不依赖页面在线）：`~/protein-platform/archive/<taskId>/`（meta.json +
   report.json + model.pdb，批量另存逐目标 `pdb-<basename>`，≤2MiB）。meta 冗余 meanPlddt/verdict/
   jobPdbs 供报告墙免取数渲染（list 时推导并写回 meta.json，之后零解析开销）；归档卡缩略图同样
@@ -76,7 +91,11 @@ node ../../dev-tests/pp-platform-live.mjs --shots   # 单体全流程：提交�
 node ../../dev-tests/pp-archive-roundtrip.mjs       # 归档往返：完成→archived→无 localStorage 新上下文→API 直查
 node ../../dev-tests/pp-complex-full.mjs            # 复合物全流程：双链→内联报告渲染→归档（含 PAE）→新上下文
 node ../../dev-tests/pp-batch-smoke.mjs             # 批量：2 个 accession→BatchCard→归档→新上下文重建
-node ../../dev-tests/pp-search-smoke.mjs            # 检索：uniprot_search→SearchCard→归档→新上下文重建
+node ../../dev-tests/pp-nl-search.mjs               # 首页内联候选（中文描述→回退理解→单选 ▶→1 条 single→3D；多选 2→1 条 batch；全程无痕）
+node ../../dev-tests/pp-lookup-fallback.mjs         # 回退诚实性：0 命中查询→进度可见→收敛为候选或诚实空话，绝不停在转圈；无痕
+node ../../dev-tests/pp-search-smoke.mjs            # 检索页内联契约：候选出现在框下→不跳转→无痕→▶ 起 1 条 single
+node ../../dev-tests/pp-archive-search.mjs          # 遗留检索归档仍可渲染（SearchCard 从 report.json 重建）；无遗留档则 SKIP
+node ../../dev-tests/pp-lookup-unit.mts             # 共享检索模块单测：URL 编码/TSV 解析/reviewed 两档/失败归因/预中止不重试
 node ../../dev-tests/pp-compare-smoke.mjs           # AlphaFold 对比：一键发起→CompareCard→归档→新上下文重建
 node ../../dev-tests/pp-archive-delete.mjs          # 归档删除：POST 造档→任务页两键删除→服务端 404
 node ../../dev-tests/pp-archive-paginate.mjs        # 归档分页：注入 45 条→渲染窗口 30+加载更多→计数全量精确→搜索复位

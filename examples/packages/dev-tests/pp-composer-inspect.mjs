@@ -67,9 +67,10 @@ expectChip(got, '其余 1 条将忽略', 'fasta extras warn')
 got = await chips(`${SEQ47}123456`)
 expectChip(got, '无法识别为序列', 'digits warn')
 
-// 5. Unknown free text → guidance chip.
+// 5. Ordinary free text → description chip (the home box now turns any prose into
+// an inline candidate lookup, so "unrecognised" is no longer a thing for words).
 got = await chips('p53 human')
-expectChip(got, '无法识别：请输入 UniProt ID', 'unknown warn')
+expectChip(got, '自然语言描述', 'description chip for free text')
 
 // 6. Batch: overflow + junk tokens both surfaced.
 const tenAccs = [
