@@ -10,7 +10,7 @@ import {
   searchUniprot,
   searchUniprotPreferred,
   slugForQuery,
-  UniprotError,
+  type UniprotError,
 } from '../protein-predictor/uniprot.mjs'
 
 let failed = 0

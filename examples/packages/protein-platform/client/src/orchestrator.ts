@@ -58,6 +58,84 @@ export function hasProductArtifact(t: Task): boolean {
   return paths.some((p) => /\.pdb$/i.test(p))
 }
 
+/** What the platform answers when the daemon asks for approval.
+ *
+ *  Mirrors the SDK's PermissionOutcome structurally instead of importing it —
+ *  the surface bundle has no business pulling the SDK in for a shape that only
+ *  ever crosses the wire as JSON. `allowed-permanent` is deliberately absent:
+ *  PermissionGate.answer only resolves allowed-once/allowed-session/rejected, so
+ *  a permanent verdict would silently fall back to **reject**. */
+export type ApprovalOutcome = { optionId: string } | { verdict: 'rejected' }
+
+/** Pick the permission option that says "go ahead".
+ *
+ *  THROWS NOTHING AND MUST NOT: until 2026-10-15 this handler called
+ *  `session.answer(...)`, which does not exist on the SDK Session, so every
+ *  prompt raised a TypeError and PermissionGate.answer swallowed it and fell
+ *  back to rejectPermission — i.e. the platform auto-rejected every approval it
+ *  was ever asked for (12/12 rows in the VPS ledger, `user_rejected`, `via:
+ *  sync`). The agent was refused `predict_structure` on a ~200-aa domain split
+ *  even though those tools are `requiresApproval: "never"`, so long chains
+ *  dead-ended as `turn blocked`, and the ui1 run "hallucinating" a user refusal
+ *  was in fact reporting the truth. The handler's RETURN VALUE is the answer. */
+export function permissionOutcome(req: { options?: unknown } | undefined | null): ApprovalOutcome {
+  const options = (Array.isArray(req?.options) ? req.options : []).filter(
+    (o): o is { optionId: string; kind?: string } =>
+      !!o && typeof (o as { optionId?: unknown }).optionId === 'string',
+  )
+  const byKind = (k: string) => options.find((o) => o.kind === k)
+  const pick =
+    byKind('allow_once') ??
+    byKind('allow_always') ??
+    options.find((o) => /allow|proceed|approv|^yes$/i.test(o.optionId))
+  return pick ? { optionId: pick.optionId } : { verdict: 'rejected' }
+}
+
+/** One approval request, in the words the wall can show.
+ *
+ *  A task that dies on a refused approval used to read `turn blocked`, which
+ *  names neither the tool nor the fact that the platform was the one saying no.
+ *  Recovering the tool label is what makes that reason actionable. */
+export function describeApproval(
+  req: { toolCall?: Record<string, unknown> } | undefined | null,
+  options: readonly { optionId?: string; name?: string }[],
+  outcome: ApprovalOutcome,
+): string {
+  const tc = req?.toolCall ?? {}
+  const label = ['title', 'name', 'toolName', 'kind', 'toolCallId']
+    .map((k) => tc[k])
+    .find((v): v is string => typeof v === 'string' && v.length > 0)
+  const picked = 'optionId' in outcome ? options.find((o) => o.optionId === outcome.optionId) : undefined
+  return `${label ?? '未知工具'} → ${picked?.name ?? ('optionId' in outcome ? outcome.optionId : '拒绝')}`
+}
+
+/** The reason a non-completed turn shows the user.
+ *
+ *  Two defects met here. `blocked` rendered as the literal string `turn blocked`
+ *  — no tool, no cause, and no hint that the platform itself had refused.
+ *  And the stall watchdog's actionable text was clobbered: the watchdog aborts
+ *  the controller, the turn ends first with the transport's own
+ *  `This operation was aborted`, and the catch block's `status === 'running'`
+ *  guard then skipped the STALL_WATCHDOG message entirely — which also killed
+ *  the auto-retry, since isTransientError keys on that marker (the raw abort
+ *  text matches nothing in TRANSIENT_RE). Both now resolve here, and the
+ *  caller has already excluded user cancellations. */
+export function turnFailureReason(
+  ev: { reason?: string; error?: { message?: string } },
+  ctx: { approvals?: readonly string[]; stallMs?: number } = {},
+): string {
+  if (ev.reason === 'blocked') {
+    const last = ctx.approvals?.at(-1)
+    return last
+      ? `回合被中断：审批请求未获平台放行（${last}）。请重试，仍失败请反馈。`
+      : '回合被中断：审批请求未获平台放行，且平台未记录到请求内容。请重试，仍失败请反馈。'
+  }
+  const msg = ev.error?.message
+  if (ev.reason === 'aborted' || /abort/i.test(msg ?? ''))
+    return `STALL_WATCHDOG：超过 ${Math.round((ctx.stallMs ?? 180_000) / 1000)}s 无任何事件，会话已中止重试`
+  return msg ?? `回合 ${ev.reason} 结束（无进一步信息）`
+}
+
 function load(): Task[] {
   try {
     const rows = JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') as Task[]
@@ -162,11 +240,14 @@ const cancelledTasks = new Set<string>()
 // and the boot-time reattach replay (a page switch/reload kills the in-page
 // event loop; the daemon-side session kept going — replay lands the task on its
 // true outcome instead of 运行中 forever). Returns true when the turn ended.
-// isCancelled lets the live loop keep its stall-aware cancel semantics.
+// isCancelled lets the live loop keep its stall-aware cancel semantics; ctx
+// carries what only the live loop knows (the approvals it answered, the stall
+// window it is running under) so a failure reason can name its cause.
 function reduceLedgerEvent(
   id: string,
   row: unknown,
   isCancelled: () => boolean = () => cancelledTasks.has(id),
+  ctx: { approvals?: readonly string[]; stallMs?: () => number } = {},
 ): boolean {
   const env = (row as { event?: unknown })?.event ?? row
   // Ledger envelopes carry their payload in `data` ({toolUseId,name,args} /
@@ -257,7 +338,9 @@ function reduceLedgerEvent(
         // gateway-flake retry below resubmits the task the user just cancelled.
         const cancelled = isCancelled()
         t.status = cancelled ? 'cancelled' : 'failed'
-        t.error = cancelled ? undefined : (ev.error?.message ?? `turn ${ev.reason}`)
+        t.error = cancelled
+          ? undefined
+          : turnFailureReason(ev, { approvals: ctx.approvals, stallMs: ctx.stallMs?.() })
       }
     })
     if (ev.reason === 'completed' && getTask(id)?.status === 'done') void archiveTask(id)
@@ -416,6 +499,11 @@ export async function runTask(
     let stallMs = STALL_MS
     let lastActivity = Date.now()
     let stalled = false
+    // Every approval this attempt was asked for, in order. A turn that ends
+    // "blocked" is the daemon saying an approval did not come back — naming the
+    // request is the difference between a card that reads `turn blocked` and one
+    // that reads what actually happened.
+    const approvals: string[] = []
     const watchdog = setInterval(() => {
       if (Date.now() - lastActivity > stallMs) {
         stalled = true
@@ -445,17 +533,13 @@ export async function runTask(
 
       session.onPermissionRequest((req: any) => {
         // Defense-in-depth consent: platform prompts are read-only science
-        // pipelines; answer allow so a non-chat UI never dead-ends. The profile
-        // approvals.mode remains the primary gate.
+        // pipelines and this is not a chat UI, so nothing here may dead-end on
+        // an approval. The RETURN value is the answer — see permissionOutcome()
+        // for what calling session.answer() instead cost us.
         const options = req?.options ?? req?.payload?.options ?? []
-        const allow = options.find((o: any) => /allow|proceed|approve/i.test(o?.kind ?? o?.optionId ?? ''))
-        if (allow)
-          void session
-            .answer({
-              requestId: req.requestId ?? req.id,
-              response: { optionId: allow.optionId ?? allow.kind },
-            })
-            .catch(() => {})
+        const outcome = permissionOutcome({ options })
+        approvals.push(describeApproval(req, options, outcome))
+        return outcome
       })
 
       void (async () => {
@@ -470,7 +554,10 @@ export async function runTask(
               (data.name === 'predict_complex' || data.name === 'batch_predict')
             )
               stallMs = 1_400_000
-            if (reduceLedgerEvent(id, row, isCancelled)) return
+            // stallMs is read at call time: the window widens the moment a
+            // Boltz fallback is observed, and the reason must quote the window
+            // that actually fired.
+            if (reduceLedgerEvent(id, row, isCancelled, { approvals, stallMs: () => stallMs })) return
           }
         } catch (e) {
           // Event stream died without a turn/end (transport close, session loss). A running
