@@ -50,8 +50,10 @@ while (Date.now() < deadline) {
   panelText = (await page.textContent('.pl-candidates').catch(() => '')) ?? ''
   if (panelText) seen.add(panelText.replace(/\s+/g, ' ').slice(0, 80))
   const settled =
-    (await page.locator('.pl-candidates .pv-search-row').count().catch(() => 0)) > 0 ||
-    /没有找到匹配的蛋白|未找到候选|检索超时|暂时不可用|连不上|出错/.test(panelText)
+    (await page
+      .locator('.pl-candidates .pv-search-row')
+      .count()
+      .catch(() => 0)) > 0 || /没有找到匹配的蛋白|未找到候选|检索超时|暂时不可用|连不上|出错/.test(panelText)
   if (settled) break
   await page.waitForTimeout(120)
 }
@@ -64,14 +66,14 @@ if (seen.size > 1 && !/正在理解/.test(stages))
 const rows = await page.locator('.pl-candidates .pv-search-row').count()
 const honest = /没有找到匹配的蛋白|未找到候选|检索超时|暂时不可用|连不上|出错/.test(panelText)
 console.log(`settled as: ${rows ? `${rows} candidate rows` : 'empty'}${honest ? ' (honest sentence)' : ''}`)
-if (!rows && !honest) fail.push(`settled with neither candidates nor an honest sentence: ${panelText.slice(0, 200)}`)
+if (!rows && !honest)
+  fail.push(`settled with neither candidates nor an honest sentence: ${panelText.slice(0, 200)}`)
 if (rows && honest) fail.push('candidates and a failure sentence shown at the same time')
 // A spinner that never stops is the failure mode this probe exists to catch.
 if (!rows && /正在检索|正在理解/.test(panelText)) fail.push('still spinning after the budget')
 
 const after = { tasks: (await tasks()).length, archive: await archiveCount() }
-if (after.tasks !== before.tasks)
-  fail.push(`fallback added a task row (${before.tasks} → ${after.tasks})`)
+if (after.tasks !== before.tasks) fail.push(`fallback added a task row (${before.tasks} → ${after.tasks})`)
 if (after.archive !== before.archive)
   fail.push(`fallback wrote an archive entry (${before.archive} → ${after.archive})`)
 console.log(`no trace (tasks ${before.tasks}→${after.tasks}, archive ${before.archive}→${after.archive})`)

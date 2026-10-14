@@ -82,7 +82,9 @@ const body = (await page.textContent('.pl-candidates').catch(() => '')) ?? ''
 if (!/P[0-9A-Z]{5}|HBB|HBA/.test(body)) fail.push(`candidate rows lack accessions: ${body.slice(0, 120)}`)
 const after = { tasks: (await tasks()).length, archive: await archiveCount() }
 if (after.tasks !== before.tasks || after.archive !== before.archive)
-  fail.push(`lookup left a trace (tasks ${before.tasks}→${after.tasks}, archive ${before.archive}→${after.archive})`)
+  fail.push(
+    `lookup left a trace (tasks ${before.tasks}→${after.tasks}, archive ${before.archive}→${after.archive})`,
+  )
 console.log(`archive: ${after.archive} entries (unchanged)`)
 
 await browser.close()

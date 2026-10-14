@@ -113,9 +113,9 @@ export function BenchView() {
       <div className="pl-wall-title">平台基准 · CASP14 公开靶标</div>
       <p className="pl-bench-note">
         用实验解析结构（PDB）给平台自己的预测打分，指标与国际评估同口径： <b>Cα-lDDT</b>（CASP/CAMEO
-        主指标，越高越好，0–1）与叠合后 <b>Cα-RMSD</b>（Å，越低越好）。 预测由本平台管线端到端产生（按链长自动选档：
-        短链走 ESMFold 单体档、400+ aa 长链与复合物走 Boltz-2 档），靶标序列取自 CASP14
-        官方序列文件，预测时对平台「盲测」。
+        主指标，越高越好，0–1）与叠合后 <b>Cα-RMSD</b>（Å，越低越好）。
+        预测由本平台管线端到端产生（按链长自动选档： 短链走 ESMFold 单体档、400+ aa 长链与复合物走 Boltz-2
+        档），靶标序列取自 CASP14 官方序列文件，预测时对平台「盲测」。
         校准图检查模型自信度是否诚实：每柱是落入该 pLDDT 区间的残基的实测 lDDT，柱高贴着对角线 = 自信度可信。
       </p>
       <table className="pl-bench-table">

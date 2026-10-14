@@ -51,7 +51,8 @@ if ((await predBtn.count()) === 0) {
   await predBtn.click()
   await page
     .waitForFunction(
-      (n) => JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]').filter((t) => t.type === 'single').length > n,
+      (n) =>
+        JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]').filter((t) => t.type === 'single').length > n,
       singles,
       { timeout: 20000 },
     )

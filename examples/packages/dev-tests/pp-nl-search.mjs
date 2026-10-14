@@ -57,7 +57,8 @@ const lookup = async (query, label) => {
     .then(() => console.log(`${label}: panel opened under the box`))
     .catch(() => fail.push(`${label}: no .pl-candidates panel after submit`))
   const hashAfterSubmit = await page.evaluate(() => location.hash)
-  if (hashAfterSubmit && hashAfterSubmit !== '#/') fail.push(`${label}: submit navigated to ${hashAfterSubmit}`)
+  if (hashAfterSubmit && hashAfterSubmit !== '#/')
+    fail.push(`${label}: submit navigated to ${hashAfterSubmit}`)
 
   await page
     .waitForSelector('.pl-candidates .pv-root .pv-search-row', { timeout: 150000 })
@@ -80,7 +81,9 @@ const lookup = async (query, label) => {
     fail.push(`${label}: lookup added a task row (${before.tasks} → ${after.tasks})`)
   if (after.archive !== before.archive)
     fail.push(`${label}: lookup wrote an archive entry (${before.archive} → ${after.archive})`)
-  console.log(`${label}: no trace (tasks ${before.tasks}→${after.tasks}, archive ${before.archive}→${after.archive})`)
+  console.log(
+    `${label}: no trace (tasks ${before.tasks}→${after.tasks}, archive ${before.archive}→${after.archive})`,
+  )
   return { tasks: before.tasks }
 }
 
@@ -103,63 +106,67 @@ const waitDone = async (label, timeout = 300000) => {
 await lookup('人类血红蛋白 α 链', 'single')
 await page.screenshot({ path: '/tmp/pp-nl-candidates.png' })
 if (fail.length === 0) {
-const beforeSingle = (await tasks()).filter((t) => t.type === 'single').length
-await page.click('.pl-candidates .pv-root .pv-search-predict')
-await page
-  .waitForFunction(
-    (n) => JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]').filter((t) => t.type === 'single').length > n,
-    beforeSingle,
-    { timeout: 20000 },
-  )
-  .then(() => console.log('row ▶ started a single task'))
-  .catch(() => fail.push('row ▶ did not start a single task'))
-const afterSingle = (await tasks()).filter((t) => t.type === 'single').length
-if (afterSingle !== beforeSingle + 1)
-  fail.push(`expected exactly 1 new single task (${beforeSingle} → ${afterSingle})`)
-await page.waitForFunction(() => location.hash === '#/tasks', { timeout: 10000 }).catch(() => {})
-await page.waitForSelector('.pl-tasklist a.pl-taskrow', { timeout: 20000 })
-if ((await waitDone('single prediction')) === '已完成') {
-  await page.click('a.pl-taskrow')
-  await page.waitForSelector('.pl-result', { timeout: 15000 })
+  const beforeSingle = (await tasks()).filter((t) => t.type === 'single').length
+  await page.click('.pl-candidates .pv-root .pv-search-predict')
   await page
-    .waitForSelector('.pv-root canvas', { timeout: 90000 })
-    .then(() => console.log('structure panel: canvas rendered'))
-    .catch(() => fail.push('no canvas after candidate prediction'))
-  await page.screenshot({ path: '/tmp/pp-nl-single.png' })
-}
+    .waitForFunction(
+      (n) =>
+        JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]').filter((t) => t.type === 'single').length > n,
+      beforeSingle,
+      { timeout: 20000 },
+    )
+    .then(() => console.log('row ▶ started a single task'))
+    .catch(() => fail.push('row ▶ did not start a single task'))
+  const afterSingle = (await tasks()).filter((t) => t.type === 'single').length
+  if (afterSingle !== beforeSingle + 1)
+    fail.push(`expected exactly 1 new single task (${beforeSingle} → ${afterSingle})`)
+  await page.waitForFunction(() => location.hash === '#/tasks', { timeout: 10000 }).catch(() => {})
+  await page.waitForSelector('.pl-tasklist a.pl-taskrow', { timeout: 20000 })
+  if ((await waitDone('single prediction')) === '已完成') {
+    await page.click('a.pl-taskrow')
+    await page.waitForSelector('.pl-result', { timeout: 15000 })
+    await page
+      .waitForSelector('.pv-root canvas', { timeout: 90000 })
+      .then(() => console.log('structure panel: canvas rendered'))
+      .catch(() => fail.push('no canvas after candidate prediction'))
+    await page.screenshot({ path: '/tmp/pp-nl-single.png' })
+  }
 }
 
 // --- multi-select: tick two rows, use the batch bar -------------------------
 if (fail.length === 0) {
-await lookup('hemoglobin human', 'batch')
-const beforeBatch = (await tasks()).filter((t) => t.type === 'batch').length
-await page.locator('.pv-search-row .pv-search-check').nth(0).click()
-await page.locator('.pv-search-row .pv-search-check').nth(1).click()
-const bar = page.locator('.pl-candidates .pv-batchbar button', { hasText: '批量预测所选' })
-await bar
-  .waitFor({ timeout: 10000, state: 'visible' })
-  .then(async () => {
-    const text = await bar.textContent()
-    console.log('batch bar:', text)
-    if (!/（2）/.test(text ?? '')) fail.push(`batch bar did not count 2 selections: ${text}`)
-  })
-  .catch(() => fail.push('batch bar did not appear after ticking two rows'))
-if (fail.length === 0) {
-  await bar.click()
-  await page
-    .waitForFunction(
-      (n) => JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]').filter((t) => t.type === 'batch').length > n,
-      beforeBatch,
-      { timeout: 20000 },
-    )
-    .then(() => console.log('batch bar started a batch task'))
-    .catch(() => fail.push('batch bar did not start a batch task'))
-}
-const afterBatch = (await tasks()).filter((t) => t.type === 'batch').length
-if (afterBatch !== beforeBatch + 1) fail.push(`expected exactly 1 new batch task (${beforeBatch} → ${afterBatch})`)
-await page.waitForSelector('.pl-tasklist a.pl-taskrow', { timeout: 20000 })
-await waitDone('batch prediction')
-await page.screenshot({ path: '/tmp/pp-nl-batch.png' })
+  await lookup('hemoglobin human', 'batch')
+  const beforeBatch = (await tasks()).filter((t) => t.type === 'batch').length
+  await page.locator('.pv-search-row .pv-search-check').nth(0).click()
+  await page.locator('.pv-search-row .pv-search-check').nth(1).click()
+  const bar = page.locator('.pl-candidates .pv-batchbar button', { hasText: '批量预测所选' })
+  await bar
+    .waitFor({ timeout: 10000, state: 'visible' })
+    .then(async () => {
+      const text = await bar.textContent()
+      console.log('batch bar:', text)
+      if (!/（2）/.test(text ?? '')) fail.push(`batch bar did not count 2 selections: ${text}`)
+    })
+    .catch(() => fail.push('batch bar did not appear after ticking two rows'))
+  if (fail.length === 0) {
+    await bar.click()
+    await page
+      .waitForFunction(
+        (n) =>
+          JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]').filter((t) => t.type === 'batch').length >
+          n,
+        beforeBatch,
+        { timeout: 20000 },
+      )
+      .then(() => console.log('batch bar started a batch task'))
+      .catch(() => fail.push('batch bar did not start a batch task'))
+  }
+  const afterBatch = (await tasks()).filter((t) => t.type === 'batch').length
+  if (afterBatch !== beforeBatch + 1)
+    fail.push(`expected exactly 1 new batch task (${beforeBatch} → ${afterBatch})`)
+  await page.waitForSelector('.pl-tasklist a.pl-taskrow', { timeout: 20000 })
+  await waitDone('batch prediction')
+  await page.screenshot({ path: '/tmp/pp-nl-batch.png' })
 }
 
 await browser.close()
