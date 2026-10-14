@@ -1,13 +1,14 @@
 // Screenshots + DOM contract for the login landing page.
 //
-//   node --import tsx pp-login-shots.mts [outDir]
+//   node --import tsx pp-login-shots.mts [outDir]              # local renderer
+//   PP_BASE=http://118.25.194.247/ node … pp-login-shots.mts   # deployed page
 //
-// Starts the REAL web-server (`createWebServer`) on a scratch port and drives
-// GET /login, so what is captured is the shipped renderer, not a copy of the
-// markup. The contract half matters as much as the pixels: pp-login.mjs drives
-// the form by `#user`/`#password`/`button[type=submit]` and pp-guest-gate.mjs
-// depends on the same, so a prettier page that renames a field would break the
-// deploy probes silently.
+// Local mode starts the REAL web-server (`createWebServer`) on a scratch port;
+// live mode points at the public login page instead. Either way it drives the
+// shipped renderer rather than a copy of the markup, which is what makes the
+// contract half meaningful: pp-login.mjs fills `#user`/`#password` and clicks
+// `button[type=submit]`, and pp-guest-gate.mjs depends on the same, so a
+// prettier page that renamed a field would break the deploy probes silently.
 import { mkdirSync } from 'node:fs'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -18,9 +19,16 @@ import { createWebServer } from '../../../packages/web-server/src/server.ts'
 const outDir = process.argv[2] ?? '/tmp/pp-login-shots'
 mkdirSync(outDir, { recursive: true })
 
-const root = await mkdtemp(join(tmpdir(), 'pp-login-root-'))
+const liveOrigin = process.env.PP_BASE ? new URL(process.env.PP_BASE).origin : null
+const root = liveOrigin ? null : await mkdtemp(join(tmpdir(), 'pp-login-root-'))
 const port = 44177
-const web = await createWebServer({ root, wsUrl: 'ws://127.0.0.1:1/agnesd', port })
+// The login page lives at the proxy root in both modes — the platform surface
+// is a mount under /platform/, never the login endpoint itself.
+const web = liveOrigin
+  ? null
+  : await createWebServer({ root: root ?? '', wsUrl: 'ws://127.0.0.1:1/agnesd', port })
+const loginUrl = liveOrigin ? `${liveOrigin}/login` : `http://127.0.0.1:${port}/login`
+if (liveOrigin) console.log(`live mode: ${loginUrl}`)
 
 const failures: string[] = []
 const ok = (name: string, cond: boolean, extra = '') => {
@@ -42,7 +50,7 @@ const shots: Shot[] = [
 
 for (const shot of shots) {
   const page = await browser.newPage({ viewport: { width: shot.width, height: shot.height } })
-  const res = await page.goto(`http://127.0.0.1:${port}/login${shot.query}`, { waitUntil: 'load' })
+  const res = await page.goto(`${loginUrl}${shot.query}`, { waitUntil: 'load' })
   ok(`${shot.name}: 200`, res?.status() === 200, String(res?.status()))
   // The three-selector contract the deploy probes drive.
   for (const [label, sel] of [
@@ -79,7 +87,7 @@ for (const shot of shots) {
 
 // The error variant must still say so, in the same box as the form.
 const errPage = await browser.newPage({ viewport: { width: 1440, height: 900 } })
-await errPage.goto(`http://127.0.0.1:${port}/login?error=1`)
+await errPage.goto(`${loginUrl}?error=1`)
 ok('error: message shown', await errPage.locator('.error').first().isVisible())
 ok(
   'error: text is the honest one',
@@ -88,7 +96,7 @@ ok(
 await errPage.close()
 
 await browser.close()
-await web.close()
+await web?.close()
 console.log(
   failures.length === 0 ? `login shots: PASS → ${outDir}` : `login shots: ${failures.length} FAILURES`,
 )
