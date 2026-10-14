@@ -5,6 +5,7 @@ import { initServices } from './bff.ts'
 import { Shell } from './components/chrome.tsx'
 import { loadConfig, type PlatformConfig } from './config.ts'
 import { BatchView } from './views/batch.tsx'
+import { BenchView } from './views/bench.tsx'
 import { HelpView } from './views/help.tsx'
 import { HomeView } from './views/home.tsx'
 import { ResultView } from './views/result.tsx'
@@ -40,6 +41,8 @@ async function boot() {
       view = h(BatchView, { ready: connected, cfg, sdk })
     } else if (hash.startsWith('#/search')) {
       view = h(SearchView, { ready: connected, cfg, sdk })
+    } else if (hash.startsWith('#/bench')) {
+      view = h(BenchView)
     } else if (hash.startsWith('#/help')) {
       view = h(HelpView)
     }

@@ -62,6 +62,9 @@ cpSync(join(pkg, 'client/theme-boot.js'), join(dist, 'theme.js'))
 // (inline scripts are CSP-blocked) — both served from the surface root.
 cpSync(join(pkg, 'client/sw.js'), join(dist, 'sw.js'))
 cpSync(join(pkg, 'client/sw-register.js'), join(dist, 'sw-register.js'))
+// Bench assets: CASP14 manifest + trimmed reference PDBs (api/bench reads them
+// relative to the bundled server.mjs, i.e. dist/bench/).
+cpSync(join(pkg, 'server/bench'), join(dist, 'bench'), { recursive: true })
 renameSync(join(dist, 'server.js'), join(dist, 'server.mjs'))
 // Pin asset URLs to their content hash (?v=…): the public chain serves them
 // with a long immutable cache (Caddy header rule), so repeat visits skip the

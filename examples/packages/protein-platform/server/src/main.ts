@@ -13,6 +13,7 @@ import {
   listArchive,
   putArchive,
 } from './archive.ts'
+import { benchReport } from './bench.ts'
 
 // AGH Surface: serves the platform SPA + archive API under the mount prefix
 // (default /platform). The daemon allocates the loopback PORT and passes the
@@ -167,6 +168,12 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     } catch (e) {
       send(res, 400, JSON.stringify({ error: (e as Error).message }))
     }
+    return
+  }
+  if (rel === 'api/bench' && req.method === 'GET') {
+    // CASP14 benchmark: rows + pLDDT→lDDT calibration. Scored on demand from
+    // archives (title-matched CASP14-<target>) against the shipped references.
+    send(res, 200, JSON.stringify(benchReport()))
     return
   }
   if (rel.startsWith('api/archive')) {
