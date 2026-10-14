@@ -98,7 +98,10 @@ export function defaultTitle(type: TaskType, input: TaskInput): string {
     const shown = input.accessions.slice(0, 2).join(' · ')
     return `批量：${shown}${input.accessions.length > 2 ? ` 等 ${input.accessions.length} 个` : ''}`
   }
-  if (input.query) return `检索：${input.query}`
+  // A description handed to the prediction tabs is a prediction — only the 检索
+  // task is actually a search, and titling both 「检索：…」 read as if the platform
+  // had ignored the request to predict.
+  if (input.query) return type === 'search' ? `检索：${input.query}` : input.query
   if (input.accession) return input.accession
   if (input.name) return input.name
   if (input.sequence) return `自定义序列 · ${input.sequence.trim().length} aa`

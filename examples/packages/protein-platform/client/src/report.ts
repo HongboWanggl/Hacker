@@ -17,6 +17,10 @@ type ShareInput = {
   structure?: { residues?: StructureResidue[]; ligandAtoms?: StructureLigand[] }
   // Batch reports: one structure per job — the viewer grows a target tab bar.
   structures?: StructureSet[]
+  // Shown in place of the figures when there are none — the caller knows why
+  // (a UniProt search task has no structure at all; a share click that raced the
+  // stage mount is different), and the default text used to assert the wrong one.
+  figureNote?: string
 }
 
 type StructureResidue = { x: number; y: number; z: number; b: number; aa?: string; chain?: string }
@@ -49,7 +53,9 @@ function scoreColor(v?: number): string {
 
 /** Call this SYNCHRONOUSLY in the click handler — WebGL canvases only composite
  *  reliably while their frame is fresh, and any await before toDataURL risks a
- *  cleared buffer (or, worse, a stage remount replacing the canvases outright). */
+ *  cleared buffer (or, worse, a stage remount replacing the canvases outright).
+ *  The platform's own viewers are 2D painter canvases (bitmap persists), so the
+ *  freshness worry is really about a remount: never await *between* the lookups. */
 export function snapshotStageFigures(): StageFig[] {
   return [...document.querySelectorAll<HTMLCanvasElement>('.pl-stage-wrap canvas')]
     .map((c, i) => {
@@ -60,6 +66,25 @@ export function snapshotStageFigures(): StageFig[] {
       }
     })
     .filter((f): f is StageFig => !!f?.data)
+}
+
+/** Figures for a share report, waiting out the stage's async mount.
+ *
+ *  The stage is mounted from a dynamic import and only paints after the structure
+ *  fetch resolves, so a share click in that window used to capture nothing — and
+ *  the report blamed the canvas ("画布未渲染，快照为空") for what was really a race
+ *  the user could neither see nor wait out. Waiting here is safe: these viewers are
+ *  2D canvases whose bitmap survives, unlike a WebGL buffer read a frame late. */
+export async function captureStageFigures(waitMs = 12_000): Promise<StageFig[]> {
+  const immediate = snapshotStageFigures()
+  if (immediate.length > 0) return immediate
+  const until = Date.now() + waitMs
+  while (Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 200))
+    const figs = snapshotStageFigures()
+    if (figs.length > 0) return figs
+  }
+  return []
 }
 
 export function downloadShareReport(input: ShareInput & { figs?: StageFig[] }): void {
@@ -80,6 +105,9 @@ export function downloadShareReport(input: ShareInput & { figs?: StageFig[] }): 
         `<figure><img src="${f.data}" alt="${esc(f.caption)}" /><figcaption>${esc(f.caption)}</figcaption></figure>`,
     )
     .join('\n')
+  const figureBlock =
+    figsHtml ||
+    `<p class="meta">${esc(input.figureNote ?? '本报告未包含结构图快照（该任务没有可快照的结构视图）')}</p>`
 
   const reportHtml = input.report
     ? `<details><summary>完整报告数据（JSON）</summary><pre>${esc(JSON.stringify(input.report, null, 2))}</pre></details>`
@@ -301,7 +329,7 @@ export function downloadShareReport(input: ShareInput & { figs?: StageFig[] }): 
   <div class="meta">任务 ${esc(input.taskId)} · ${esc(when)} · 由蛋白质预测工作台生成</div>
   <div class="hero">${scoreBlock}</div>
   ${viewerHtml}
-  ${figsHtml || '<p class="meta">（本报告生成时画布未渲染，快照为空）</p>'}
+  ${figureBlock}
   ${reportHtml}
   <footer>pLDDT 置信度色标：≥90 很高（深蓝）· 70–90 高（浅蓝）· 50–70 中（黄）· &lt;50 低（橙）</footer>
 </div>

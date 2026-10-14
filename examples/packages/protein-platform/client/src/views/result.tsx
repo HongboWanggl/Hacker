@@ -2,7 +2,7 @@ import { createElement as h, useCallback, useEffect, useMemo, useState } from 'r
 import { archivedServices, getServices, type PvServices, setServicesSession } from '../bff.ts'
 import { getTask, subscribeTasks } from '../orchestrator.ts'
 import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
-import { downloadShareReport, type StructureSet, snapshotStageFigures } from '../report.ts'
+import { captureStageFigures, downloadShareReport, type StructureSet } from '../report.ts'
 
 const STATUS_BADGE: Record<string, string> = {
   running: '运行中',
@@ -88,9 +88,10 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
     if (sharing) return
     setSharing(true)
     try {
-      // Figures FIRST, synchronously in the click tick — before any await can
-      // trigger the rerender/remount dance or clear the WebGL buffers.
-      const figs = snapshotStageFigures()
+      // Figures first — but the stage mounts asynchronously (dynamic import +
+      // structure fetch), so a click in that window must wait for the canvas
+      // rather than capture nothing and call it an unrendered canvas.
+      const figs = await captureStageFigures()
       // biome-ignore lint/suspicious/noExplicitAny: raw archived report payload, schema owned by the server
       let report: any
       try {
@@ -160,6 +161,16 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
         verdict,
         report,
         figs,
+        // Say why, truthfully: a UniProt search task never had a structure view
+        // to snapshot, which is not the same as a canvas that failed to render.
+        ...(figs.length > 0
+          ? {}
+          : {
+              figureNote:
+                type === 'search'
+                  ? '本任务为 UniProt 检索，产物是候选列表（见下方 JSON），没有结构图'
+                  : '本次未能捕获结构图快照（结构视图未就绪）；下方「完整报告数据」与评分不受影响',
+            }),
         ...(structures ? { structures } : structure ? { structure } : {}),
       })
     } finally {
