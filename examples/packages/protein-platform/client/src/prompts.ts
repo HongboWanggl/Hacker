@@ -36,8 +36,16 @@ export function buildPrompt(type: TaskType, input: TaskInput): string {
       : `1) 调用 predict_structure 预测以下序列（name: ${name}）
 2) 调用 analyze_confidence 分析置信度并识别低置信区段
 3) 用一句话给出结论。`
+    // The length refusal is the one branch the numbered plan cannot survive:
+    // predict_structure refuses ≥1000 aa, so there is no PDB, and step 3 then
+    // fails on a path that was never written. Because the platform reports a
+    // failed task with its FIRST tool error (rootError), that second failure used
+    // to be the only thing the user saw — `Cannot read structures/Q02388.pdb` —
+    // burying the real cause, the residue count and the ceiling, which the tool
+    // had already stated perfectly. Stop at the refusal and say what it said.
     return `预测蛋白质三维结构。严格按步骤执行，不要询问任何问题：
 ${seq}
+如果 predict_structure 因序列过长而拒绝（上限 1000 aa）：立即停止后续步骤，不要调用 analyze_confidence —— 结构并不存在，那只会产生一个与真实原因无关的报错。请直接复述工具给出的原因（含具体残基数与上限），并说明可走的路线：改用不超过 1000 aa 的单个结构域或片段重新提交。
 ${input.sequence ? `\n序列：\n${input.sequence.trim()}\n` : ''}`
   }
   if (type === 'complex') {

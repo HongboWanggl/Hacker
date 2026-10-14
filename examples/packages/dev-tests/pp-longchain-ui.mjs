@@ -11,8 +11,9 @@
 // reason, and the absence of a 3D slot that has nothing behind it.
 //
 // Two entry points for the same wall: a UniProt ID (sequence fetched by the
-// agent first) and a pasted raw sequence. Both must settle as failed with a
-// reason, and neither may render a figure.
+// agent first) and a pasted raw sequence. Either may settle 已完成 — as long as a
+// structure is actually there — but a run that produced nothing must settle with
+// a reason that names its cause, and never with a shrug.
 import { chromium } from '/tmp/node_modules/playwright-core/index.mjs'
 import { loginViaUi } from './pp-login.mjs'
 
@@ -23,7 +24,11 @@ if (!creds.username) {
   process.exit(2)
 }
 
-const SETTLE_TIMEOUT_MS = 8 * 60_000
+// Long enough for a domain-split Boltz run to finish: single-type tasks widen
+// their watchdog to the complex window once predict_complex is observed, and the
+// platform's own cap is 20 minutes. A shorter settle would report "still running"
+// as a failure and hide the very outcome we are testing for.
+const SETTLE_TIMEOUT_MS = 24 * 60_000
 const syn = (n) => 'MKTAYIAKQRQISFVKSHFSRQ'.repeat(Math.ceil(n / 22)).slice(0, n)
 
 const fail = []
@@ -50,9 +55,21 @@ const cardHasFig = (id) => page.locator(`a.pl-card[href="#/task/${id}"] .pl-card
 
 // The wall is this browser's own record; run against a fresh context per case so
 // "which card is mine" is never a guess.
+//
+// `useless` is the 2026-10-15 regression in one regex: `turn blocked` named no
+// tool and no cause, and `This operation was aborted` hid the stall watchdog
+// (and, because neither matched TRANSIENT_RE, silently disabled the auto-retry).
+// A card may fail, but it may not fail with a shrug.
+const USELESS = /^\s*(turn blocked|This operation was aborted|aborted|unknown|error)\s*$/i
 const cases = [
-  { id: 'ui1-uniprot-2944', label: 'UniProt ID Q02388（COL7A1 2944 aa）', text: 'Q02388', want: /1000/ },
-  { id: 'ui2-pasted-2944', label: '粘贴原始序列 2944 aa', text: syn(2944), want: /1000/ },
+  {
+    id: 'ui1-uniprot-2944',
+    label: 'UniProt ID Q02388（COL7A1 2944 aa）',
+    text: 'Q02388',
+    want: /1000/,
+    useless: USELESS,
+  },
+  { id: 'ui2-pasted-2944', label: '粘贴原始序列 2944 aa', text: syn(2944), want: /1000/, useless: USELESS },
 ]
 
 for (const c of cases) {
@@ -94,17 +111,41 @@ for (const c of cases) {
   )
 
   ok(`${c.id}: settled (not still running)`, row.status !== 'running')
-  // THE regression: a run that produced no structure must never read 已完成.
-  ok(`${c.id}: NOT marked 已完成`, row.status !== 'done', `status=${row.status}`)
-  ok(`${c.id}: carries a reason`, typeof reason === 'string' && reason.trim().length > 0)
-  ok(`${c.id}: reason names the ceiling`, c.want.test(reason), reason.slice(0, 120))
 
   // …and the card the eye lands on agrees with the row.
   const text = await cardText(mine.id)
-  ok(`${c.id}: card does not claim 已完成`, !text.includes('已完成'), text.replace(/\s+/g, ' ').slice(0, 80))
-  ok(`${c.id}: card has no empty 3D slot`, (await cardHasFig(mine.id)) === 0)
-  // Opening it must not be a dead end either: the detail page carries the error
-  // banner and the 失败 badge, not a stale 已完成.
+  const figs = await cardHasFig(mine.id)
+  const done = row.status === 'done'
+  ok(
+    `${c.id}: card text agrees with the row`,
+    done === text.includes('已完成'),
+    text.replace(/\s+/g, ' ').slice(0, 80),
+  )
+  // THE regression, and the only shape that actually matters: 已完成 is a claim
+  // about a structure, so it must be backed by one. The inverse is NOT required
+  // — since approvals flow again the agent can take the domain-split route it
+  // was previously refused, so a long chain may legitimately finish as done.
+  ok(`${c.id}: a 已完成 row renders a structure`, !done || figs > 0, `status=${row.status} figs=${figs}`)
+  // A run with nothing behind it must say why, and say something USEFUL.
+  ok(`${c.id}: carries a reason`, typeof reason === 'string' && reason.trim().length > 0)
+  ok(
+    `${c.id}: reason is not a useless literal`,
+    !c.useless.test(reason),
+    JSON.stringify(reason).slice(0, 120),
+  )
+  ok(
+    `${c.id}: reason explains itself`,
+    done || reason.trim().length >= 12,
+    JSON.stringify(reason).slice(0, 120),
+  )
+  // Soft: a fold that died with no artifact should still name the ceiling. It is
+  // a warning rather than a failure because the ceiling is the tool's business
+  // (pp-longchain-e2e.mts asserts it where the tool text is observable) while
+  // this probe owns what the user sees.
+  if (!done && figs === 0 && !c.want.test(reason))
+    console.log(`  ~  ${c.id}: reason does not name the ceiling: ${JSON.stringify(reason).slice(0, 140)}`)
+
+  // Opening it must not be a dead end either.
   await page.goto(`${base}#/task/${mine.id}`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(2500)
   const banner =
@@ -119,15 +160,21 @@ for (const c of cases) {
       .first()
       .innerText()
       .catch(() => '')) ?? ''
-  ok(
-    `${c.id}: task page shows an error banner`,
-    banner.trim().length > 0,
-    banner.replace(/\s+/g, ' ').slice(0, 120),
-  )
-  ok(`${c.id}: task page names the ceiling`, c.want.test(banner), banner.replace(/\s+/g, ' ').slice(0, 120))
-  ok(`${c.id}: detail badge is not 已完成`, badge.trim() !== '已完成', badge)
-  // A failed row must be retryable and deletable, not stuck.
-  ok(`${c.id}: offers a retry`, (await page.locator('text=重新提交此任务').count()) > 0)
+  ok(`${c.id}: detail badge agrees with the row`, (badge.trim() === '已完成') === done, badge)
+  if (!done) {
+    ok(
+      `${c.id}: task page shows an error banner`,
+      banner.trim().length > 0,
+      banner.replace(/\s+/g, ' ').slice(0, 120),
+    )
+    ok(
+      `${c.id}: task page banner is not a useless literal`,
+      !c.useless.test(banner),
+      banner.replace(/\s+/g, ' ').slice(0, 120),
+    )
+    // A failed row must be retryable and deletable, not stuck.
+    ok(`${c.id}: offers a retry`, (await page.locator('text=重新提交此任务').count()) > 0)
+  }
   await page.screenshot({ path: `/tmp/pp-longchain-ui-${c.id}.png`, fullPage: false })
 }
 

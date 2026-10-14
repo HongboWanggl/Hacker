@@ -31,8 +31,16 @@ export type Task = {
   updatedAt: number
   error?: string
   /** last errored tool result (truncated) — a completed turn with zero
-   *  artifacts and a recorded error is a FAILED task, not a fake done. */
+   *  artifacts and a recorded error is a FAILED task, not a fake done. Used for
+   *  the retry judgement, where any transient symptom should count. */
   lastError?: string
+  /** FIRST errored tool result: the CAUSE. In an agent pipeline the earliest
+   *  failure is what broke the plan and the later ones are its consequences, so
+   *  this — not lastError — is what the user is shown. The 2944-aa Q02388 run is
+   *  the example: the cause was `Sequence too long (2944 residues); … ceiling for
+   *  predict_complex`, but the newest error was a downstream
+   *  `Cannot read structures/Q02388.pdb` for a file that was never written. */
+  rootError?: string
 }
 
 const LS_KEY = 'pp-tasks-v1'
@@ -243,7 +251,9 @@ const cancelledTasks = new Set<string>()
 // isCancelled lets the live loop keep its stall-aware cancel semantics; ctx
 // carries what only the live loop knows (the approvals it answered, the stall
 // window it is running under) so a failure reason can name its cause.
-function reduceLedgerEvent(
+// Exported so dev-tests/pp-task-reason-unit.mts can drive the real reducer
+// against scripted ledgers instead of restating its rules.
+export function reduceLedgerEvent(
   id: string,
   row: unknown,
   isCancelled: () => boolean = () => cancelledTasks.has(id),
@@ -307,7 +317,12 @@ function reduceLedgerEvent(
     patch(id, (t) => {
       const st = [...t.stages].reverse().find((s) => s.status === 'running')
       if (st) st.status = ev.isError ? 'error' : 'done'
-      if (ev.isError) t.lastError = text.slice(0, 400)
+      if (ev.isError) {
+        // Both, on purpose: rootError is the cause and is what the user is
+        // shown; lastError is the newest symptom and is what decides a retry.
+        if (!t.rootError) t.rootError = text.slice(0, 400)
+        t.lastError = text.slice(0, 400)
+      }
       if (!ev.isError) {
         if (savedTo) t.savedTo[ev.toolUseId ?? st?.tool ?? '?'] = savedTo
         // The result page renders the confidence report; prefer it over any
@@ -328,10 +343,14 @@ function reduceLedgerEvent(
         // not a structure (Q02388, 2026-10-15).
         if (!hasProductArtifact(t)) {
           t.status = 'failed'
-          t.error = t.lastError ?? '回合结束但没有产出结构或报告'
+          // The CAUSE first. Showing only the newest error told the 2944-aa
+          // Q02388 user that a PDB could not be read, when the tool had already
+          // said the sequence was too long and by how much.
+          t.error = t.rootError ?? t.lastError ?? '回合结束但没有产出结构或报告'
         } else {
           t.status = 'done'
           t.lastError = undefined
+          t.rootError = undefined
         }
       } else if (t.status === 'running') {
         // A user cancel settles as 已取消 — and must NOT read as failed, or the
@@ -636,7 +655,10 @@ export async function runTask(
           // FASTA must not veto the retry of a failed fold (Q02388).
           !!t &&
           !hasProductArtifact(t) &&
-          isTransientError(t.error ?? t.lastError)
+          // Either end of the error chain: t.error is now the CAUSE, so a
+          // transient symptom that came later must still be able to earn a
+          // retry rather than being masked by a deterministic first failure.
+          (isTransientError(t.error) || isTransientError(t.lastError))
         if (!retryable) break
         console.log(
           `[platform] attempt ${n} failed transiently (${(t!.error ?? '').slice(0, 120)}), auto-retrying`,
@@ -650,6 +672,10 @@ export async function runTask(
           t2.resultSavedTo = undefined
           t2.resultJson = undefined
           t2.previewTail = ''
+          // A fresh attempt gets a fresh cause; a stale rootError would be
+          // reported as the reason for a failure it had nothing to do with.
+          t2.lastError = undefined
+          t2.rootError = undefined
         })
       }
     } finally {
@@ -702,6 +728,7 @@ export async function reattachRunningTasks(sdk: DaemonLink): Promise<void> {
         t2.resultSavedTo = undefined
         t2.resultJson = undefined
         t2.lastError = undefined
+        t2.rootError = undefined
       })
       runners.set(id, () => {
         cancelledTasks.add(id)
