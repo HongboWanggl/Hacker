@@ -43,12 +43,26 @@ for (const t of targets) {
     continue
   }
   console.log(`${t.id} (${t.length} aa): submitting…`)
-  await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
-  await page.waitForSelector('.pl-composer textarea', { timeout: 20000 })
-  await page.fill('.pl-composer textarea', t.sequence)
-  await page.fill('.pl-input-name', title)
-  await page.click('.pl-submit')
-  await page.waitForSelector('.pl-tasklist, .pl-card', { timeout: 15000 })
+  // Submit can flake when the WS link is still reconnecting after the previous
+  // task (submit button stays disabled) — reload and retry once before giving up.
+  let submitted = false
+  for (let attempt = 0; attempt < 2 && !submitted; attempt++) {
+    await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
+    await page.waitForSelector('.pl-composer textarea', { timeout: 20000 })
+    await page.fill('.pl-composer textarea', t.sequence)
+    await page.fill('.pl-input-name', title)
+    try {
+      await page.click('.pl-submit', { timeout: 20000 })
+      await page.waitForSelector('.pl-tasklist, .pl-card', { timeout: 15000 })
+      submitted = true
+    } catch {
+      console.log(`${t.id}: submit attempt ${attempt + 1} failed${attempt ? ' — giving up' : ' — reloading and retrying'}`)
+    }
+  }
+  if (!submitted) {
+    results.push({ id: t.id, outcome: 'submit-failed' })
+    continue
+  }
 
   await page.goto(`${base}#/tasks`, { timeout: 15000 })
   const outcome = await page
