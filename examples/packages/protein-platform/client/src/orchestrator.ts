@@ -68,6 +68,17 @@ export function getTasks(): Task[] {
   return tasks
 }
 
+/** Drop this browser's failed/cancelled task rows. The server archive only ever
+ *  holds completed tasks, so these rows are local scratch — clearing them is a
+ *  view tidy-up, never an evidence change (archived runs are untouched). */
+export function clearFailedTasks(): number {
+  const before = tasks.length
+  tasks = tasks.filter((t) => t.status !== 'failed' && t.status !== 'cancelled')
+  const removed = before - tasks.length
+  if (removed > 0) emit()
+  return removed
+}
+
 export function getTask(id: string): Task | undefined {
   return tasks.find((t) => t.id === id)
 }

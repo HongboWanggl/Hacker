@@ -1,7 +1,7 @@
 import { type MouseEvent, useEffect, useState } from 'react'
 import { type ArchiveMeta, listArchive } from '../bff.ts'
 import { StructureThumb } from '../components/thumb.tsx'
-import { cancelTask, getTasks, subscribeTasks, type Task } from '../orchestrator.ts'
+import { cancelTask, clearFailedTasks, getTasks, subscribeTasks, type Task } from '../orchestrator.ts'
 import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
 
 const STATUS_BADGE: Record<string, string> = {
@@ -182,6 +182,20 @@ export function TasksView() {
       alive = false
     }
   }, [])
+  // Failed/cancelled rows are this browser's own scratch (archives only hold
+  // completed tasks), so "clear failed" is a local tidy-up with the same
+  // two-click arming as the archive ✕ — no modal, no accidental wipes.
+  const [clearArmed, setClearArmed] = useState(false)
+  const failCount = tasks.filter((t) => t.status === 'failed' || t.status === 'cancelled').length
+  const clearFailed = () => {
+    if (!clearArmed) {
+      setClearArmed(true)
+      setTimeout(() => setClearArmed(false), 4000)
+      return
+    }
+    setClearArmed(false)
+    clearFailedTasks()
+  }
   const types: Array<'all' | TaskType> = ['all', 'single', 'complex', 'batch', 'search', 'compare']
   const countFor = (k: 'all' | TaskType) =>
     k === 'all'
@@ -192,6 +206,16 @@ export function TasksView() {
       <div className="pl-wall-title">
         全部任务{' '}
         <small>· {ql || filter !== 'all' ? `${liveF.length + historyF.length} / ${total}` : total}</small>
+        {failCount > 0 && (
+          <button
+            type="button"
+            className={`pl-row-del pl-clear-failed${clearArmed ? ' armed' : ''}`}
+            onClick={clearFailed}
+            title="清除本机浏览器里的失败/取消记录（服务器归档的已完成任务不受影响）"
+          >
+            {clearArmed ? '确认清除' : `清除失败记录 ×${failCount}`}
+          </button>
+        )}
       </div>
       {!loaded ? (
         <div className="pl-empty">正在加载历史归档…</div>

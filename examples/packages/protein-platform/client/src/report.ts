@@ -252,7 +252,7 @@ export function downloadShareReport(input: ShareInput & { figs?: StageFig[] }): 
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${esc(input.title)} · 蛋白质结构预测报告</title>
+<title>${esc(input.title)} · ProteinLens 蛋白透镜报告</title>
 <style>
   body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, 'PingFang SC', sans-serif;
          color: #1f2430; background: #f6f7f9; }

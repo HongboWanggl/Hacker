@@ -343,6 +343,12 @@ html.dark .pl-composer textarea::placeholder {
   color: var(--pl-muted);
   font-weight: 400;
 }
+/* Local failed-row tidy-up: right-aligned chip in the title row. */
+.pl-wall-title .pl-clear-failed {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 5px 9px;
+}
 
 .pl-wall {
   display: grid;

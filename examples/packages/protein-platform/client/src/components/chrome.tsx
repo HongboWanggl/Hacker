@@ -62,7 +62,7 @@ export function TopBar({ connected }: { connected: boolean }) {
     <header className="pl-topbar">
       <div className="pl-brand">
         <div className="pl-brand-mark">🧬</div>
-        蛋白质结构预测平台
+        ProteinLens 蛋白透镜
       </div>
       <nav className="pl-nav">
         {links.map((l) => (
