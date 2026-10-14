@@ -1,9 +1,37 @@
 # 交接文档：蛋白质平台迭代（2026-10-13）
 
-> 状态：**算力路由二期 + 夜班三修全量上线（2026-10-13 深夜，第 21 轮）**——VPS 分发链
-> 头插 GPU worker 档（探活 1.5s → 22min 上限 → 任何失败静默落回原链）；「没有可展示
-> 的结果」双根因修复（VPS 无算力 + 假完成语义）；复制三按钮 http 兜底（execCommand +
-> 下载）。全链路真测绿，公网站点可直接验收。用户指示：夜班自治，明早验收。
+> 状态：**切页恢复 + 内联报告 + 自然语言输入，公网全链验证通过（2026-10-14，第 22 轮）**——
+> 用户报的「有的预测不显示结构」「切页面任务就挂」两个 bug 已修；自然语言一句话描述 →
+> UniProt 候选 → 确认后预测 全流程在公网站点真测绿。用户上一轮疑问的 NL 候选预测「失败」
+> 复诊为瞬时故障：同一流程重跑全绿（检索→候选▶→预测已完成→PDB/置信度落盘→canvas 渲染）。
+
+## 追加完成项（第 22 轮：切页恢复 + 内联结构 + 自然语言输入）
+
+1. **切页/刷新不再打断预测**（commit 0224ac4）：根因是刷新后 orchestrator 不会重新挂到
+   运行中的 session——attach() 在监听器建立前就回放完了事件。修法：`reattachRunningTasks(sdk)`
+   在 boot 时对每个运行中任务走 `sdk.session.load()`（load 内部会 attach，回放行能到达监听器）；
+   事件归约抽成 `reduceLedgerEvent`（live 循环与 reattach 共用，消除双份漂移）；journal 耗尽
+   无 turn/end → failed；load 失败 → failed 带错误文本。
+2. **内联报告也能渲染结构**（同 commit）：predict_structure 的报告有时不落 savedTo（内联
+   JSON），此前结果页空态。现 orchestrator 在文本含 `"sequenceLength"` 时捕获 resultJson；
+   result.tsx 在无 savedTo 时用 `preview={task.resultJson}` 渲染 ToolViewStage；archiveTask
+   对 single/complex 缺 resultSavedTo 时回退 resultJson。
+3. **自然语言输入**（commit 11b77a4）：composer.ts 新增 `classifySingle`（fasta/accession/
+   sequence/short/junk/description 六分类，20-aa 字母表正则是核心判据），inspect 条与提交
+   路径共用同一分类器不会漂移。description → `search` 任务 → SearchCard 候选列表 →
+   每行 ▶ 一键预测（即确认步骤）。search prompt 把用户原话嵌进 prompt（否则 agent 反问
+   用户导致空转）。英文盲区：全由 AA 字母组成的英文词会读成过短序列——inspect 条会
+   显示该解读，用户可改述。
+4. **验证**：本地 pp-switch-page（提交→中途 reload→必须已完成+canvas）、pp-nl-search
+   （chip=自然语言→search 已完成→候选▶→预测已完成→canvas）全 PASS；公网 dbg 探针
+   全绿（savedTo 三件套齐、canvas rendered）。
+5. **NL 候选预测「失败」复诊**：首次公网跑出现 失败但 PDB 已产出、刷新后 canvas 又渲染
+   ——复跑同一流程全绿。结论：瞬时故障类别（与第 21 轮 complex 偶发失败同类），结果页
+   「↻ 重新提交」兜底即可，不改码。
+6. **部署**：VPS thin bundle ff 到 11b77a4（前置 551c94bf），agh-update-platform 重发 +
+   daemon/web 双重启。SSH 偶发 connection reset（重试即愈，与本轮改动无关）。
+7. **新探针**：`pp-switch-page.mjs`、`pp-nl-search.mjs`（公网可用：PP_BASE/PP_USER/PP_PASS）。
+
 
 ## 追加完成项（第 21 轮：算力路由二期 + 复合物结果 + 复制按钮）
 
