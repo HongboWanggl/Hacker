@@ -304,7 +304,7 @@ export const predictStructure = {
           return fail('Sequence contains invalid characters. Use single-letter amino-acid code.')
         if (seq.length > 1000)
           return fail(
-            `Sequence too long (${seq.length} residues); ESMFold endpoint handles short chains (<1000, ideally <400).`,
+            `Sequence too long (${seq.length} residues); ESMFold endpoint handles short chains (<1000, ideally <400) — and 1000 is the ceiling for predict_complex as well, so this target needs to be split into domains before any tier can fold it.`,
           )
         const label = name.replace(/[^A-Za-z0-9_.-]/g, '_')
         const res = await fetchRetry(tctx.net.fetch, ESMFOLD_URL, {
@@ -318,7 +318,7 @@ export const predictStructure = {
           // to the fallback instead of leaving a bare status code.
           const hint =
             res.status === 413 || res.status === 422
-              ? ` — chain too long for the free endpoint. For chains of 400+ residues use predict_complex (Boltz-2 folds single chains and runs locally without a key).`
+              ? ` — chain too long for the free endpoint. For chains of 400+ residues use predict_complex (Boltz-2 folds single chains and runs locally without a key), but only up to 1000 residues — past that the target must be split into domains.`
               : ''
           return fail(`ESMFold request failed: HTTP ${res.status}${hint}`)
         }

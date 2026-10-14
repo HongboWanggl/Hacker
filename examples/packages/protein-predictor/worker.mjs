@@ -85,7 +85,7 @@ const server = createServer(async (req, res) => {
     .then(async () => {
       const out = await runLocalBoltz({ proteins, smiles })
       if (out.missing) return json(res, 503, { error: 'boltz CLI not available on worker' })
-      if (out.error) return json(res, 502, { error: out.error })
+      if (out.error) return json(res, 502, { error: out.error, ...(out.terminal ? { terminal: true } : {}) })
       const pdb = await readFile(out.modelPdb, 'utf8')
       const paeNpz = out.paeNpz ? (await readFile(out.paeNpz)).toString('base64') : undefined
       json(res, 200, { pdb, ...(paeNpz ? { paeNpzB64: paeNpz } : {}), conf: out.conf, aff: out.aff })

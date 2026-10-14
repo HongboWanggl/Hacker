@@ -18,6 +18,15 @@ const Kind = Symbol.for('TypeBox.Kind')
 const BOLTZ_BASE = 'https://api.boltz.bio'
 const AA_RE = /^[ACDEFGHIKLMNPQRSTVWYBXZUO]+$/i
 const SMILES_MAX = 600
+// Ceiling for every tier this tool can route to, expressed in total residues.
+// All three engines bottom out at the same wall, so the ceiling is stated up
+// front instead of discovered after a 20-minute wait: the public ColabFold MSA
+// service must align the whole chain before Boltz-2 moves at all, and the 8 GB
+// worker card cannot hold a fold far past ~1000 residues. The longest target
+// this platform has actually completed is 408 aa (CASP14 T1024). Observed
+// 2026-10-15: a 2944-aa COL7A1 chain (Q02388) sat in the MSA step — 6 s of CPU
+// across 5 minutes, one open socket to the MSA server — until the cap killed it.
+const MAX_TIER_RESIDUES = 1000
 
 const writeMeta = {
   isReadOnly: false,
@@ -151,6 +160,11 @@ export async function runLocalBoltz({ proteins, smiles }) {
     const msg = String(error?.message ?? error)
     if (killed(error))
       return {
+        // `terminal` tells the caller this failure is a property of THIS input,
+        // not of this machine: retrying it anywhere else can only burn the same
+        // 20 minutes again. The worker reports it as terminal so the client can
+        // surface the reason instead of silently falling through.
+        terminal: true,
         error: `Local Boltz-2 timed out after 20 min (${msg.slice(0, 120)}). This target exceeds what the local weights finish on this machine within the cap — DO NOT retry with the same input, it will time out again. Either split the target into domain-sized pieces (≤ ~600 aa each) and predict those, or configure a Boltz API key (BOLTZ_API_KEY / secret store) for the hosted engine.`,
       }
     // The tail of the message carries the actual exception; the head is the exec line + progress bars.
@@ -280,9 +294,22 @@ export async function runWorkerBoltz({ proteins, smiles }) {
     // to answer (even with a compute error) before the client gives up.
     const res = await workerPost('/predict', JSON.stringify({ proteins, smiles }), headers, 22 * 60_000)
     if (res.status !== 200) {
-      // 5xx compute error → legacy chain takes it, but keep the reason visible:
-      // the old silent return made worker failures masquerade as "needs API key".
       console.warn(`[boltz] worker /predict ${res.status}: ${res.body.slice(0, 200)}`)
+      // Two kinds of 5xx, and they must not be conflated:
+      //  · infrastructure (503 no CLI / 500 crash) → transient, the worker is an
+      //    accelerator and never a dependency, so fall through as before;
+      //  · `terminal` compute failure (the worker hit its own 20-minute cap) →
+      //    the input is the problem, not the machine. Falling through would run
+      //    the same doomed fold on the hosted API / VPS-local CLI and hand the
+      //    user a generic "needs a Boltz API key" hint instead of the worker's
+      //    actionable "split into ≤600 aa domains". Surface it as the reason.
+      let body
+      try {
+        body = JSON.parse(res.body)
+      } catch {
+        body = undefined
+      }
+      if (res.status === 502 && body?.terminal && body.error) return { terminalError: String(body.error) }
       return undefined
     }
     const out = JSON.parse(res.body)
@@ -484,7 +511,7 @@ export const predictComplex = {
     agnes.registerTool({
       name: 'predict_complex',
       description:
-        'Predict a protein complex or protein-ligand structure with Boltz-2 (co-folding). Handles multi-chain proteins, RNA/DNA, and small-molecule ligands; reports pTM/ipTM interface confidence and binding confidence. Uses the Boltz API when a key is configured (costs credits); otherwise runs the open-source weights locally via the boltz-community CLI (slow: minutes per target, first run downloads ~10 GB) — prefer predict_structure (ESMFold, free) for single-chain jobs under 400 residues; single chains of 400+ residues are accepted here as the long-chain fallback (ESMFold rejects those). Saves the best structure as a PDB with pLDDT in the B-factor column.',
+        'Predict a protein complex or protein-ligand structure with Boltz-2 (co-folding). Handles multi-chain proteins, RNA/DNA, and small-molecule ligands; reports pTM/ipTM interface confidence and binding confidence. Uses the Boltz API when a key is configured (costs credits); otherwise runs the open-source weights locally via the boltz-community CLI (slow: minutes per target, first run downloads ~10 GB) — prefer predict_structure (ESMFold, free) for single-chain jobs under 400 residues; single chains of 400+ residues are accepted here as the long-chain fallback (ESMFold rejects those), up to 1000 total residues — beyond that no configured tier can fold the chain and the tool refuses instead of stalling. Saves the best structure as a PDB with pLDDT in the B-factor column.',
       parameters: {
         [Kind]: 'Object',
         type: 'object',
@@ -530,6 +557,17 @@ export const predictComplex = {
         }
         const smiles = ligand_smiles.trim()
         if (smiles.length > SMILES_MAX) return fail(`SMILES too long (${smiles.length} chars).`)
+        // Upper bound, applied before any routing: a chain this size would be
+        // accepted, shipped to the GPU worker, and then die in MSA against the
+        // 20-minute cap — the user waits half an hour to be told what we can
+        // already compute here in microseconds.
+        const totalResidues = proteins.reduce((n, s) => n + s.length, 0)
+        if (totalResidues > MAX_TIER_RESIDUES)
+          return fail(
+            `Sequences too long for Boltz-2 (${totalResidues} residues across ${proteins.length} chain(s); this platform's ceiling is ${MAX_TIER_RESIDUES}). ` +
+              'A chain this size cannot get past the MSA step on the public ColabFold service, and the GPU tier runs out of memory well before it. ' +
+              'Split the target into domains (≤ ~600 aa each) and predict them separately, or paste an experimental structure for comparison instead.',
+          )
         // Single chain + no ligand is accepted only as the long-chain fallback:
         // the free ESMFold endpoint 413s past ~400 residues, and Boltz-2 folds
         // those single chains fine (locally or via the API).
@@ -545,9 +583,12 @@ export const predictComplex = {
         }
         const label = name.replace(/[^A-Za-z0-9_.-]/g, '_')
         // 算力路由第一档：GPU worker（家里机器经反向 SSH 隧道挂在回环端口）。
-        // 任何失败（隧道断/忙/算错）都静默落回下面的原链路——保底语义，对前端透明。
+        // 基建类失败（隧道断/忙/进程崩）静默落回下面的原链路——保底语义，对前端透明；
+        // 唯一例外是 `terminalError`（这个输入本身算不完）：那类失败在别的档位上
+        // 只会再烧一次同样的时间，所以直接把原因当作用户可见的失败返回。
         const t0 = Date.now()
         const workerOut = await runWorkerBoltz({ proteins, smiles })
+        if (workerOut?.terminalError) return fail(workerOut.terminalError)
         if (workerOut) {
           return finishBoltzResult({
             tctx,
