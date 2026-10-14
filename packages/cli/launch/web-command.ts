@@ -25,6 +25,7 @@ export type WebCommandOptions = {
   cwd?: string
   dataDir?: string
   port?: number
+  browserWsUrl?: string
 }
 
 function option(argv: readonly string[], name: string): string | undefined {
@@ -60,6 +61,28 @@ function portFromOrigin(value: string): number {
   return parsePort(origin.port)
 }
 
+/**
+ * Browser-facing daemon URL for a reverse-proxied deployment.
+ *
+ * The default is the daemon's own discovery URL, which is loopback — correct on a single machine,
+ * unreachable when the browser sits on the other side of a proxy. An operator who fronts the web
+ * server with a public host names the endpoint that host exposes (Caddy rewriting Host/Origin back
+ * to the daemon's loopback origin, which its local-authority check demands), e.g.
+ * `AGNES_WEB_WS_URL=ws://example.test/agnesd`.
+ */
+function publicWsUrl(value: string | undefined): string | undefined {
+  if (value === undefined || value === '') return undefined
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error('AGNES_WEB_WS_URL must be an absolute ws:// or wss:// URL')
+  }
+  if (url.protocol !== 'ws:' && url.protocol !== 'wss:')
+    throw new Error('AGNES_WEB_WS_URL must be an absolute ws:// or wss:// URL')
+  return url.toString()
+}
+
 export function parseWebCommand(
   argv: readonly string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -69,11 +92,13 @@ export function parseWebCommand(
   const cwd = option(argv, '--cwd')
   const dataDir = option(argv, '--data-dir')
   const selectedPort = option(argv, '--port')
+  const browserWsUrl = publicWsUrl(env.AGNES_WEB_WS_URL)
   return {
     ...(home ? { home } : {}),
     ...(profile ? { profile } : {}),
     ...(cwd ? { cwd } : {}),
     ...(dataDir ? { dataDir } : {}),
+    ...(browserWsUrl ? { browserWsUrl } : {}),
     port:
       selectedPort === undefined
         ? env.AGNES_WEB_ORIGIN
@@ -160,7 +185,8 @@ export async function runWebCommand(
     const authHome = parsed.home ?? (io.env ?? process.env).AGH_HOME
     web = await makeServer({
       root: resources.webRoot,
-      wsUrl: backend.web.url,
+      // Discovered loopback, unless the operator published the daemon through a proxy.
+      wsUrl: parsed.browserWsUrl ?? backend.web.url,
       port,
       origin,
       ...(authHome ? { authHome } : {}),

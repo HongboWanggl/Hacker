@@ -65,7 +65,25 @@ function daemonWsUrl(): string | null {
   }
 }
 
-function configJson(): string {
+/** Loopback and missing URLs are both unreachable from a browser behind a proxy. */
+function browserUnreachable(url: string | null): boolean {
+  if (!url) return true
+  try {
+    const host = new URL(url).hostname.replace(/^\[|\]$/g, '')
+    return host === '127.0.0.1' || host === '::1' || host === 'localhost'
+  } catch {
+    return false
+  }
+}
+
+// A loopback wsUrl served to a proxied request is a silent-broken deployment: the
+// browser dials its own machine and every live view sits at 「连接中…」 forever.
+// The fix is the publish-side pin (PP_SURFACE_WS_URL -> deploy surfaces config);
+// the platform never sees the public hostname, so all it can do is say so — once,
+// loudly, because the symptom itself looks like "the daemon is slow".
+let warnedLoopbackWs = false
+
+function configJson(req: IncomingMessage): string {
   // The daemon passes AGH_HOME through to local node surfaces; HOME is the fallback.
   const home = process.env.AGH_HOME ?? process.env.HOME ?? '/tmp'
   // wsUrl precedence: the deploy-declared surface config (deploy/surfaces/main.json
@@ -78,8 +96,19 @@ function configJson(): string {
   } catch {
     cfgWsUrl = undefined
   }
+  const wsUrl =
+    (typeof cfgWsUrl === 'string' && cfgWsUrl) || process.env.PROTEIN_PLATFORM_WS_URL || daemonWsUrl()
+  // X-Forwarded-User only exists behind the login gate — i.e. a request that came
+  // in through the proxy, where a loopback URL cannot work.
+  if (!warnedLoopbackWs && forwardedUser(req) && browserUnreachable(wsUrl)) {
+    warnedLoopbackWs = true
+    console.warn(
+      `[protein-platform] serving loopback wsUrl (${wsUrl}) to a proxied request — ` +
+        'republish with PP_SURFACE_WS_URL=<public endpoint>/agnesd or the browser cannot reach the daemon',
+    )
+  }
   return JSON.stringify({
-    wsUrl: (typeof cfgWsUrl === 'string' && cfgWsUrl) || process.env.PROTEIN_PLATFORM_WS_URL || daemonWsUrl(),
+    wsUrl,
     profile: process.env.AGNES_PROFILE ?? 'local-dev',
     rowId: 'web:@aghes/protein-view',
     bffPath: '/api/client-modules/service',
@@ -122,7 +151,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     return
   }
   if (rel === 'config.json') {
-    send(res, 200, configJson())
+    send(res, 200, configJson(req))
     return
   }
   if (rel === 'api/whoami') {

@@ -145,6 +145,52 @@ describe('Web command launch contract', () => {
     expect(clientClosed).toBe(true)
   })
 
+  // A browser behind a reverse proxy cannot reach the daemon's discovery URL: that one is loopback.
+  // The operator names the endpoint the proxy publishes instead, and the server must embed THAT in
+  // the page (data-ws) rather than the discovery answer it can only use on a single machine.
+  it('embeds the operator-published daemon URL, not the loopback discovery one', async () => {
+    const signals = new EventEmitter()
+    let wsUrl: unknown
+    const ensureBackend = async (): Promise<LocalBackend> =>
+      ({
+        scope: { profile: 'local-dev', scopeID: 'test-scope' },
+        discovery: {},
+        socketPath: unreachableSocket,
+        web: {
+          url: 'ws://127.0.0.1:52000',
+          origin: 'http://127.0.0.1:4181',
+          token: 'test-token-with-enough-entropy',
+        },
+        closeClient: async () => undefined,
+        close: async () => undefined,
+      }) as LocalBackend
+    const createServer: NonNullable<WebCommandIO['createServer']> = async (options) => {
+      wsUrl = options.wsUrl
+      setTimeout(() => signals.emit('SIGTERM'), 0)
+      return { url: 'http://127.0.0.1:4181', close: async () => undefined }
+    }
+    await runWebCommand(['--port', '4181'], {
+      env: { AGH_HOME: '/tmp/agnes-home', AGNES_WEB_WS_URL: 'ws://example.test/agnesd' },
+      resources,
+      signals,
+      ensureBackend,
+      createServer,
+      write: () => {},
+    })
+    expect(wsUrl).toBe('ws://example.test/agnesd')
+  })
+
+  it('accepts only an absolute ws(s) endpoint as the published daemon URL', () => {
+    expect(parseWebCommand([], { AGNES_WEB_WS_URL: 'wss://example.test/agnesd' }).browserWsUrl).toBe(
+      'wss://example.test/agnesd',
+    )
+    expect(Object.hasOwn(parseWebCommand([], {}), 'browserWsUrl')).toBe(false)
+    for (const bad of ['agnesd', 'http://example.test/agnesd', '/agnesd'])
+      expect(() => parseWebCommand([], { AGNES_WEB_WS_URL: bad })).toThrow(
+        'AGNES_WEB_WS_URL must be an absolute ws:// or wss:// URL',
+      )
+  })
+
   it('treats an unreachable daemon as an unavailable skin asset, not a launcher failure', async () => {
     const signals = new EventEmitter()
     let resolveAsset: ((pathname: string) => Promise<Uint8Array | null>) | undefined

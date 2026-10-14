@@ -108,3 +108,7 @@ node ../../dev-tests/pp-guest-gate.mjs              # guest 只读闸门：whoam
   + `flush_interval -1`（Host 写 4177 会被 WS 升级校验 403）。
 - 公网 wsUrl 覆盖走 deploy 树 `surfaces/main.json` 的 `config.wsUrl`（发布时
   `PP_SURFACE_WS_URL=wss://<host>/agnesd` 注入；surface 子进程 env 是白名单，env 传不进去）。
+  ⚠️ 漏带这个变量 → `config.json` 落回 discovery 的 `ws://127.0.0.1:46119`，公网浏览器拨自己的
+  127.0.0.1，顶栏永远「连接中…」（实况事件流全断，而归档仍是好的，症状极具迷惑性）。
+  republish 走服务器上的封装脚本 `~/bin/pp-publish-platform`（已带该变量）；平台自身遇到
+  「被代理的请求 + 回环 wsUrl」会打一条 `serving loopback wsUrl …` 警告到 surface 日志。

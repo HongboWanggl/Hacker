@@ -3,9 +3,7 @@
   "surfaceId": "platform",
   "mount": "/platform",
   "sourceId": "local",
-  "config": {
-    "wsUrl": "ws://118.25.194.247/agnesd"
-  },
+  "config": {},
   "secrets": {},
   "grants": []
 }
