@@ -22,6 +22,9 @@ async function boot() {
   try {
     sdk = await connectDaemon(cfg)
     connected = true
+    // Tasks left 'running' by a page switch/reload reattach to their daemon-side
+    // session and replay to the true outcome (structure/archives recover too).
+    import('./orchestrator.ts').then(({ reattachRunningTasks }) => void reattachRunningTasks(sdk))
   } catch (e) {
     console.error('daemon connect failed', e)
   }

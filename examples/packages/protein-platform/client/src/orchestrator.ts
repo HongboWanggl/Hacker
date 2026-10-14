@@ -118,6 +118,117 @@ function verdictOf(mean: number): string {
   return '低置信 · 大概率含无序区'
 }
 
+// User-cancel flags, shared by the live run loop and boot-time reattach so a
+// cancel reads as 已取消 no matter which page consumed the events. The stall
+// watchdog aborts WITHOUT this flag — its aborts must read as failed (retryable),
+// not cancelled.
+const cancelledTasks = new Set<string>()
+
+// One ledger event, reduced into the task. Shared verbatim by the live run loop
+// and the boot-time reattach replay (a page switch/reload kills the in-page
+// event loop; the daemon-side session kept going — replay lands the task on its
+// true outcome instead of 运行中 forever). Returns true when the turn ended.
+// isCancelled lets the live loop keep its stall-aware cancel semantics.
+function reduceLedgerEvent(
+  id: string,
+  row: unknown,
+  isCancelled: () => boolean = () => cancelledTasks.has(id),
+): boolean {
+  const env = (row as { event?: unknown })?.event ?? row
+  // Ledger envelopes carry their payload in `data` ({toolUseId,name,args} /
+  // {toolUseId,isError,content} / {reason,error?}); tolerate flat rows too.
+  const ev = ((env as { data?: Record<string, unknown> }).data ?? env) as {
+    name?: string
+    args?: unknown
+    toolUseId?: string
+    isError?: boolean
+    content?: { text?: string }[]
+    reason?: string
+    error?: { message?: string }
+  }
+  const kind = (env as { type?: string; kind?: string })?.type ?? (env as { kind?: string })?.kind
+  if (kind === 'tool/call') {
+    patch(id, (t) => {
+      const existing = t.stages.find((s) => s.tool === ev.name && s.status === 'running')
+      if (!existing)
+        t.stages.push({
+          tool: ev.name!,
+          label: STAGE_LABEL[ev.name!] ?? ev.name!,
+          status: 'running',
+        })
+    })
+  } else if (kind === 'tool/result') {
+    const text = typeof ev?.content?.[0]?.text === 'string' ? ev.content[0].text : ''
+    // batch_predict has no on-disk summary and predict_complex's report
+    // carries no JSON savedTo (its savedTo IS the PDB): in both cases the
+    // result IS the report. Keep it verbatim so the result page can feed
+    // the pv components a parseable resultPreview directly. Complex runs
+    // in three shapes — API mode carries predictionId; the local/worker
+    // boltz paths carry engine:"boltz2-local"/"boltz2-worker" — match all.
+    // predict_structure carries the whole confidence report inline (sequenceLength)
+    // and its savedTo is the PDB itself — capture it too, or tasks where the
+    // agent skips analyze_confidence render 没有可展示的结果 despite a good model.
+    if (
+      text.startsWith('{') &&
+      (text.includes('"jobs"') ||
+        text.includes('"predictionId"') ||
+        text.includes('"boltz2-local"') ||
+        text.includes('"boltz2-worker"') ||
+        text.includes('"sequenceLength"'))
+    ) {
+      patch(id, (t) => {
+        t.resultJson = text.slice(0, 32_000)
+      })
+    }
+    // Artifact paths appear under either key ("savedTo" on fetch/predict outputs,
+    // "file" inside the confidence report body), and report previews interleave
+    // line-number prefixes — the path itself is always a plain quoted string.
+    const paths = [...text.matchAll(/"(?:savedTo|file|pdbPath|reportPath)"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map(
+      (m) => m[1].replace(/\\(.)/g, '$1'),
+    )
+    const savedTo = paths.find((p) => /\.(pdb|fasta|json)$/.test(p))
+    const confidence = paths.find((p) => /confidence\.json$/.test(p))
+    patch(id, (t) => {
+      const st = [...t.stages].reverse().find((s) => s.status === 'running')
+      if (st) st.status = ev.isError ? 'error' : 'done'
+      if (ev.isError) t.lastError = text.slice(0, 400)
+      if (!ev.isError) {
+        if (savedTo) t.savedTo[ev.toolUseId ?? st?.tool ?? '?'] = savedTo
+        // The result page renders the confidence report; prefer it over any
+        // earlier JSON (e.g. a fetch record) that happens to land first.
+        if (confidence) t.resultSavedTo = confidence
+        else if (savedTo?.endsWith('.json') && !savedTo.endsWith('.pdb') && !t.resultSavedTo)
+          t.resultSavedTo = savedTo
+      }
+    })
+  } else if (kind === 'turn/end') {
+    patch(id, (t) => {
+      if (ev.reason === 'completed') {
+        // The agent reports a tool error and stops → turn ends
+        // "completed" with zero artifacts. That is a failed task,
+        // not a fake done — otherwise the wall shows a green ✓ and
+        // the result page a bare 没有可展示的结果 with no reason.
+        if (!t.resultJson && Object.keys(t.savedTo).length === 0 && t.lastError) {
+          t.status = 'failed'
+          t.error = t.lastError
+        } else {
+          t.status = 'done'
+          t.lastError = undefined
+        }
+      } else if (t.status === 'running') {
+        // A user cancel settles as 已取消 — and must NOT read as failed, or the
+        // gateway-flake retry below resubmits the task the user just cancelled.
+        const cancelled = isCancelled()
+        t.status = cancelled ? 'cancelled' : 'failed'
+        t.error = cancelled ? undefined : (ev.error?.message ?? `turn ${ev.reason}`)
+      }
+    })
+    if (ev.reason === 'completed' && getTask(id)?.status === 'done') void archiveTask(id)
+    return true
+  }
+  return false
+}
+
 // Persist a completed task into the surface archive (report JSON + PDB) so the
 // history survives browser storage loss and daemon restarts — the BFF needs a
 // live session in the daemon registry, the archive does not. Best-effort: a
@@ -241,10 +352,16 @@ async function archiveTask(id: string): Promise<void> {
       if (!t.resultJson) return
       reportJson = t.resultJson
       report = JSON.parse(reportJson)
-    } else {
-      if (!t.resultSavedTo) return
+    } else if (t.resultSavedTo) {
       report = (await bffCall(t.sessionId, 'protein.report', { path: t.resultSavedTo })) as typeof report
       reportJson = JSON.stringify(report)
+    } else if (t.resultJson) {
+      // predict_structure's report is the inline tool result (savedTo is the PDB,
+      // no confidence.json on disk when the agent skipped analyze_confidence).
+      reportJson = t.resultJson
+      report = JSON.parse(reportJson)
+    } else {
+      return
     }
     const pdbPath =
       (typeof report.file === 'string' && report.file.endsWith('.pdb') ? report.file : undefined) ??
@@ -313,7 +430,10 @@ export async function runTask(
   emit()
 
   const controller = new AbortController()
-  runners.set(id, () => controller.abort())
+  runners.set(id, () => {
+    cancelledTasks.add(id)
+    controller.abort()
+  })
   const attempt = async (): Promise<void> => {
     // Stall watchdog: the model gateway occasionally hangs an inference without a
     // transport error, so neither turn/end nor the events-loop catch ever fires and
@@ -364,97 +484,10 @@ export async function runTask(
 
       void (async () => {
         try {
+          const isCancelled = () => controller.signal.aborted && !stalled
           for await (const row of session.events({ preview: true })) {
             lastActivity = Date.now()
-            const env = (row as { event?: unknown })?.event ?? row
-            // Ledger envelopes carry their payload in `data` ({toolUseId,name,args} /
-            // {toolUseId,isError,content} / {reason,error?}); tolerate flat rows too.
-            const ev = ((env as { data?: Record<string, unknown> }).data ?? env) as {
-              name?: string
-              args?: unknown
-              toolUseId?: string
-              isError?: boolean
-              content?: { text?: string }[]
-              reason?: string
-              error?: { message?: string }
-            }
-            const kind = (env as { type?: string; kind?: string })?.type ?? (env as { kind?: string })?.kind
-            if (kind === 'tool/call') {
-              patch(id, (t) => {
-                const existing = t.stages.find((s) => s.tool === ev.name && s.status === 'running')
-                if (!existing)
-                  t.stages.push({
-                    tool: ev.name!,
-                    label: STAGE_LABEL[ev.name!] ?? ev.name!,
-                    status: 'running',
-                  })
-              })
-            } else if (kind === 'tool/result') {
-              const text = typeof ev?.content?.[0]?.text === 'string' ? ev.content[0].text : ''
-              // batch_predict has no on-disk summary and predict_complex's report
-              // carries no JSON savedTo (its savedTo IS the PDB): in both cases the
-              // result IS the report. Keep it verbatim so the result page can feed
-              // the pv components a parseable resultPreview directly. Complex runs
-              // in three shapes — API mode carries predictionId; the local/worker
-              // boltz paths carry engine:"boltz2-local"/"boltz2-worker" — match all.
-              if (
-                text.startsWith('{') &&
-                (text.includes('"jobs"') ||
-                  text.includes('"predictionId"') ||
-                  text.includes('"boltz2-local"') ||
-                  text.includes('"boltz2-worker"'))
-              ) {
-                patch(id, (t) => {
-                  t.resultJson = text.slice(0, 32_000)
-                })
-              }
-              // Artifact paths appear under either key ("savedTo" on fetch/predict outputs,
-              // "file" inside the confidence report body), and report previews interleave
-              // line-number prefixes — the path itself is always a plain quoted string.
-              const paths = [
-                ...text.matchAll(/"(?:savedTo|file|pdbPath|reportPath)"\s*:\s*"((?:[^"\\]|\\.)*)"/g),
-              ].map((m) => m[1].replace(/\\(.)/g, '$1'))
-              const savedTo = paths.find((p) => /\.(pdb|fasta|json)$/.test(p))
-              const confidence = paths.find((p) => /confidence\.json$/.test(p))
-              patch(id, (t) => {
-                const st = [...t.stages].reverse().find((s) => s.status === 'running')
-                if (st) st.status = ev.isError ? 'error' : 'done'
-                if (ev.isError) t.lastError = text.slice(0, 400)
-                if (!ev.isError) {
-                  if (savedTo) t.savedTo[ev.toolUseId ?? st?.tool ?? '?'] = savedTo
-                  // The result page renders the confidence report; prefer it over any
-                  // earlier JSON (e.g. a fetch record) that happens to land first.
-                  if (confidence) t.resultSavedTo = confidence
-                  else if (savedTo?.endsWith('.json') && !savedTo.endsWith('.pdb') && !t.resultSavedTo)
-                    t.resultSavedTo = savedTo
-                }
-              })
-            } else if (kind === 'turn/end') {
-              patch(id, (t) => {
-                if (ev.reason === 'completed') {
-                  // The agent reports a tool error and stops → turn ends
-                  // "completed" with zero artifacts. That is a failed task,
-                  // not a fake done — otherwise the wall shows a green ✓ and
-                  // the result page a bare 没有可展示的结果 with no reason.
-                  if (!t.resultJson && Object.keys(t.savedTo).length === 0 && t.lastError) {
-                    t.status = 'failed'
-                    t.error = t.lastError
-                  } else {
-                    t.status = 'done'
-                    t.lastError = undefined
-                  }
-                } else if (t.status === 'running') {
-                  // A user cancel (controller aborted, not a stall) settles as
-                  // 已取消 — and must NOT read as failed, or the gateway-flake
-                  // retry below resubmits the task the user just cancelled.
-                  const cancelled = controller.signal.aborted && !stalled
-                  t.status = cancelled ? 'cancelled' : 'failed'
-                  t.error = cancelled ? undefined : (ev.error?.message ?? `turn ${ev.reason}`)
-                }
-              })
-              if (ev.reason === 'completed' && getTask(id)?.status === 'done') void archiveTask(id)
-              return
-            }
+            if (reduceLedgerEvent(id, row, isCancelled)) return
           }
         } catch (e) {
           // Event stream died without a turn/end (transport close, session loss). A running
@@ -538,6 +571,7 @@ export async function runTask(
       }
     } finally {
       runners.delete(id)
+      cancelledTasks.delete(id)
     }
   })()
 
@@ -545,5 +579,80 @@ export async function runTask(
     cancel: () => {
       controller.abort()
     },
+  }
+}
+
+// Boot-time recovery for tasks stranded by a page switch/reload/tab close: the
+// run loop lived in the old page, but the daemon-side session kept going (or
+// already finished). Reattach and replay the journal through the same reducer —
+// the task lands on its true outcome, archives what the dead page never could,
+// and live events keep flowing if the turn is still running. Sessions that no
+// longer exist (daemon restart) settle failed honestly instead of spinning.
+export async function reattachRunningTasks(sdk: any): Promise<void> {
+  const stranded = getTasks().filter((t) => t.status === 'running')
+  for (const t of stranded) {
+    const id = t.id
+    if (!t.sessionId || !sdk) {
+      patch(id, (t2) => {
+        if (t2.status === 'running') {
+          t2.status = 'failed'
+          t2.error = '页面刷新时会话尚未建立 — 请重新提交'
+        }
+      })
+      continue
+    }
+    try {
+      // load (not attach): attach() delivers its journal replay BEFORE any
+      // events() iterator exists, so the listener registers too late and the
+      // replayed rows vanish. events() attaches internally — its listener is
+      // live before the attach round-trip, so the replay lands in the queue.
+      // load also re-establishes the daemon-side session for later BFF reads
+      // (archive), and rejects unknown sessions honestly.
+      const session = await sdk.session.load(t.sessionId)
+      // Replay from zero re-derives every stage/artifact; start clean so the
+      // old page's partial ledger can't duplicate rows or shadow real results.
+      patch(id, (t2) => {
+        t2.stages = []
+        t2.savedTo = {}
+        t2.resultSavedTo = undefined
+        t2.resultJson = undefined
+        t2.lastError = undefined
+      })
+      runners.set(id, () => {
+        cancelledTasks.add(id)
+        void session.cancel?.().catch(() => {})
+      })
+      void (async () => {
+        try {
+          for await (const row of session.events({ preview: true })) {
+            if (reduceLedgerEvent(id, row)) return
+          }
+          // Journal exhausted without turn/end: the daemon died mid-turn.
+          patch(id, (t2) => {
+            if (t2.status === 'running') {
+              t2.status = 'failed'
+              t2.error = '会话在后台中断且无完成事件（daemon 重启？）— 可重新提交'
+            }
+          })
+        } catch (e) {
+          patch(id, (t2) => {
+            if (t2.status === 'running') {
+              t2.status = 'failed'
+              t2.error = `重连会话事件流失败：${(e as Error)?.message ?? 'session ended'}`.slice(0, 300)
+            }
+          })
+        } finally {
+          runners.delete(id)
+          cancelledTasks.delete(id)
+        }
+      })()
+    } catch (e) {
+      patch(id, (t2) => {
+        if (t2.status === 'running') {
+          t2.status = 'failed'
+          t2.error = `会话不存在（daemon 重启或已清理）：${(e as Error)?.message ?? ''}`.slice(0, 300)
+        }
+      })
+    }
   }
 }

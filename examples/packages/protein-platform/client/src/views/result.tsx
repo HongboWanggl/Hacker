@@ -1,8 +1,8 @@
 import { createElement as h, useCallback, useEffect, useMemo, useState } from 'react'
 import { archivedServices, getServices, type PvServices, setServicesSession } from '../bff.ts'
 import { getTask, subscribeTasks } from '../orchestrator.ts'
-import { downloadShareReport, snapshotStageFigures, type StructureSet } from '../report.ts'
 import { TASK_TYPE_LABEL, type TaskType } from '../prompts.ts'
+import { downloadShareReport, type StructureSet, snapshotStageFigures } from '../report.ts'
 
 const STATUS_BADGE: Record<string, string> = {
   running: '运行中',
@@ -102,7 +102,8 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
       // on failure the report degrades to the static PNG snapshots alone.
       let structure: unknown
       try {
-        if (opts?.structurePath) structure = await getServices().call('protein.structure', { path: opts.structurePath })
+        if (opts?.structurePath)
+          structure = await getServices().call('protein.structure', { path: opts.structurePath })
         else if (opts?.archived) structure = await archivedServices(id).call('protein.structure', {})
       } catch {
         /* viewer omitted */
@@ -118,9 +119,11 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
         const fetched = await Promise.all(
           okJobs.slice(0, 8).map(async (j) => {
             try {
-              const st = (opts?.archived
-                ? await archivedServices(id).call('protein.structure', { path: j.savedTo })
-                : await getServices().call('protein.structure', { path: j.savedTo })) as StructureSet
+              const st = (
+                opts?.archived
+                  ? await archivedServices(id).call('protein.structure', { path: j.savedTo })
+                  : await getServices().call('protein.structure', { path: j.savedTo })
+              ) as StructureSet
               return {
                 name: typeof j.accession === 'string' ? j.accession : (j.name ?? ''),
                 meanPlddt: typeof j.meanPlddt === 'number' ? j.meanPlddt : undefined,
@@ -309,7 +312,11 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
         />
         {canCompareArchived && (
           <div style={{ marginTop: 14, textAlign: 'center' }}>
-            <button className="pl-back" onClick={() => void runArchivedCompare()} disabled={archivedComparing}>
+            <button
+              className="pl-back"
+              onClick={() => void runArchivedCompare()}
+              disabled={archivedComparing}
+            >
               {archivedComparing ? '发起对比中…' : `⇄ 与 AlphaFold DB（${archived.accession}）对比 →`}
             </button>
           </div>
@@ -320,9 +327,15 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
               className="pl-back"
               disabled={sharing}
               onClick={() =>
-                void shareReport(taskId, archived.title ?? archived.taskId, archived.type ?? 'single', archived.savedAt, {
-                  archived: true,
-                })
+                void shareReport(
+                  taskId,
+                  archived.title ?? archived.taskId,
+                  archived.type ?? 'single',
+                  archived.savedAt,
+                  {
+                    archived: true,
+                  },
+                )
               }
             >
               {sharing ? '生成报告中…' : '⇩ 分享报告（HTML）'}
@@ -439,11 +452,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
 
       {(task.status === 'failed' || task.status === 'cancelled') && (
         <div style={{ marginTop: 14, textAlign: 'center' }}>
-          <button
-            className="pl-back"
-            disabled={retrying}
-            onClick={() => void retryTask()}
-          >
+          <button className="pl-back" disabled={retrying} onClick={() => void retryTask()}>
             {retrying ? '重新提交中…' : '↻ 重新提交此任务'}
           </button>
         </div>
@@ -452,7 +461,14 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
       {running && (
         <div className="pl-stage-wrap">
           <div style={{ padding: '28px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 12,
+              }}
+            >
               <div className="pl-taskrow-title">正在运行 · 阶段进度</div>
               <button
                 className={`pl-row-del${cancelArmed ? ' armed' : ''}`}
@@ -512,8 +528,17 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
           onPredict={handlePredict}
         />
       )}
-      {!running && task.type !== 'batch' && task.type !== 'complex' && savedTo && (
-        <ToolViewStage toolName={viewTool} savedTo={savedTo} services={getServices()} onPredict={handlePredict} />
+      {!running && task.type !== 'batch' && task.type !== 'complex' && (savedTo || task.resultJson) && (
+        <ToolViewStage
+          toolName={viewTool}
+          savedTo={savedTo ?? 'inline'}
+          // No on-disk report (agent skipped analyze_confidence): the inline
+          // predict_structure result IS the report — hand it over parseable and
+          // the panel renders structure + metrics without a re-fetch.
+          preview={savedTo ? undefined : task.resultJson}
+          services={getServices()}
+          onPredict={handlePredict}
+        />
       )}
       {canCompare && (
         <div style={{ marginTop: 14, textAlign: 'center' }}>
@@ -541,9 +566,10 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
           </button>
         </div>
       )}
-      {!running && task.type !== 'batch' && !savedTo && (
+      {!running && task.type !== 'batch' && !savedTo && !task.resultJson && (
         <div className="pl-empty">
-          没有可展示的结果{(task.status === 'failed' || task.status === 'cancelled') ? '（任务未完成）' : ''} — 可回到<a href="#/">首页</a>
+          没有可展示的结果{task.status === 'failed' || task.status === 'cancelled' ? '（任务未完成）' : ''} —
+          可回到<a href="#/">首页</a>
           重新提交
         </div>
       )}
