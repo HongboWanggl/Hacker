@@ -37,12 +37,20 @@ await page.fill('.pl-composer textarea', 'MVLSPADKTNVKAAWGKVGAHAGEYGAEAL')
 await page.click('.pl-submit')
 
 // The first attempt must fail fast (503) and the retry loop must resubmit —
-// watch the task settle on the wall; never cancelled, and not stuck 运行中.
+// wait for the SECOND api/task post first (the failed badge appears during the
+// 3s backoff, before the retry fires), then for the run to settle 已完成.
 await page.goto(`${base}#/tasks`, { timeout: 15000 })
 await page.waitForSelector('.pl-tasklist a.pl-taskrow', { timeout: 20000 })
+let sawRetry = false
+for (let i = 0; i < 120 && !sawRetry; i++) {
+  if (taskPosts >= 2) sawRetry = true
+  else await page.waitForTimeout(250)
+}
+console.log('retry fired (2nd api/task post):', sawRetry, `posts=${taskPosts}`)
+if (!sawRetry) fail.push(`auto-retry never resubmitted (api/task posts: ${taskPosts})`)
 const outcome = await page
   .waitForSelector(
-    '.pl-tasklist a.pl-taskrow:first-child .pl-badge.done, .pl-tasklist a.pl-taskrow:first-child .pl-badge.failed, .pl-tasklist a.pl-taskrow:first-child .pl-badge.cancelled',
+    '.pl-tasklist a.pl-taskrow:first-child .pl-badge.done',
     { timeout: 240000, state: 'attached' },
   )
   .then((el) => el.textContent())
