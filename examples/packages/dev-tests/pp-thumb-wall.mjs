@@ -31,7 +31,11 @@ const stats = await page.evaluate(() => {
     figCards: cards.length,
     thumbs: thumbs.length,
     paths: thumbs.reduce((s, t) => s + t.querySelectorAll('path').length, 0),
-    strokes: [...new Set([...thumbs.flatMap((t) => [...t.querySelectorAll('path')].map((p) => p.getAttribute('stroke')))])],
+    strokes: [
+      ...new Set([
+        ...thumbs.flatMap((t) => [...t.querySelectorAll('path')].map((p) => p.getAttribute('stroke'))),
+      ]),
+    ],
   }
 })
 console.log('stats:', JSON.stringify(stats))

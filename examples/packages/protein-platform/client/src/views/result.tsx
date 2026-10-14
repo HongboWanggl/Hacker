@@ -58,6 +58,7 @@ function archivedToolName(type?: TaskType): string {
 // (captured via the apply() shim) renders inside a clean platform stage. It
 // self-serves report + structure + PAE through the BFF once we hand it the
 // savedTo from the ledger.
+// biome-ignore lint/suspicious/noExplicitAny: props are passed down from boot()'s untyped sdk handle and config cache
 export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sdk?: any }) {
   const [, force] = useState(0)
   useEffect(() => subscribeTasks(() => force((n) => n + 1)), [])
@@ -90,6 +91,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
       // Figures FIRST, synchronously in the click tick — before any await can
       // trigger the rerender/remount dance or clear the WebGL buffers.
       const figs = snapshotStageFigures()
+      // biome-ignore lint/suspicious/noExplicitAny: raw archived report payload, schema owned by the server
       let report: any
       try {
         if (opts?.resultJson) report = JSON.parse(opts.resultJson)
@@ -110,7 +112,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
       }
       // Batch reports carry one PDB per job — fetch each (≤8) so the viewer
       // gets a per-target tab bar. All-or-nothing per target, never fatal.
-      const jobs = Array.isArray(report?.jobs) ? (report.jobs as any[]) : []
+      const jobs = Array.isArray(report?.jobs) ? (report.jobs as any[]) : [] // biome-ignore lint/suspicious/noExplicitAny: same archived payload, see above
       const okJobs = jobs.filter(
         (j) => j?.status === 'ok' && typeof j?.savedTo === 'string' && j.savedTo.endsWith('.pdb'),
       )
@@ -251,7 +253,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
 
   if (!task) {
     if (!archivedChecked) return <main className="pl-result" />
-    if (!archived || !archived.reportPath) {
+    if (!archived?.reportPath) {
       return (
         <main className="pl-result">
           <div className="pl-empty">
@@ -313,6 +315,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
         {canCompareArchived && (
           <div style={{ marginTop: 14, textAlign: 'center' }}>
             <button
+              type="button"
               className="pl-back"
               onClick={() => void runArchivedCompare()}
               disabled={archivedComparing}
@@ -324,6 +327,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
         {archived && (
           <div style={{ marginTop: 14, textAlign: 'center' }}>
             <button
+              type="button"
               className="pl-back"
               disabled={sharing}
               onClick={() =>
@@ -383,7 +387,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
         'compare',
         { accession: task.input.accession, predictionPath: pdbPath },
         {
-          seedFiles: { [pdbPath!]: pdb.b64 },
+          seedFiles: { [pdbPath as string]: pdb.b64 },
         },
       )
     } catch (e) {
@@ -452,7 +456,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
 
       {(task.status === 'failed' || task.status === 'cancelled') && (
         <div style={{ marginTop: 14, textAlign: 'center' }}>
-          <button className="pl-back" disabled={retrying} onClick={() => void retryTask()}>
+          <button type="button" className="pl-back" disabled={retrying} onClick={() => void retryTask()}>
             {retrying ? '重新提交中…' : '↻ 重新提交此任务'}
           </button>
         </div>
@@ -471,6 +475,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
             >
               <div className="pl-taskrow-title">正在运行 · 阶段进度</div>
               <button
+                type="button"
                 className={`pl-row-del${cancelArmed ? ' armed' : ''}`}
                 onClick={cancelRunning}
                 title="取消任务"
@@ -542,7 +547,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
       )}
       {canCompare && (
         <div style={{ marginTop: 14, textAlign: 'center' }}>
-          <button className="pl-back" onClick={() => void runCompare()} disabled={comparing}>
+          <button type="button" className="pl-back" onClick={() => void runCompare()} disabled={comparing}>
             {comparing ? '发起对比中…' : `⇄ 与 AlphaFold DB（${task.input.accession}）对比 →`}
           </button>
         </div>
@@ -550,6 +555,7 @@ export function ResultView({ taskId, cfg, sdk }: { taskId: string; cfg?: any; sd
       {!running && (
         <div style={{ marginTop: 14, textAlign: 'center' }}>
           <button
+            type="button"
             className="pl-back"
             disabled={sharing}
             onClick={() =>
@@ -592,6 +598,7 @@ function ToolViewStage({
   onPredict?: (accessions: string[]) => void
   onCompare?: (job: { accession: string; savedTo?: string }) => void
 }) {
+  // biome-ignore lint/suspicious/noExplicitAny: compare result shape comes from the compare toolview, untyped by design
   const [comp, setComp] = useState<any>(null)
   useEffect(() => {
     let alive = true

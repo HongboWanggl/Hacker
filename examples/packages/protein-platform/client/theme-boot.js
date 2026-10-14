@@ -4,11 +4,11 @@
 // components and the platform chrome both key their dark rules on that class.
 // Resolution: explicit localStorage choice (`pp-theme`) → system preference.
 // Everything is fault-tolerant: no storage or no matchMedia just falls back.
-(function () {
-  'use strict'
+;(() => {
   var dark = false
+  var saved
   try {
-    var saved = localStorage.getItem('pp-theme')
+    saved = localStorage.getItem('pp-theme')
     if (saved === 'dark') dark = true
     else if (saved === 'light') dark = false
     else dark = window.matchMedia('(prefers-color-scheme: dark)').matches

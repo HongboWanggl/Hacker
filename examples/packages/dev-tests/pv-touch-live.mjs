@@ -11,10 +11,6 @@ const W = Number(process.argv[2] ?? 400)
 const browser = await chromium.launch({ executablePath: exe, headless: true })
 const page = await browser.newPage({ viewport: { width: W, height: 850 } })
 let failed = 0
-const ok = (name, cond, extra = '') => {
-  console.log(cond ? 'ok ' : 'FAIL', name, extra)
-  if (!cond) failed++
-}
 try {
   await page.goto('http://127.0.0.1:4177/', { waitUntil: 'domcontentloaded', timeout: 60000 })
   await page.waitForTimeout(5000)
@@ -50,7 +46,9 @@ try {
     }, title)
     await page.waitForTimeout(3500)
     await page.evaluate(() => {
-      document.querySelectorAll('details.turn-process:not([open])').forEach((d) => d.querySelector('summary')?.click())
+      document.querySelectorAll('details.turn-process:not([open])').forEach((d) => {
+        d.querySelector('summary')?.click()
+      })
     })
     await page.waitForTimeout(2500)
     const roots = await page.evaluate(() => document.querySelectorAll('.pv-root').length)
@@ -60,8 +58,7 @@ try {
     }
     panelsSeen++
     const stats = await page.evaluate(() => {
-      const sel =
-        'button, select, input, [role="option"], [role="button"], .pv-pae-pair, .pv-toggle, a[href]'
+      const sel = 'button, select, input, [role="option"], [role="button"], .pv-pae-pair, .pv-toggle, a[href]'
       const out = []
       document.querySelectorAll('.pv-root').forEach((root) => {
         root.querySelectorAll(sel).forEach((el) => {
@@ -94,7 +91,9 @@ try {
   const rows = [...seen.entries()].sort((a, b) => a[1].minH - b[1].minH)
   for (const [key, s] of rows) {
     const verdict = s.minH >= 44 && s.minW >= 44 ? 'ok44' : s.minH >= 24 && s.minW >= 24 ? 'wcag' : 'TINY'
-    console.log(`${verdict.padEnd(5)} h=${s.minH.toFixed(0).padStart(3)} w=${s.minW.toFixed(0).padStart(3)} n=${String(s.n).padStart(3)}  ${key}`)
+    console.log(
+      `${verdict.padEnd(5)} h=${s.minH.toFixed(0).padStart(3)} w=${s.minW.toFixed(0).padStart(3)} n=${String(s.n).padStart(3)}  ${key}`,
+    )
     if (verdict === 'TINY') failed++
   }
   console.log(failed ? `\nTOUCH AUDIT: ${failed} TINY classes` : '\nTOUCH AUDIT: no sub-24px controls')

@@ -49,7 +49,14 @@ function CalibChart({ calib }: { calib: NonNullable<BenchData['calib']> }) {
         const h = (H - PAD * 2) * Math.min(1, c.meanLddt)
         return (
           <g key={b}>
-            <rect x={x} y={H - PAD - h} width={w} height={h} rx={2} className={`cal-bar ${band(c.meanLddt * 100)}`} />
+            <rect
+              x={x}
+              y={H - PAD - h}
+              width={w}
+              height={h}
+              rx={2}
+              className={`cal-bar ${band(c.meanLddt * 100)}`}
+            />
             <text x={x + w / 2} y={H - PAD - h - 4} textAnchor="middle" className="cal-num">
               {c.meanLddt.toFixed(2)}
             </text>
@@ -88,16 +95,26 @@ export function BenchView() {
       alive = false
     }
   }, [])
-  if (failed) return <main className="pl-page"><div className="pl-empty">基准数据加载失败 — 稍后刷新试试</div></main>
-  if (!data) return <main className="pl-page"><div className="pl-empty">正在加载基准数据…</div></main>
+  if (failed)
+    return (
+      <main className="pl-page">
+        <div className="pl-empty">基准数据加载失败 — 稍后刷新试试</div>
+      </main>
+    )
+  if (!data)
+    return (
+      <main className="pl-page">
+        <div className="pl-empty">正在加载基准数据…</div>
+      </main>
+    )
   const done = data.rows.filter((r) => r.status === 'done')
   return (
     <main className="pl-page">
       <div className="pl-wall-title">平台基准 · CASP14 公开靶标</div>
       <p className="pl-bench-note">
-        用实验解析结构（PDB）给平台自己的预测打分，指标与国际评估同口径：{' '}
-        <b>Cα-lDDT</b>（CASP/CAMEO 主指标，越高越好，0–1）与叠合后 <b>Cα-RMSD</b>（Å，越低越好）。
-        预测由本平台管线端到端产生（Boltz-2 推理），靶标序列取自 CASP14 官方序列文件，预测时对平台「盲测」。
+        用实验解析结构（PDB）给平台自己的预测打分，指标与国际评估同口径： <b>Cα-lDDT</b>（CASP/CAMEO
+        主指标，越高越好，0–1）与叠合后 <b>Cα-RMSD</b>（Å，越低越好）。 预测由本平台管线端到端产生（Boltz-2
+        推理），靶标序列取自 CASP14 官方序列文件，预测时对平台「盲测」。
         校准图检查模型自信度是否诚实：每柱是落入该 pLDDT 区间的残基的实测 lDDT，柱高贴着对角线 = 自信度可信。
       </p>
       <table className="pl-bench-table">
@@ -157,9 +174,9 @@ export function BenchView() {
         </div>
       )}
       <p className="pl-bench-note">
-        参考结构：RCSB 实验解析（X 射线 / 冷冻电镜），仅取与靶标序列一致匹配的链段；
-        指标实现：平台内置 Cα-lDDT（Mariani et al. 2013 定义，四阈值 0.5/1/2/4 Å、15 Å 包含半径）。
-        已完成 {data.scored} / {data.rows.length} 个靶标。靶标集来源：
+        参考结构：RCSB 实验解析（X 射线 / 冷冻电镜），仅取与靶标序列一致匹配的链段； 指标实现：平台内置
+        Cα-lDDT（Mariani et al. 2013 定义，四阈值 0.5/1/2/4 Å、15 Å 包含半径）。 已完成 {data.scored} /{' '}
+        {data.rows.length} 个靶标。靶标集来源：
         <a href="https://predictioncenter.org/casp14/" target="_blank" rel="noreferrer">
           predictioncenter.org/casp14
         </a>

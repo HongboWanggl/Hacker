@@ -4,6 +4,7 @@ import type { PlatformConfig } from './config.ts'
 // backed by the same-origin client-modules BFF, which dispatches into the
 // protein-view extension services with the session's workspace as cwd.
 
+// biome-ignore lint/suspicious/noExplicitAny: service payloads cross the daemon boundary and are interpreted by untyped extension code
 export type PvServices = { call: (service: string, input: Record<string, unknown>) => Promise<any> }
 
 let cfgRef: PlatformConfig | null = null
@@ -14,14 +15,14 @@ let singleton: PvServices | null = null
  *  These are transient by construction — retry them (short, bounded) instead of
  *  failing the task's report fetch or archive write. */
 async function bffPost(body: Record<string, unknown>): Promise<Response> {
-  let r = await fetch(cfgRef!.bffPath, {
+  let r = await fetch((cfgRef as NonNullable<typeof cfgRef>).bffPath, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   })
   for (let i = 0; i < 2 && (r.status === 502 || r.status === 503 || r.status === 504); i++) {
     await new Promise((resolve) => setTimeout(resolve, 1500))
-    r = await fetch(cfgRef!.bffPath, {
+    r = await fetch((cfgRef as NonNullable<typeof cfgRef>).bffPath, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -37,8 +38,8 @@ export function initServices(cfg: PlatformConfig): PvServices {
       const sessionId = sessionIdRef.current
       if (!sessionId) throw new Error('no active session')
       const r = await bffPost({
-        profile: cfgRef!.profile,
-        rowId: cfgRef!.rowId,
+        profile: (cfgRef as NonNullable<typeof cfgRef>).profile,
+        rowId: (cfgRef as NonNullable<typeof cfgRef>).rowId,
         sessionId,
         service,
         input,
@@ -68,8 +69,15 @@ export async function bffCall(
   sessionId: string,
   service: string,
   input: Record<string, unknown>,
+  // biome-ignore lint/suspicious/noExplicitAny: same daemon-boundary payload as PvServices.call, see above
 ): Promise<any> {
-  const r = await bffPost({ profile: cfgRef!.profile, rowId: cfgRef!.rowId, sessionId, service, input })
+  const r = await bffPost({
+    profile: (cfgRef as NonNullable<typeof cfgRef>).profile,
+    rowId: (cfgRef as NonNullable<typeof cfgRef>).rowId,
+    sessionId,
+    service,
+    input,
+  })
   if (!r.ok) throw new Error(`${service}: HTTP ${r.status}`)
   const j = (await r.json()) as { output?: unknown; error?: string }
   if (j.error) throw new Error(`${service}: ${j.error}`)

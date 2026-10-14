@@ -20,7 +20,7 @@ const browser = await chromium.launch({ executablePath: exe, headless: true })
     colorScheme: 'dark',
     ...(httpCreds ? { httpCredentials: httpCreds } : {}),
   })
-if (httpCreds) await login(page.request, base, httpCreds)
+  if (httpCreds) await login(page.request, base, httpCreds)
   await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
   await page.waitForSelector('.pl-theme-btn', { timeout: 15000, state: 'attached' })
   const dark = await page.evaluate(() => ({
@@ -56,7 +56,7 @@ if (httpCreds) await login(page.request, base, httpCreds)
     colorScheme: 'light',
     ...(httpCreds ? { httpCredentials: httpCreds } : {}),
   })
-if (httpCreds) await login(page.request, base, httpCreds)
+  if (httpCreds) await login(page.request, base, httpCreds)
   await page.goto(`${base}#/tasks`, { waitUntil: 'domcontentloaded', timeout: 60000 })
   if (await page.evaluate(() => document.documentElement.classList.contains('dark')))
     fail.push('fresh context: system light must stay light')
@@ -82,14 +82,19 @@ if (httpCreds) await login(page.request, base, httpCreds)
     colorScheme: 'dark',
     ...(httpCreds ? { httpCredentials: httpCreds } : {}),
   })
-if (httpCreds) await login(page.request, base, httpCreds)
+  if (httpCreds) await login(page.request, base, httpCreds)
   // Latest archived task (any type) — the pv-root must exist and be dark.
   const list = await page.request.get(`${base}api/archive`, { headers: { origin: 'http://127.0.0.1:4177' } })
   const entries = (await list.json()).slice(0, 8)
   const withStructure = entries.find((m) => ['single', 'complex', 'compare'].includes(m.type))
   if (withStructure) {
-    await page.goto(`${base}#/task/${withStructure.taskId}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
-    await page.waitForSelector('.pv-root', { timeout: 20000, state: 'attached' }).catch(() => fail.push('pv-root missing on result page'))
+    await page.goto(`${base}#/task/${withStructure.taskId}`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 60000,
+    })
+    await page
+      .waitForSelector('.pv-root', { timeout: 20000, state: 'attached' })
+      .catch(() => fail.push('pv-root missing on result page'))
     const pv = await page.evaluate(() => {
       const el = document.querySelector('.pv-root')
       return el ? getComputedStyle(el).backgroundImage || getComputedStyle(el).backgroundColor : null

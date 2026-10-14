@@ -25,9 +25,9 @@ for (const title of candidates) {
   }, title)
   await page.waitForTimeout(3500)
   await page.evaluate(() =>
-    document
-      .querySelectorAll('details.turn-process:not([open])')
-      .forEach((d) => d.querySelector('summary')?.click()),
+    document.querySelectorAll('details.turn-process:not([open])').forEach((d) => {
+      d.querySelector('summary')?.click()
+    }),
   )
   await page.waitForTimeout(2000)
   if (await page.evaluate(() => !!document.querySelector('canvas.pv-pae-canvas'))) break

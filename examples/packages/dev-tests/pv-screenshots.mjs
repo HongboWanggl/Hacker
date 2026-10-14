@@ -40,7 +40,7 @@ async function openPanel(candidates, acceptSel, tilesMin = 0) {
     await page.waitForTimeout(2500)
     const ok = await page.evaluate(
       ({ sel, min }) => {
-        const root = document.querySelector('.pv-root:has(' + sel + ')')
+        const root = document.querySelector(`.pv-root:has(${sel})`)
         return !!root && document.querySelectorAll('.pv-seq-tile').length >= min
       },
       { sel: acceptSel, min: tilesMin },

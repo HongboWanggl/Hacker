@@ -76,7 +76,9 @@ function pdb(bFactors: number[]): string {
 
 // Task workspace: reports/<id>.json, structures/<id>.pdb, structures/pae.npz
 function fixtureTask(taskId: string, report: Record<string, unknown>, bs: number[]) {
-  const dir = join(process.env.PROTEIN_PLATFORM_TASKS_ROOT!, taskId)
+  const root = process.env.PROTEIN_PLATFORM_TASKS_ROOT
+  if (!root) throw new Error('PROTEIN_PLATFORM_TASKS_ROOT is required')
+  const dir = join(root, taskId)
   mkdirSync(join(dir, 'reports'), { recursive: true })
   mkdirSync(join(dir, 'structures'), { recursive: true })
   writeFileSync(join(dir, 'reports', 'CASP14-T1025_268aa.confidence.json'), JSON.stringify(report))
@@ -154,7 +156,13 @@ console.log('putArchive workspace pulls')
 // --- 3. batch: inline report b64 + workspace jobPdbs --------------------------
 {
   fixtureTask('task-batch', { jobs: [] }, [90, 90, 90, 90])
-  const dir = join(process.env.PROTEIN_PLATFORM_TASKS_ROOT!, 'task-batch')
+  const dir = join(
+    process.env.PROTEIN_PLATFORM_TASKS_ROOT ??
+      (() => {
+        throw new Error('PROTEIN_PLATFORM_TASKS_ROOT is required')
+      })(),
+    'task-batch',
+  )
   writeFileSync(join(dir, 'structures', 'P12345.pdb'), pdb([88, 88, 88, 88]))
   writeFileSync(join(dir, 'structures', 'Q9Y6K9.pdb'), pdb([75, 75, 75, 75]))
   const resultJson = JSON.stringify({

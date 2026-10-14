@@ -12,7 +12,10 @@ const httpCreds = process.env.PP_USER
   : undefined
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const ctx = await browser.newContext({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+const ctx = await browser.newContext({
+  viewport: { width: 1400, height: 1000 },
+  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
+})
 if (httpCreds) await login(ctx.request, base, httpCreds)
 const page = await ctx.newPage()
 
@@ -31,7 +34,9 @@ const seed = {
 }
 await ctx.addInitScript((s) => localStorage.setItem('pp-tasks-v1', JSON.stringify([s])), seed)
 await page.goto(`${base}#/task/tretryseed01`, { waitUntil: 'domcontentloaded', timeout: 60000 })
-await page.waitForSelector('.pl-error-banner', { timeout: 30000 }).catch(() => fail.push('error banner missing'))
+await page
+  .waitForSelector('.pl-error-banner', { timeout: 30000 })
+  .catch(() => fail.push('error banner missing'))
 const btn = page.locator('button.pl-back', { hasText: '重新提交' }).first()
 await btn.waitFor({ timeout: 15000, state: 'visible' }).catch(() => fail.push('retry button missing'))
 if (fail.length === 0) {

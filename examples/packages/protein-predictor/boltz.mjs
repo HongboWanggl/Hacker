@@ -249,18 +249,15 @@ const WORKER_URL = process.env.BOLTZ_WORKER_URL ?? 'http://127.0.0.1:7610'
 function workerPost(path, body, headers, totalMs) {
   return new Promise((resolve, reject) => {
     const { hostname, port, pathname } = new URL(`${WORKER_URL}${path}`)
-    const req = httpRequest(
-      { hostname, port, path: pathname, method: 'POST', headers },
-      (res) => {
-        let data = ''
-        res.setEncoding('utf8')
-        res.on('data', (c) => {
-          data += c
-          if (data.length > 32 * 1024 * 1024) req.destroy(new Error('worker response too large'))
-        })
-        res.on('end', () => resolve({ status: res.statusCode, body: data }))
-      },
-    )
+    const req = httpRequest({ hostname, port, path: pathname, method: 'POST', headers }, (res) => {
+      let data = ''
+      res.setEncoding('utf8')
+      res.on('data', (c) => {
+        data += c
+        if (data.length > 32 * 1024 * 1024) req.destroy(new Error('worker response too large'))
+      })
+      res.on('end', () => resolve({ status: res.statusCode, body: data }))
+    })
     req.setTimeout(totalMs, () => req.destroy(new Error(`worker request timed out after ${totalMs}ms`)))
     req.on('error', reject)
     req.end(body)
@@ -281,12 +278,7 @@ export async function runWorkerBoltz({ proteins, smiles }) {
     if (token) headers.authorization = `Bearer ${token}`
     // 22 min > the worker's own 20 min per-job cap, so the worker always gets
     // to answer (even with a compute error) before the client gives up.
-    const res = await workerPost(
-      '/predict',
-      JSON.stringify({ proteins, smiles }),
-      headers,
-      22 * 60_000,
-    )
+    const res = await workerPost('/predict', JSON.stringify({ proteins, smiles }), headers, 22 * 60_000)
     if (res.status !== 200) {
       // 5xx compute error → legacy chain takes it, but keep the reason visible:
       // the old silent return made worker failures masquerade as "needs API key".

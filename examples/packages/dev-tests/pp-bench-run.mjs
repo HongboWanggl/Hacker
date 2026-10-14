@@ -56,7 +56,9 @@ for (const t of targets) {
       await page.waitForSelector('.pl-tasklist, .pl-card', { timeout: 15000 })
       submitted = true
     } catch {
-      console.log(`${t.id}: submit attempt ${attempt + 1} failed${attempt ? ' — giving up' : ' — reloading and retrying'}`)
+      console.log(
+        `${t.id}: submit attempt ${attempt + 1} failed${attempt ? ' — giving up' : ' — reloading and retrying'}`,
+      )
     }
   }
   if (!submitted) {

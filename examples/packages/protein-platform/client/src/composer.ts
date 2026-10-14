@@ -116,8 +116,10 @@ export function analyzeInput(text: string, type: 'single' | 'complex' | 'batch')
 
   const cls = classifySingle(trimmed)
   if (cls.kind === 'accession') return [{ tone: 'ok', text: `UniProt ID · ${cls.accession}` }]
-  if (cls.kind === 'sequence') return [{ tone: 'ok', text: `原始序列 · ${cls.letters!.length} aa` }]
-  if (cls.kind === 'short') return [{ tone: 'warn', text: `序列过短（${cls.letters!.length} aa，需 ≥10）` }]
+  if (cls.kind === 'sequence')
+    return [{ tone: 'ok', text: `原始序列 · ${(cls.letters as string).length} aa` }]
+  if (cls.kind === 'short')
+    return [{ tone: 'warn', text: `序列过短（${(cls.letters as string).length} aa，需 ≥10）` }]
   if (cls.kind === 'junk') return [{ tone: 'warn', text: '含数字或特殊字符，无法识别为序列' }]
   if (cls.kind === 'description') return [{ tone: 'ok', text: '自然语言描述 · 将检索 UniProt 候选' }]
   return [{ tone: 'warn', text: '无法识别：请输入 UniProt ID、FASTA 或 ≥10 aa 的序列' }]

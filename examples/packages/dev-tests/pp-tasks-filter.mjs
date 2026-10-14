@@ -11,7 +11,10 @@ const httpCreds = process.env.PP_USER
   : undefined
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+const page = await browser.newPage({
+  viewport: { width: 1400, height: 1000 },
+  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
+})
 if (httpCreds) await login(page.request, base, httpCreds)
 page.on('pageerror', (err) => fail.push(`pageerror: ${String(err).slice(0, 120)}`))
 
@@ -45,7 +48,14 @@ const emptyMsg = await page.locator('.pl-empty').count()
 if (searched === 0 && emptyMsg === 0) fail.push('zero search hits but no empty hint shown')
 await page.locator('.pl-search').fill('zzz-no-such-task-zzz')
 await page.waitForTimeout(300)
-if ((await page.locator('.pl-empty').textContent().catch(() => ''))?.includes('没有匹配') !== true)
+if (
+  (
+    await page
+      .locator('.pl-empty')
+      .textContent()
+      .catch(() => '')
+  )?.includes('没有匹配') !== true
+)
   fail.push('no-hit search lacks the 没有匹配 hint')
 await page.locator('.pl-search').fill('')
 await page.locator('.pl-type-tab', { hasText: '全部' }).click()

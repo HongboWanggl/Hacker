@@ -42,7 +42,7 @@ function ThemeToggle() {
     }
   }
   return (
-    <button className="pl-theme-btn" title={dark ? '切换浅色' : '切换深色'} onClick={flip}>
+    <button type="button" className="pl-theme-btn" title={dark ? '切换浅色' : '切换深色'} onClick={flip}>
       {dark ? '☀️' : '🌙'}
     </button>
   )

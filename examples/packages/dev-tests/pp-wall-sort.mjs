@@ -11,7 +11,10 @@ const httpCreds = process.env.PP_USER
   ? { username: process.env.PP_USER, password: process.env.PP_PASS ?? '' }
   : undefined
 const fail = []
-const browser = await chromium.launch({ executablePath: `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`, headless: true })
+const browser = await chromium.launch({
+  executablePath: `${process.env.HOME}/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell`,
+  headless: true,
+})
 const page = await browser.newPage({
   viewport: { width: 1400, height: 1000 },
   ...(httpCreds ? { httpCredentials: httpCreds } : {}),

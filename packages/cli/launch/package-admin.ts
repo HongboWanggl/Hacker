@@ -283,7 +283,11 @@ export function localPackageAdmin(backend: LocalBackend, origin: string) {
         // stale session's E_WORKSPACE_REQUIRED) must reach the launcher log or every 503 is
         // undebuggable.
         const rpcData = (e as { data?: unknown }).data
-        console.warn('[bff] callService failed:', (e as Error)?.message ?? e, rpcData ? JSON.stringify(rpcData) : '')
+        console.warn(
+          '[bff] callService failed:',
+          (e as Error)?.message ?? e,
+          rpcData ? JSON.stringify(rpcData) : '',
+        )
         serviceReply(response, 503, { error: 'service unavailable' })
       }
       return true

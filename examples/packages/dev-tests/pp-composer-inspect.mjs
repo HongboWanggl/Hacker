@@ -11,7 +11,10 @@ const httpCreds = process.env.PP_USER
   : undefined
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+const page = await browser.newPage({
+  viewport: { width: 1400, height: 1000 },
+  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
+})
 if (httpCreds) await login(page.request, base, httpCreds)
 page.on('pageerror', (err) => fail.push(`pageerror: ${String(err).slice(0, 120)}`))
 
@@ -30,7 +33,10 @@ const chips = async (text, type) => {
     await page.waitForTimeout(300)
   }
   await ta.fill(text)
-  await page.locator('.pl-inspect').waitFor({ timeout: 5000 }).catch(() => {})
+  await page
+    .locator('.pl-inspect')
+    .waitFor({ timeout: 5000 })
+    .catch(() => {})
   await page.waitForTimeout(150)
   return page
     .locator('.pl-chip')
@@ -38,7 +44,8 @@ const chips = async (text, type) => {
     .catch(() => [])
 }
 const expectChip = (got, want, label) => {
-  if (!got.some((t) => t.includes(want))) fail.push(`${label}: expected chip ~${JSON.stringify(want)}, got ${JSON.stringify(got)}`)
+  if (!got.some((t) => t.includes(want)))
+    fail.push(`${label}: expected chip ~${JSON.stringify(want)}, got ${JSON.stringify(got)}`)
 }
 
 const SEQ47 = 'MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHF'
@@ -57,7 +64,7 @@ expectChip(got, `FASTA · ${SEQ47.length} aa`, 'fasta first record')
 expectChip(got, '其余 1 条将忽略', 'fasta extras warn')
 
 // 4. Digits inside a long paste → not a sequence, warned loudly.
-got = await chips(SEQ47 + '123456')
+got = await chips(`${SEQ47}123456`)
 expectChip(got, '无法识别为序列', 'digits warn')
 
 // 5. Unknown free text → guidance chip.
@@ -65,7 +72,18 @@ got = await chips('p53 human')
 expectChip(got, '无法识别：请输入 UniProt ID', 'unknown warn')
 
 // 6. Batch: overflow + junk tokens both surfaced.
-const tenAccs = ['P69905', 'P68871', 'P04637', 'P02768', 'P01308', 'P61769', 'P00698', 'P00734', 'P05067', 'P00533']
+const tenAccs = [
+  'P69905',
+  'P68871',
+  'P04637',
+  'P02768',
+  'P01308',
+  'P61769',
+  'P00698',
+  'P00734',
+  'P05067',
+  'P00533',
+]
 got = await chips([...tenAccs, 'not-an-id'].join('\n'), '批量')
 expectChip(got, '8 个 UniProt ID', 'batch cap')
 expectChip(got, '最多 8 个，仅取前 8 个', 'batch overflow warn')

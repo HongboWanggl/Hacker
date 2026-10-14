@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto'
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { createClient, memoryJournal } from '../../../packages/sdk/src/index.node.ts'
 
 // Publish the protein-platform Surface package:
@@ -20,7 +20,8 @@ type PkgAdmin = {
 }
 type PkgOpResult = { state: string; error?: { code?: string } }
 
-const home = process.env.AGH_HOME!
+const home = process.env.AGH_HOME
+if (!home) throw new Error('AGH_HOME is required for this probe')
 const profile = process.env.AGNES_PROFILE ?? 'local-dev'
 const target = join(home, 'profiles', profile, 'deploy', 'protein-platform')
 const repoDeploy = new URL('../protein-platform/deploy/', import.meta.url).pathname

@@ -35,7 +35,11 @@ try {
   })
   console.log('REAL-SESSION OK:', JSON.stringify(r).slice(0, 200))
 } catch (e) {
-  console.log('REAL-SESSION FAIL:', (e as Error).message, JSON.stringify((e as { data?: unknown }).data ?? null))
+  console.log(
+    'REAL-SESSION FAIL:',
+    (e as Error).message,
+    JSON.stringify((e as { data?: unknown }).data ?? null),
+  )
 }
 // 3. Bogus session for contrast (always fails; see header comment).
 try {
@@ -48,6 +52,10 @@ try {
   })
   console.log('BOGUS unexpectedly ok')
 } catch (e) {
-  console.log('BOGUS fails as expected:', (e as Error).message, JSON.stringify((e as { data?: unknown }).data ?? null))
+  console.log(
+    'BOGUS fails as expected:',
+    (e as Error).message,
+    JSON.stringify((e as { data?: unknown }).data ?? null),
+  )
 }
 process.exit(0)

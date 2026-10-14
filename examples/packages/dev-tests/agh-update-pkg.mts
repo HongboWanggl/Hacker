@@ -50,9 +50,11 @@ for (const name of names) {
   console.log(`${name}: preview integrity ${preview.integrity.slice(0, 24)}`)
   // First publish must use `install`: `update` on a not-yet-installed package
   // throws E_DEP_MISSING, safely mapped to the misleading E_PACKAGE_SOURCE.
-  const installed = ((await pkg.list({ profile: common.profile })) as {
-    packages: { id: string }[]
-  }).packages.some((row) => row.id === preview.id)
+  const installed = (
+    (await pkg.list({ profile: common.profile })) as {
+      packages: { id: string }[]
+    }
+  ).packages.some((row) => row.id === preview.id)
   await op(
     installed ? 'update' : 'install',
     installed

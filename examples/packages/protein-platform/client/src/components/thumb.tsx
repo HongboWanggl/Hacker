@@ -1,4 +1,4 @@
-import { createElement as h, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 // Mini Cα-trace thumbnail for wall cards, rendered from the archive's parsed
 // structure (api/archive/<id>/structure → protein.structure shape). A flat 2D
@@ -43,6 +43,7 @@ function pca2(pts: number[][]): [number[], number[]] {
   return [v1, v2]
 }
 
+// biome-ignore lint/suspicious/noExplicitAny: input is a raw archived report payload whose schema lives server-side
 function projectThumb(output: any): Thumb {
   const residues: Array<{ x: number; y: number; z: number; b: number; chain: string }> = output?.residues
   if (!Array.isArray(residues) || residues.length < 2) return null
@@ -105,7 +106,7 @@ export function StructureThumb({
   // Batch archives hold one PDB per target (pdb-<basename>); `path` deep-links
   // to one of them via the server's ?path= resolution (model.pdb otherwise).
   const key = path ? `${taskId}::${path}` : taskId
-  const preset = path ? meta?.thumbs?.[(path.split('/').pop() ?? '')] : meta?.thumb
+  const preset = path ? meta?.thumbs?.[path.split('/').pop() ?? ''] : meta?.thumb
   const [thumb, setThumb] = useState<Thumb | undefined>(() =>
     preset ? { chains: preset.d, colors: preset.c, viewBox: '0 0 100 100' } : cache.get(key),
   )

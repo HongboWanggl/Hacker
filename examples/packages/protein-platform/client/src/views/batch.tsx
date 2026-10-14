@@ -3,6 +3,7 @@ import { runTask } from '../orchestrator.ts'
 
 // 批量预测：每行一个 UniProt ID（≤8），batch_predict 串行预测后由 BatchCard
 // 汇总渲染（成功行可展开逐目标 3D 详情）。
+// biome-ignore lint/suspicious/noExplicitAny: props are passed down from boot()'s untyped sdk handle and config cache
 export function BatchView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: any }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -40,6 +41,7 @@ export function BatchView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: 
             识别到 {accessions.length} 个 ID{accessions.length > 8 ? '（取前 8 个）' : ''}
           </span>
           <button
+            type="button"
             className="pl-submit"
             disabled={!ready || busy || accessions.length === 0}
             onClick={() => void submit()}

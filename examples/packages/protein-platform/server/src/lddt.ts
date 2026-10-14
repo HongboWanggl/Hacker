@@ -124,7 +124,10 @@ function dominantEigenvector4(M: number[][]): number[] {
 
 // Optimal superposition of Q onto P via Horn's quaternion method (dominant
 // eigenvector of the 4×4 Horn matrix). Returns CA-RMSD of the superposed clouds.
-function hornRmsd(P: Array<{ x: number; y: number; z: number }>, Q: Array<{ x: number; y: number; z: number }>): number {
+function hornRmsd(
+  P: Array<{ x: number; y: number; z: number }>,
+  Q: Array<{ x: number; y: number; z: number }>,
+): number {
   const n = P.length
   const centroid = (pts: Array<{ x: number; y: number; z: number }>) =>
     [0, 1, 2].map((k) => pts.reduce((sum, p) => sum + (k === 0 ? p.x : k === 1 ? p.y : p.z), 0) / n)
@@ -177,10 +180,7 @@ export type ScoreResult = {
 }
 
 export function scoreStructures(model: ScoreRes[], ref: ScoreRes[]): ScoreResult | undefined {
-  const pairs = nwPairs(
-    model.map((r) => r.aa).join(''),
-    ref.map((r) => r.aa).join(''),
-  )
+  const pairs = nwPairs(model.map((r) => r.aa).join(''), ref.map((r) => r.aa).join(''))
   if (pairs.length < 5) return undefined
   const mi = pairs.map(([i]) => i)
   const ri = pairs.map(([, j]) => j)
@@ -212,7 +212,8 @@ export function scoreStructures(model: ScoreRes[], ref: ScoreRes[]): ScoreResult
   let lddt = 0
   for (let t = 0; t < THRESHOLDS.length; t++) {
     let ok = 0
-    for (const [u, v, dRef] of pairList) if (Math.abs(dist(model[mi[u]], model[mi[v]]) - dRef) <= THRESHOLDS[t]) ok++
+    for (const [u, v, dRef] of pairList)
+      if (Math.abs(dist(model[mi[u]], model[mi[v]]) - dRef) <= THRESHOLDS[t]) ok++
     lddt += ok / pairList.length
   }
   lddt /= THRESHOLDS.length

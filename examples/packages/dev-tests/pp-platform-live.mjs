@@ -36,10 +36,13 @@ try {
   // there and wait for the run to finish (ESMFold on 142aa takes tens of seconds).
   await page.goto(`${base}#/tasks`, { timeout: 15000 })
   const outcome = await page
-    .waitForSelector('.pl-tasklist a.pl-taskrow:first-child .pl-badge.done, .pl-tasklist a.pl-taskrow:first-child .pl-badge.failed, .pl-tasklist a.pl-taskrow:first-child .pl-badge.cancelled', {
-      timeout: 420000,
-      state: 'attached',
-    })
+    .waitForSelector(
+      '.pl-tasklist a.pl-taskrow:first-child .pl-badge.done, .pl-tasklist a.pl-taskrow:first-child .pl-badge.failed, .pl-tasklist a.pl-taskrow:first-child .pl-badge.cancelled',
+      {
+        timeout: 420000,
+        state: 'attached',
+      },
+    )
     .then((el) => el.textContent())
     .catch(() => null)
   if (outcome !== '已完成') fail.push(`task outcome: ${outcome}`)
@@ -64,7 +67,7 @@ try {
 }
 await browser.close()
 if (fail.length) {
-  console.log('FAILED:\n- ' + fail.join('\n- '))
+  console.log(`FAILED:\n- ${fail.join('\n- ')}`)
   process.exit(1)
 }
 console.log('platform live E2E: PASS')

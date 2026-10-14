@@ -52,10 +52,7 @@ function normalizeUpstreamHeaders(headers: IncomingHttpHeaders): Record<string, 
  * startup-built CSP that embeds the WS origin (web-server/src/server.ts). */
 export function surfaceCspFor(wsOrigin: string | undefined): string {
   if (!wsOrigin || !/^wss?:\/\/[A-Za-z0-9._-]+:\d{1,5}$/.test(wsOrigin)) return DEFAULT_SURFACE_CSP
-  return DEFAULT_SURFACE_CSP.replace(
-    "connect-src 'self'",
-    `connect-src 'self' ${wsOrigin}`,
-  )
+  return DEFAULT_SURFACE_CSP.replace("connect-src 'self'", `connect-src 'self' ${wsOrigin}`)
 }
 
 /**
@@ -116,10 +113,10 @@ export function createMountProxy(deps: {
         // is wrapped and falls back to the same 502 this file already uses when the upstream socket
         // itself is unreachable.
         try {
-          res.writeHead(
-            upstreamRes.statusCode ?? 502,
-            { ...surfaceSecurityHeaders(normalizeUpstreamHeaders(upstreamRes.headers)), 'content-security-policy': csp },
-          )
+          res.writeHead(upstreamRes.statusCode ?? 502, {
+            ...surfaceSecurityHeaders(normalizeUpstreamHeaders(upstreamRes.headers)),
+            'content-security-policy': csp,
+          })
         } catch {
           upstreamRes.destroy()
           if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain' })

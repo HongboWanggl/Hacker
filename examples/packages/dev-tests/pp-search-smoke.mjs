@@ -10,7 +10,10 @@ const httpCreds = process.env.PP_USER
   : undefined
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+const page = await browser.newPage({
+  viewport: { width: 1400, height: 1000 },
+  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
+})
 if (httpCreds) await login(page.request, base, httpCreds)
 await page.goto(`${base}#/search`, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForSelector('.pl-input-name', { timeout: 15000 })
@@ -58,7 +61,10 @@ if (!/P6\d{4}|HBB|HBA/.test(body)) fail.push(`SearchCard missing accessions: ${b
 await page.screenshot({ path: '/tmp/pp-search-smoke.png' })
 // Fresh context: the archived search page must rebuild SearchCard from the
 // archived report.json alone.
-const page2 = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+const page2 = await browser.newPage({
+  viewport: { width: 1400, height: 1000 },
+  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
+})
 if (httpCreds) await login(page2.request, base, httpCreds)
 await page2.goto(`${base}#/task/${taskId}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page2.waitForSelector('.pv-root', { timeout: 60000 })
@@ -74,7 +80,9 @@ if (!/历史归档/.test(body2)) fail.push('archived search page lacks archive b
 // task verbatim from the accession. Assert on the archived page — proves the
 // hand-off works without the live task, like a researcher on another device.
 const predBtn = page2.locator('.pv-search-predict').first()
-await predBtn.waitFor({ timeout: 15000, state: 'visible' }).catch(() => fail.push('predict ▶ missing on search card'))
+await predBtn
+  .waitFor({ timeout: 15000, state: 'visible' })
+  .catch(() => fail.push('predict ▶ missing on search card'))
 if (fail.length === 0) {
   await predBtn.click()
   await page2

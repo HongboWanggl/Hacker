@@ -3,6 +3,7 @@ import { runTask } from '../orchestrator.ts'
 
 // UniProt 检索：uniprot_search → SearchCard（hits 列表）。检索产物 savedTo 走
 // 与预测任务完全相同的 ledger 归约；结果页由 uniprot_search toolview 渲染。
+// biome-ignore lint/suspicious/noExplicitAny: props are passed down from boot()'s untyped sdk handle and config cache
 export function SearchView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: any }) {
   const [query, setQuery] = useState('')
   const [busy, setBusy] = useState(false)
@@ -35,6 +36,7 @@ export function SearchView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk:
             }}
           />
           <button
+            type="button"
             className="pl-submit"
             disabled={!ready || busy || !query.trim()}
             onClick={() => void submit()}

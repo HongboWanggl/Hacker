@@ -93,7 +93,8 @@ const rigid = (pts: number[][], Rm: number[][], tv: number[]) =>
   pts.map((p) => Rm.map((r) => r[0] * p[0] + r[1] * p[1] + r[2] * p[2] + tv.reduce((s, v) => s + v, 0) / 3))
 ok('kabsch rigid RMSD ~0', k.rmsd < 0.01)
 const planar: number[][] = []
-for (let i = 0; i < 50; i++) planar.push([Math.cos(i * 0.5) * (1 + i * 0.1), Math.sin(i * 0.5) * (1 + i * 0.1), 0])
+for (let i = 0; i < 50; i++)
+  planar.push([Math.cos(i * 0.5) * (1 + i * 0.1), Math.sin(i * 0.5) * (1 + i * 0.1), 0])
 const kp = kabsch(planar, rigid(planar, R, [3, -7, 2]))
 console.log('kabsch planar RMSD (expect ~0):', kp.rmsd)
 ok('kabsch planar RMSD ~0', kp.rmsd < 0.01)

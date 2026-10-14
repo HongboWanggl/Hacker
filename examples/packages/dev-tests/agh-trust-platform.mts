@@ -7,7 +7,8 @@ import { createClient, memoryJournal } from '../../../packages/sdk/src/index.nod
 // so the canonical tree in the repo is synced to
 // <AGH_HOME>/profiles/<profile>/deploy/protein-platform first, then signed into
 // agnes.lock via packages.trustWorkspace.
-const home = process.env.AGH_HOME!
+const home = process.env.AGH_HOME
+if (!home) throw new Error('AGH_HOME is required for this probe')
 const profile = process.env.AGNES_PROFILE ?? 'local-dev'
 const repoDeploy = new URL('../protein-platform/deploy/', import.meta.url).pathname
 const target = join(home, 'profiles', profile, 'deploy', 'protein-platform')
@@ -24,6 +25,7 @@ const client = createClient({
   journal: memoryJournal(),
 })
 await client.initialize()
+// biome-ignore lint/suspicious/noExplicitAny: trustWorkspace is an admin API not yet in the public SDK types
 const { hash } = await (client.packages as any).trustWorkspace({
   profile,
   clientId: await client.clientId(),

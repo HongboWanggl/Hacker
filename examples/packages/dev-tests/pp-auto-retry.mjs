@@ -49,10 +49,10 @@ for (let i = 0; i < 120 && !sawRetry; i++) {
 console.log('retry fired (2nd api/task post):', sawRetry, `posts=${taskPosts}`)
 if (!sawRetry) fail.push(`auto-retry never resubmitted (api/task posts: ${taskPosts})`)
 const outcome = await page
-  .waitForSelector(
-    '.pl-tasklist a.pl-taskrow:first-child .pl-badge.done',
-    { timeout: 240000, state: 'attached' },
-  )
+  .waitForSelector('.pl-tasklist a.pl-taskrow:first-child .pl-badge.done', {
+    timeout: 240000,
+    state: 'attached',
+  })
   .then((el) => el.textContent())
   .catch(() => null)
 console.log('outcome:', outcome)

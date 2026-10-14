@@ -10,6 +10,7 @@ const runningStage = (t: { stages: Array<{ label: string; status: string }> }) =
 
 // Lazy wall snapshot: fetches the confidence report via the BFF and renders
 // name + mean pLDDT + band bar + verdict. Fails soft (title-only card).
+// biome-ignore lint/suspicious/noExplicitAny: task is the archived task record whose schema lives server-side
 function ReportSnapshot({ task }: { task: any }) {
   const [snap, setSnap] = useState<any>(null)
   useEffect(() => {
@@ -275,7 +276,12 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
         <div className="pl-composer-foot">
           <div className="pl-type-tabs">
             {(['single', 'complex', 'batch'] as TaskType[]).map((t) => (
-              <button key={t} className={`pl-type-tab ${type === t ? 'on' : ''}`} onClick={() => setType(t)}>
+              <button
+                type="button"
+                key={t}
+                className={`pl-type-tab ${type === t ? 'on' : ''}`}
+                onClick={() => setType(t)}
+              >
                 {TASK_TYPE_LABEL[t]}
               </button>
             ))}
@@ -295,6 +301,7 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
             onChange={(e) => setName(e.target.value)}
           />
           <button
+            type="button"
             className="pl-submit"
             disabled={
               !ready ||
@@ -340,6 +347,7 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
             不会触碰你的其他文件；全程无需审批，完成即在报告墙出结果。
           </div>
           <button
+            type="button"
             className="pl-consent-ok"
             onClick={() => {
               try {
@@ -365,6 +373,7 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
           <div className="pl-filters pl-filters-wall">
             {(['all', 'single', 'complex', 'batch', 'search', 'compare'] as const).map((k) => (
               <button
+                type="button"
                 key={k}
                 className={`pl-type-tab ${wallFilter === k ? 'on' : ''}`}
                 onClick={() => setWallFilter(k)}
@@ -376,12 +385,14 @@ export function HomeView({ ready, cfg, sdk }: { ready: boolean; cfg: any; sdk: a
               ·
             </span>
             <button
+              type="button"
               className={`pl-type-tab ${wallSort === 'new' ? 'on' : ''}`}
               onClick={() => setWallSort('new')}
             >
               最新
             </button>
             <button
+              type="button"
               className={`pl-type-tab ${wallSort === 'score' ? 'on' : ''}`}
               onClick={() => setWallSort('score')}
             >

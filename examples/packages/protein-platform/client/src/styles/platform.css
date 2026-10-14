@@ -1014,7 +1014,12 @@ html.dark .pl-back:hover {
 }
 html.dark .pl-thumb,
 html.dark .pl-thumb-grid {
-  background: radial-gradient(ellipse at 50% 42%, rgb(56 76 112 / 38%) 0%, rgb(40 54 82 / 28%) 70%, transparent 100%);
+  background: radial-gradient(
+    ellipse at 50% 42%,
+    rgb(56 76 112 / 38%) 0%,
+    rgb(40 54 82 / 28%) 70%,
+    transparent 100%
+  );
 }
 html.dark .pl-type-tab {
   background: var(--pl-card);

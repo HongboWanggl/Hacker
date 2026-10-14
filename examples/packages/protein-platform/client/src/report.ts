@@ -66,12 +66,13 @@ export function downloadShareReport(input: ShareInput & { figs?: StageFig[] }): 
   const figs = input.figs ?? snapshotStageFigures()
 
   const when = new Date(input.savedAt).toLocaleString('zh-CN')
-  const scoreBlock = input.meanPlddt != null
-    ? `<div class="score" style="color:${scoreColor(input.meanPlddt)}">${input.meanPlddt.toFixed(1)}</div>
+  const scoreBlock =
+    input.meanPlddt != null
+      ? `<div class="score" style="color:${scoreColor(input.meanPlddt)}">${input.meanPlddt.toFixed(1)}</div>
        <div class="score-label">平均 pLDDT${input.verdict ? ` · ${esc(input.verdict)}` : ''}</div>`
-    : input.verdict
-      ? `<div class="score-label" style="font-size:15px">${esc(input.verdict)}</div>`
-      : ''
+      : input.verdict
+        ? `<div class="score-label" style="font-size:15px">${esc(input.verdict)}</div>`
+        : ''
 
   const figsHtml = figs
     .map(
@@ -88,10 +89,16 @@ export function downloadShareReport(input: ShareInput & { figs?: StageFig[] }): 
   // residues, ligand balls) — drag rotate, wheel zoom, double-click reset,
   // auto-rotate toggle. Batch reports pass one set per job; the viewer grows
   // a target tab bar. All vanilla JS inline; PNG figures above stay for print.
-  const sets: Array<{ name: string; meanPlddt?: number; residues: StructureResidue[]; ligands: StructureLigand[] }> = []
+  const sets: Array<{
+    name: string
+    meanPlddt?: number
+    residues: StructureResidue[]
+    ligands: StructureLigand[]
+  }> = []
   for (const s of input.structures ?? []) {
     const residues = s.residues ?? []
-    if (residues.length > 0) sets.push({ name: s.name ?? '', meanPlddt: s.meanPlddt, residues, ligands: s.ligandAtoms ?? [] })
+    if (residues.length > 0)
+      sets.push({ name: s.name ?? '', meanPlddt: s.meanPlddt, residues, ligands: s.ligandAtoms ?? [] })
   }
   if (sets.length === 0 && input.structure) {
     const residues = input.structure.residues ?? []

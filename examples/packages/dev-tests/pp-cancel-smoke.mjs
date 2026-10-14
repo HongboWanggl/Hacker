@@ -13,7 +13,10 @@ const httpCreds = process.env.PP_USER
   : undefined
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+const page = await browser.newPage({
+  viewport: { width: 1400, height: 1000 },
+  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
+})
 if (httpCreds) await login(page.request, base, httpCreds)
 await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForSelector('.pl-composer textarea', { timeout: 15000 })
@@ -67,15 +70,17 @@ if (fail.length === 0) {
   await page.click('.pl-submit')
   const id = await page.evaluate(() => JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]')[0].id)
   await page.goto(`${base}#/task/${id}`, { timeout: 15000 })
-  await page.waitForSelector('.pl-stage-wrap', { timeout: 30000 }).catch(() => fail.push('stage block missing'))
+  await page
+    .waitForSelector('.pl-stage-wrap', { timeout: 30000 })
+    .catch(() => fail.push('stage block missing'))
   if (fail.length === 0) {
     const btn = page.locator('.pl-stage-wrap button.pl-row-del', { hasText: '取消' })
-    await btn.waitFor({ timeout: 15000, state: 'visible' }).catch(() => fail.push('result-page cancel button missing'))
+    await btn
+      .waitFor({ timeout: 15000, state: 'visible' })
+      .catch(() => fail.push('result-page cancel button missing'))
     if (fail.length === 0) {
       await btn.click()
-      await page
-        .locator('.pl-stage-wrap button.pl-row-del', { hasText: '确认取消' })
-        .click()
+      await page.locator('.pl-stage-wrap button.pl-row-del', { hasText: '确认取消' }).click()
       await page
         .waitForFunction(
           () => {

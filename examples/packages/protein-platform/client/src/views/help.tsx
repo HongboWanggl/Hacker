@@ -1,4 +1,4 @@
-import { createElement as h } from 'react'
+import type { ReactNode } from 'react'
 
 // In-product usage guide (#/help). Biologists never read the repo README —
 // this is the documentation surface they actually see: how to phrase input,
@@ -12,7 +12,7 @@ const PLDDT_BANDS = [
   { color: '#FF7D45', range: '< 50', label: '低', note: '大概率是无序区 / 环区，勿当结构证据' },
 ]
 
-function Section({ title, children }: { title: string; children: any }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="pl-help-sec">
       <h2>{title}</h2>
@@ -30,7 +30,9 @@ export function HelpView() {
         <div className="pl-help-grid">
           <div className="pl-help-card">
             <h3>UniProt ID</h3>
-            <p>直接输入登录号，如 <code>P69905</code>（血红蛋白 α 链）。平台自动获取序列并预测。</p>
+            <p>
+              直接输入登录号，如 <code>P69905</code>（血红蛋白 α 链）。平台自动获取序列并预测。
+            </p>
           </div>
           <div className="pl-help-card">
             <h3>FASTA</h3>
@@ -38,7 +40,9 @@ export function HelpView() {
           </div>
           <div className="pl-help-card">
             <h3>原始序列</h3>
-            <p>纯氨基酸字母（≥10 个）也可直接粘贴，如突变体序列 <code>MVLSPADKTNVKAAWGK…</code>。</p>
+            <p>
+              纯氨基酸字母（≥10 个）也可直接粘贴，如突变体序列 <code>MVLSPADKTNVKAAWGK…</code>。
+            </p>
           </div>
         </div>
       </Section>
@@ -51,7 +55,10 @@ export function HelpView() {
           </div>
           <div className="pl-help-card">
             <h3>复合物预测</h3>
-            <p>每行一条链 + 可选配体 SMILES（如阿司匹林 <code>CC(=O)OC1=CC=CC=C1C(=O)O</code>）→ Boltz-2，附 PAE 链间误差热图。</p>
+            <p>
+              每行一条链 + 可选配体 SMILES（如阿司匹林 <code>CC(=O)OC1=CC=CC=C1C(=O)O</code>）→ Boltz-2，附
+              PAE 链间误差热图。
+            </p>
           </div>
           <div className="pl-help-card">
             <h3>批量预测</h3>
@@ -83,26 +90,52 @@ export function HelpView() {
           </div>
           <div className="pl-help-card">
             <h3>AlphaFold DB 对比</h3>
-            <p>单体结果页点「⇄ 与 AlphaFold DB 对比」：与官方参考模型算 RMSD、逐段差值。核心区 ~0.3 Å 即高度一致。</p>
+            <p>
+              单体结果页点「⇄ 与 AlphaFold DB 对比」：与官方参考模型算 RMSD、逐段差值。核心区 ~0.3 Å
+              即高度一致。
+            </p>
           </div>
         </div>
       </Section>
 
       <Section title="④ 工作台能做的事">
         <ul className="pl-help-list">
-          <li><b>检索 → 预测</b>：「检索」页搜关键词（如 hemoglobin），行内 ▶ 一键预测；勾选多个可批量。</li>
-          <li><b>任务管理</b>：任务列表可取消运行中的任务（两键确认防误触）；失败/已取消的任务可一键按原输入重提。</li>
-          <li><b>分享报告</b>：结果页「⇩ 分享报告」生成自包含 HTML（评分 + 3D/曲线快照 + 完整 JSON），可直接进幻灯片或邮件。</li>
-          <li><b>历史归档</b>：所有完成的任务自动归档；换浏览器、清存储、重启服务后结果页仍完整可交互，归档单体页还能直接发起 AlphaFold 对比。</li>
+          <li>
+            <b>检索 → 预测</b>：「检索」页搜关键词（如 hemoglobin），行内 ▶ 一键预测；勾选多个可批量。
+          </li>
+          <li>
+            <b>任务管理</b>
+            ：任务列表可取消运行中的任务（两键确认防误触）；失败/已取消的任务可一键按原输入重提。
+          </li>
+          <li>
+            <b>分享报告</b>：结果页「⇩ 分享报告」生成自包含 HTML（评分 + 3D/曲线快照 + 完整
+            JSON），可直接进幻灯片或邮件。
+          </li>
+          <li>
+            <b>历史归档</b>
+            ：所有完成的任务自动归档；换浏览器、清存储、重启服务后结果页仍完整可交互，归档单体页还能直接发起
+            AlphaFold 对比。
+          </li>
         </ul>
       </Section>
 
       <Section title="⑤ 常见问题">
         <ul className="pl-help-list">
-          <li><b>一个任务要多久？</b>单体约 1–3 分钟；复合物 / 批量更久（Boltz-2 计算量大）。运行中可随时取消。</li>
-          <li><b>任务失败了？</b>模型网关与预测服务的偶发抖动（超时、限流、连接中断等），平台最多自动重试两次；仍失败时点「↻ 重新提交此任务」即可，输入原样重放。</li>
-          <li><b>能预测突变体吗？</b>能——把突变后的序列当原始序列粘贴（单体），或放进复合物的链里。</li>
-          <li><b>结果可以引用吗？</b>本平台的预测由 ESMFold / Boltz-2 生成，学术引用请指向相应模型论文；分享报告中的 JSON 含完整参数可复核。</li>
+          <li>
+            <b>一个任务要多久？</b>单体约 1–3 分钟；复合物 / 批量更久（Boltz-2 计算量大）。运行中可随时取消。
+          </li>
+          <li>
+            <b>任务失败了？</b>
+            模型网关与预测服务的偶发抖动（超时、限流、连接中断等），平台最多自动重试两次；仍失败时点「↻
+            重新提交此任务」即可，输入原样重放。
+          </li>
+          <li>
+            <b>能预测突变体吗？</b>能——把突变后的序列当原始序列粘贴（单体），或放进复合物的链里。
+          </li>
+          <li>
+            <b>结果可以引用吗？</b>本平台的预测由 ESMFold / Boltz-2
+            生成，学术引用请指向相应模型论文；分享报告中的 JSON 含完整参数可复核。
+          </li>
         </ul>
       </Section>
 

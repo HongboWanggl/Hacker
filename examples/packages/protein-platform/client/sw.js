@@ -66,7 +66,5 @@ self.addEventListener('fetch', (e) => {
   if (!ASSET.test(u.pathname) || !u.search.startsWith('?v=')) return
   // Only URLs the page explicitly handed us are served from here.
   if (!known.has(req.url)) return
-  e.respondWith(
-    (async () => (await caches.match(req)) || fetch(req))(),
-  )
+  e.respondWith((async () => (await caches.match(req)) || fetch(req))())
 })

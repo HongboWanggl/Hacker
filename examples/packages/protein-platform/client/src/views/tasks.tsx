@@ -65,7 +65,12 @@ function ArchivedRow({
         </div>
       )}
       {canDelete && (
-        <button className={`pl-row-del${confirming ? ' armed' : ''}`} onClick={remove} title="删除归档">
+        <button
+          type="button"
+          className={`pl-row-del${confirming ? ' armed' : ''}`}
+          onClick={remove}
+          title="删除归档"
+        >
           {confirming ? '确认删除' : '✕'}
         </button>
       )}
@@ -105,7 +110,12 @@ function LiveRow({ t }: { t: Task }) {
         ))}
       </div>
       {t.status === 'running' && (
-        <button className={`pl-row-del${confirming ? ' armed' : ''}`} onClick={cancel} title="取消任务">
+        <button
+          type="button"
+          className={`pl-row-del${confirming ? ' armed' : ''}`}
+          onClick={cancel}
+          title="取消任务"
+        >
           {confirming ? '确认取消' : '取消'}
         </button>
       )}
@@ -194,6 +204,7 @@ export function TasksView() {
           <div className="pl-filters">
             {types.map((k) => (
               <button
+                type="button"
                 key={k}
                 className={`pl-type-tab ${filter === k ? 'on' : ''}`}
                 onClick={() => setFilter(k)}
@@ -225,7 +236,7 @@ export function TasksView() {
             </div>
           )}
           {historyF.length > shown && (
-            <button className="pl-more" onClick={() => setShown((n) => n + PAGE)}>
+            <button type="button" className="pl-more" onClick={() => setShown((n) => n + PAGE)}>
               加载更多 · 还有 {historyF.length - shown} 条
             </button>
           )}

@@ -13,7 +13,10 @@ const httpCreds = process.env.PP_USER
 const origin = new URL(base).origin
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+const page = await browser.newPage({
+  viewport: { width: 1400, height: 1000 },
+  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
+})
 if (httpCreds) await login(page.request, base, httpCreds)
 page.on('console', (msg) => {
   const t = msg.text()
@@ -32,9 +35,16 @@ if (!batch) {
 await page.goto(`${base}#/task/${batch.taskId}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForSelector('.pv-batch-row', { timeout: 20000 }).catch(() => fail.push('batch rows missing'))
 // Expand the first successful row (rows with a caret toggle the drill-down).
-await page.locator('.pv-batch-row', { has: page.locator('.pv-batch-caret') }).first().click()
-await page.waitForSelector('.pv-batch-detail', { timeout: 20000 }).catch(() => fail.push('drill-down did not open'))
-await page.waitForSelector('.pv-batch-detail canvas.pv-3d, .pv-batch-detail .pv-spinner', { timeout: 20000 }).catch(() => fail.push('detail content missing'))
+await page
+  .locator('.pv-batch-row', { has: page.locator('.pv-batch-caret') })
+  .first()
+  .click()
+await page
+  .waitForSelector('.pv-batch-detail', { timeout: 20000 })
+  .catch(() => fail.push('drill-down did not open'))
+await page
+  .waitForSelector('.pv-batch-detail canvas.pv-3d, .pv-batch-detail .pv-spinner', { timeout: 20000 })
+  .catch(() => fail.push('detail content missing'))
 // The expanded row's accession — the table order is the report's, which need
 // not match the archive meta's jobPdbs order, so read it from the detail itself.
 const expandedAcc = await page
@@ -46,17 +56,25 @@ if (!expandedAcc) fail.push('could not read expanded row accession')
 
 // The platform-only compare button must exist in the drill-down toolbar.
 const cmpBtn = page.locator('.pv-batch-detail button', { hasText: '⇄ 对比' }).first()
-await cmpBtn.waitFor({ timeout: 20000, state: 'attached' }).catch(() => fail.push('⇄ 对比 button missing in drill-down'))
+await cmpBtn
+  .waitFor({ timeout: 20000, state: 'attached' })
+  .catch(() => fail.push('⇄ 对比 button missing in drill-down'))
 
-const before = await page.evaluate(() => JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]').length).catch(() => 0)
+const before = await page
+  .evaluate(() => JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]').length)
+  .catch(() => 0)
 await cmpBtn.click().catch(() => fail.push('compare click failed'))
 await page.waitForURL(/#\/tasks/, { timeout: 15000 }).catch(() => fail.push('did not navigate to #/tasks'))
 await page.waitForTimeout(1500)
-const after = await page.evaluate(() => JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]')).catch(() => [])
+const after = await page
+  .evaluate(() => JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]'))
+  .catch(() => [])
 const newTask = (after.length > before ? after[0] : null) ?? after.find((t) => t.type === 'compare')
 if (!newTask) fail.push('no new compare task in task store')
 else {
-  console.log(`new compare task: ${newTask.id} accession=${newTask.input?.accession} status=${newTask.status}`)
+  console.log(
+    `new compare task: ${newTask.id} accession=${newTask.input?.accession} status=${newTask.status}`,
+  )
   if (expandedAcc && newTask.input?.accession?.toUpperCase() !== expandedAcc.toUpperCase())
     fail.push(`compare accession mismatch: ${newTask.input?.accession} (want ${expandedAcc})`)
   // The archive write happens from the page on completion — closing the browser

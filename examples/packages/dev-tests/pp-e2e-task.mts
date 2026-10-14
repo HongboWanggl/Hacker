@@ -8,21 +8,32 @@ const client = createClient({
   journal: memoryJournal(),
 })
 await client.initialize()
+// biome-ignore lint/suspicious/noExplicitAny: probe drives the raw client surface, which is untyped by design here
 await (client as any).workspace.add(taskDir)
+// biome-ignore lint/suspicious/noExplicitAny: same raw client surface, see above
 const session = await (client as any).session.new({ cwd: taskDir, preset: 'standard' })
 const stages: { name: string; status: string }[] = []
 let savedTo: string | undefined
 let previewTail = ''
-session.onPreview?.((d: { delta?: string }) => { previewTail = (previewTail + (d.delta ?? '')).slice(-300) })
+session.onPreview?.((d: { delta?: string }) => {
+  previewTail = (previewTail + (d.delta ?? '')).slice(-300)
+})
 const events = session.events({ preview: false })
 const loop = (async () => {
   for await (const row of events) {
     const env = row as unknown as { type: string; data?: Record<string, unknown> }
-    const e = (env.data ?? env) as unknown as { name?: string; isError?: boolean; content?: { text?: string }[] }
+    const e = (env.data ?? env) as unknown as {
+      name?: string
+      isError?: boolean
+      content?: { text?: string }[]
+    }
     if (env.type === 'tool/call') stages.push({ name: e.name, status: 'running' })
     if (env.type === 'tool/result') {
       for (let i = stages.length - 1; i >= 0; i--)
-        if (stages[i].status === 'running') { stages[i].status = e.isError ? 'error' : 'done'; break }
+        if (stages[i].status === 'running') {
+          stages[i].status = e.isError ? 'error' : 'done'
+          break
+        }
       const text = (e.content ?? []).map((c: { text?: string }) => c.text ?? '').join('')
       const m = text.match(/"savedTo"\s*:\s*"((?:[^"\\]|\\.)*)"/)
       if (m) savedTo ??= m[1]

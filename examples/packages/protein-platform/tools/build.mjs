@@ -73,7 +73,10 @@ renameSync(join(dist, 'server.js'), join(dist, 'server.mjs'))
 // index.html itself stays at max-age=300 so deploys propagate within minutes.
 const idx = readFileSync(join(dist, 'index.html'), 'utf8')
 const assetV = (name) =>
-  createHash('sha256').update(readFileSync(join(dist, name))).digest('base64url').slice(0, 10)
+  createHash('sha256')
+    .update(readFileSync(join(dist, name)))
+    .digest('base64url')
+    .slice(0, 10)
 // Anchor on the attribute so comment mentions of the filenames never match.
 writeFileSync(
   join(dist, 'index.html'),

@@ -105,4 +105,3 @@ server.listen(PORT, '127.0.0.1', () => {
 // 408aa T1024 retry, 2026-10-14). Long jobs are already bounded by the client's
 // 22min fetch window and runLocalBoltz's own 20min cap, so lift the HTTP limit.
 server.requestTimeout = 0
-

@@ -10,7 +10,10 @@ const httpCreds = process.env.PP_USER
   : undefined
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+const page = await browser.newPage({
+  viewport: { width: 1400, height: 1000 },
+  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
+})
 if (httpCreds) await login(page.request, base, httpCreds)
 await page.goto(`${base}#/batch`, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForSelector('.pl-composer textarea', { timeout: 15000 })
@@ -61,7 +64,10 @@ if (!/P68871/.test(body ?? '')) fail.push('BatchCard missing P68871 row')
 await page.screenshot({ path: '/tmp/pp-batch-smoke.png' })
 // Fresh context (no localStorage) → the archived page must rebuild the whole
 // result from the archive API alone: report.json feeds the BatchCard.
-const page2 = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+const page2 = await browser.newPage({
+  viewport: { width: 1400, height: 1000 },
+  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
+})
 if (httpCreds) await login(page2.request, base, httpCreds)
 await page2.goto(`${base}#/task/${taskId}`, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page2.waitForSelector('.pv-root', { timeout: 60000 })

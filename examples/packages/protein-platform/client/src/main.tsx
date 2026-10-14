@@ -14,12 +14,14 @@ import { TasksView } from './views/tasks.tsx'
 import './styles/platform.css'
 
 async function boot() {
-  const root = createRoot(document.getElementById('root')!)
+  const rootEl = document.getElementById('root')
+  if (!rootEl) throw new Error('platform boot: #root element missing')
+  const root = createRoot(rootEl)
   const cfg: PlatformConfig = await loadConfig()
-  const services = initServices(cfg)
+  initServices(cfg)
 
   let connected = false
-  let sdk: any = null
+  let sdk: Awaited<ReturnType<typeof connectDaemon>> | null = null
   try {
     sdk = await connectDaemon(cfg)
     connected = true

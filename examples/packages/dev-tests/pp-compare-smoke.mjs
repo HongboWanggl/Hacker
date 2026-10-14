@@ -12,14 +12,20 @@ const httpCreds = process.env.PP_USER
   : undefined
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+const page = await browser.newPage({
+  viewport: { width: 1400, height: 1000 },
+  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
+})
 if (httpCreds) await login(page.request, base, httpCreds)
 await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 })
 await page.waitForSelector('.pl-composer textarea', { timeout: 15000 })
 await page.fill('.pl-composer textarea', 'P69905')
 await page.click('.pl-submit')
 await page.goto(`${base}#/tasks`, { timeout: 15000 })
-await page.waitForSelector('.pl-tasklist a.pl-taskrow:first-child .pl-badge.done', { timeout: 420000, state: 'attached' })
+await page.waitForSelector('.pl-tasklist a.pl-taskrow:first-child .pl-badge.done', {
+  timeout: 420000,
+  state: 'attached',
+})
 await page.click('a.pl-taskrow')
 await page.waitForSelector('.pl-result', { timeout: 15000 })
 const btn = page.locator('button.pl-back', { hasText: 'AlphaFold' }).first()
@@ -27,21 +33,25 @@ await btn.waitFor({ timeout: 60000, state: 'visible' }).catch(() => fail.push('c
 if (fail.length === 0) {
   await btn.click()
   // Wait until a second task (type compare) appears in the store, then until IT is done.
-  await page.waitForFunction(
-    () => {
-      const t = JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]')
-      return t.length >= 2 && t[0].type === 'compare'
-    },
-    { timeout: 120000 },
-  ).catch(() => fail.push('compare task never created'))
+  await page
+    .waitForFunction(
+      () => {
+        const t = JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]')
+        return t.length >= 2 && t[0].type === 'compare'
+      },
+      { timeout: 120000 },
+    )
+    .catch(() => fail.push('compare task never created'))
   await page.goto(`${base}#/tasks`, { timeout: 15000 })
-  await page.waitForFunction(
-    () => {
-      const t = JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]')
-      return t[0]?.type === 'compare' && (t[0].status === 'done' || t[0].status === 'failed')
-    },
-    { timeout: 420000 },
-  ).catch(() => {})
+  await page
+    .waitForFunction(
+      () => {
+        const t = JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]')
+        return t[0]?.type === 'compare' && (t[0].status === 'done' || t[0].status === 'failed')
+      },
+      { timeout: 420000 },
+    )
+    .catch(() => {})
   const t = (await page.evaluate(() => JSON.parse(localStorage.getItem('pp-tasks-v1') ?? '[]')))[0]
   if (t?.status !== 'done') fail.push(`compare outcome: ${t?.status} ${t?.error ?? ''}`)
   // Compare archives too: hold the tab open until the archive lands, then
@@ -63,7 +73,9 @@ if (fail.length === 0) {
   await page.goto(`${base}#/task/${t.id}`, { timeout: 15000 })
   await page.waitForSelector('.pv-root', { timeout: 60000 }).catch(() => fail.push('no .pv-root'))
   await page
-    .waitForFunction(() => /RMSD|一致性/i.test(document.querySelector('.pl-result')?.innerText ?? ''), { timeout: 60000 })
+    .waitForFunction(() => /RMSD|一致性/i.test(document.querySelector('.pl-result')?.innerText ?? ''), {
+      timeout: 60000,
+    })
     .catch(() => {})
   const body = (await page.textContent('.pl-result').catch(() => '')) ?? ''
   if (!/RMSD|一致性/i.test(body)) fail.push(`CompareCard missing metrics: ${body.slice(0, 200)}`)
@@ -71,8 +83,11 @@ if (fail.length === 0) {
   // Fresh context: archived compare page must rebuild from the archive alone.
   // Fresh context = fresh localStorage; on remote deployments it also needs the
   // basic-auth credentials (a bare browser.newPage() 401s on every archive fetch).
-  const ctx2 = await browser.newContext({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
-if (httpCreds) await login(ctx2.request, base, httpCreds)
+  const ctx2 = await browser.newContext({
+    viewport: { width: 1400, height: 1000 },
+    ...(httpCreds ? { httpCredentials: httpCreds } : {}),
+  })
+  if (httpCreds) await login(ctx2.request, base, httpCreds)
   const page2 = await ctx2.newPage()
   // One reload retry: the mount-table flap can outlast the app's own retries.
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -86,7 +101,9 @@ if (httpCreds) await login(ctx2.request, base, httpCreds)
     await page2.waitForTimeout(4000)
   }
   await page2
-    .waitForFunction(() => /RMSD|一致性/i.test(document.querySelector('.pl-result')?.innerText ?? ''), { timeout: 30000 })
+    .waitForFunction(() => /RMSD|一致性/i.test(document.querySelector('.pl-result')?.innerText ?? ''), {
+      timeout: 30000,
+    })
     .catch(() => {})
   const body2 = (await page2.textContent('.pl-result').catch(() => '')) ?? ''
   if (!/RMSD|一致性/i.test(body2)) fail.push('archived compare page missing metrics')

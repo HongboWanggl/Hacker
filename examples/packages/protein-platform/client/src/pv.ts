@@ -4,11 +4,14 @@ import type { PvServices } from './bff.ts'
 // Bind the protein-view toolview components into the platform app without
 // touching protein-view: apply(ctx) with a capture shim (same shape the
 // dev-tests happy-dom suites use). Returns toolName -> component.
+// biome-ignore lint/suspicious/noExplicitAny: toolview component shape is owned by protein-view's untyped apply() shim — retyping here would fork the source of truth
 export function bindProteinToolViews(services: PvServices): Map<string, any> {
+  // biome-ignore lint/suspicious/noExplicitAny: same shim-typed component, see above
   const registrations: Array<{ def: { key: string }; comp: any }> = []
   apply({
     agnes: { services },
     slots: {
+      // biome-ignore lint/suspicious/noExplicitAny: component shape comes from protein-view's untyped apply() shim
       register(def: { key: string }, comp: any) {
         registrations.push({ def, comp })
       },
@@ -22,6 +25,7 @@ export function bindProteinToolViews(services: PvServices): Map<string, any> {
       const off = f()
       return typeof off === 'function' ? off : undefined
     },
+    // biome-ignore lint/suspicious/noExplicitAny: capture shim must match apply()'s untyped expected shape
   } as any)
   return new Map(registrations.map((r) => [r.def.key, r.comp]))
 }

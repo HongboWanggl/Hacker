@@ -11,35 +11,44 @@ const httpCreds = process.env.PP_USER
   : undefined
 const fail = []
 const browser = await chromium.launch({ executablePath: exe, headless: true })
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, ...(httpCreds ? { httpCredentials: httpCreds } : {}) })
+const page = await browser.newPage({
+  viewport: { width: 1400, height: 1000 },
+  ...(httpCreds ? { httpCredentials: httpCreds } : {}),
+})
 if (httpCreds) await login(page.request, base, httpCreds)
 await page.goto(`${base}#/help`, { waitUntil: 'domcontentloaded', timeout: 60000 })
 
 // Nav link exists and highlights on the help route.
-await page.waitForSelector('.pl-nav a[href="#/help"].on', { timeout: 15000, state: 'attached' }).catch(() => fail.push('nav 指南 link missing/not active'))
+await page
+  .waitForSelector('.pl-nav a[href="#/help"].on', { timeout: 15000, state: 'attached' })
+  .catch(() => fail.push('nav 指南 link missing/not active'))
 
 // Five numbered sections.
 const secs = await page.locator('.pl-help-sec h2').count()
 if (secs < 5) fail.push(`expected ≥5 sections, got ${secs}`)
 
 // pLDDT palette: 4 swatches in the pv band colors.
-await page.waitForFunction(
-  () => document.querySelectorAll('.pl-help-swatch').length >= 4,
-  { timeout: 10000 },
-).catch(() => fail.push('pLDDT band swatches missing'))
-const swatchColors = await page.locator('.pl-help-swatch').evaluateAll((els) => els.map((e) => e.style.background))
+await page
+  .waitForFunction(() => document.querySelectorAll('.pl-help-swatch').length >= 4, { timeout: 10000 })
+  .catch(() => fail.push('pLDDT band swatches missing'))
+const swatchColors = await page
+  .locator('.pl-help-swatch')
+  .evaluateAll((els) => els.map((e) => e.style.background))
 const hex2rgb = (h) => {
   const n = parseInt(h.slice(1), 16)
   return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`
 }
 for (const c of ['#0053D6', '#65CBF3', '#FFDB13', '#FF7D45']) {
-  if (!swatchColors.some((s) => s.replace(/\s/g, '') === hex2rgb(c).replace(/\s/g, ''))) fail.push(`swatch color ${c} missing`)
+  if (!swatchColors.some((s) => s.replace(/\s/g, '') === hex2rgb(c).replace(/\s/g, '')))
+    fail.push(`swatch color ${c} missing`)
 }
 
 // Cross-links resolve inside the SPA.
 await page.screenshot({ path: '/tmp/pp-help-smoke.png', fullPage: true })
 await page.locator('.pl-help-foot a', { hasText: '首页' }).click()
-await page.waitForSelector('.pl-composer textarea', { timeout: 15000 }).catch(() => fail.push('footer link did not reach home composer'))
+await page
+  .waitForSelector('.pl-composer textarea', { timeout: 15000 })
+  .catch(() => fail.push('footer link did not reach home composer'))
 
 await browser.close()
 if (fail.length) {
