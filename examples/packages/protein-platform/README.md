@@ -59,7 +59,7 @@ AGH_HOME=$HOME/agh-home AGNES_PROFILE=local-dev \
 - **可视化**：直接 import protein-view 的 toolview 组件（`bindProteinToolViews` shim 捕获 +
   `ownerProps` 伪 owner——resultPreview 必须是**截断 JSON**，可解析 JSON 会使组件跳过 report
   重取）。解析器共享自 `protein-view/extensions/main/pdb-parse.mjs`（B-factor = pLDDT）。
-- **归档**（`server/src/archive.ts`）：`~/protein-platform/archive/<taskId>/`（meta.json +
+- **归档**（`server/src/archive.ts`；客户端单次 POST 工作区相对路径，服务端 `putArchive` 自行从 `<tasksRoot>/<taskId>/` 拉取，不依赖页面在线）：`~/protein-platform/archive/<taskId>/`（meta.json +
   report.json + model.pdb，批量另存逐目标 `pdb-<basename>`，≤2MiB）。meta 冗余 meanPlddt/verdict/
   jobPdbs 供报告墙免取数渲染（list 时推导并写回 meta.json，之后零解析开销）；归档卡缩略图同样
   服务端预计算（PCA 投影 ≤120 点写入 meta.thumb/thumbs，旧档下次 list 惰性回填）——报告墙与

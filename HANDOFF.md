@@ -1,7 +1,31 @@
-# 交接文档：蛋白质平台迭代（2026-10-13）
+# 交接文档：蛋白质平台迭代（2026-10-14）
 
-> 状态：**平台基准化上线——CASP14 十靶标走真实管线，本机+公网真测绿（2026-10-14，第 25 轮）**——
-> 新增「基准」页（#/bench）：服务端 Cα-lDDT/Cα-RMSD 打分 + pLDDT 校准直方图，9/10 靶标完成打分。
+> 状态：**第 25 轮欠账清零——predictor kabsch 退化修复 + 归档服务端落盘上线公网，真测全绿（2026-10-14，第 26 轮）**——
+> 归档不再依赖浏览器在线：客户端只提交一份工作区相对路径，服务端自行读取 `<tasksRoot>/<taskId>/` 落盘。
+
+## 追加完成项（第 26 轮：把欠的帐处理掉）
+
+1. **predictor kabsch 退化**（protein-predictor/alphafold.mjs）：幂迭代 `dominantQuaternion` 换成
+   cyclic Jacobi；近共面/共线点云 RMSD 由 6.989 → 0（pairwise-unit 覆盖两类退化）。
+2. **归档静默丢失**（约一半 bench-loop 运行丢归档）：根因是旧流程把产物 base64 经 2–4 次在线 BFF
+   调用搬运，窗口长达数秒，页面跳转即中断。现在客户端 `archiveTask` 单次 POST 工作区相对路径
+   （body < 60000 字符才 `keepalive`），服务端 `putArchive` 自行从工作区拉取：
+   - 绝对 savedTo 归一化 + 路径穿越守卫；超预算只丢 `pdb-*`（最大者先丢），report.json 必保留；
+   - 元数据不变量：`reportPath` 仅在 report.json 真正落盘时写入，`pdbPath` 仅在 model.pdb 存在时写入；
+   - PAE 写入时量化、缩略图写入时预算、meanPlddt/verdict 从报告回填。
+3. **代码整理**：NPZ/NPY 读取抽到 `protein-view/extensions/main/npz-parse.mjs`，由 protein.pae 服务与
+   平台归档共用，输出形状不再漂移。
+4. **验证**：`dev-tests/archive-put.mts` 13 断言全绿（单体/穿越/批量/超预算/绝对路径）；typecheck 干净，
+   改动文件 biome 0 error。**已知遗留**：`boltz-flow-unit.mts` 在 HEAD 即失败（`calls[0].init` undefined，
+   第 99 行）——已用 git stash 基线确认非本轮回归，待单独修。
+5. **部署**：VPS 仓库 5a2cc277 → 3d648c50（thin bundle，base 必须是 VPS 实际 HEAD）；
+   `agh-update-platform.mts` 重新发布（integrity sha256-5c5d1ba83e7309491，安装 dist 含新特性串）；
+   daemon + web 双重启，公网 302 登录门正常。
+6. **公网真测（凭据经 env，未落盘未打印）**：pp-platform-live PASS、首页渲染诊断干净、
+   pp-archive-roundtrip PASS（reportPath/pdbPath/meanPlddt/verdict/缩略图齐全，纯归档重建 OK）、
+   pp-batch-smoke PASS、pp-compare-smoke PASS（refSavedTo 分支落盘）。
+7. **未做（可选）**：欠账 #3 T1024（408aa 膜蛋白）确定性失败的根因排查未开始，仍诚实显示「待运行」。
+8. **文档**：操作手册 §4 放宽「关页面」提示（归档已服务端完成），版本升至 2026-10-14。
 
 ## 追加完成项（第 25 轮：平台基准化 · CASP14）
 
