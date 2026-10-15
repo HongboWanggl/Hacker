@@ -26,16 +26,16 @@ const SMILES_MAX = 600
 //     align the chain before Boltz-2 moves at all, so the run is doomed. Observed
 //     2026-10-15: a 2944-aa COL7A1 chain (Q02388) sat in the MSA step — 6 s of CPU
 //     across 5 minutes, one open socket to the MSA server — until the cap killed it.
-//   · ~420 — what this platform has actually FOLDED. The longest completed target
-//     is 408 aa (CASP14 T1024); every success on record is at or below it, and
-//     every run well above it has failed.
+//   · 408 — what this platform has actually FOLDED. The longest completed target
+//     on record (CASP14 T1024, 408 aa) is exactly that number; every success is
+//     at or below it, and every run far above it has failed.
 // A 920-aa chain (androgen receptor P10275, 2026-10-15) completed MSA in 10 min,
 // finished preprocessing, then wrote nothing into predictions/ and exited 0 — the
-// 8 GB worker card running out of memory mid-inference. So between ~420 and 1000
+// 8 GB worker card running out of memory mid-inference. So between 408 and 1000
 // the tool will accept the job and may well fail on the worker's memory: the
 // caller is told the measured envelope rather than a promise.
 const MAX_TIER_RESIDUES = 1000
-const DEMONSTRATED_FOLD_RESIDUES = 420
+const DEMONSTRATED_FOLD_RESIDUES = 408
 
 const writeMeta = {
   isReadOnly: false,
@@ -218,9 +218,9 @@ export async function runLocalBoltz({ proteins, smiles }) {
         `so the real cause is only in its output:\n${stdout.slice(-1200)}` +
         (n > DEMONSTRATED_FOLD_RESIDUES
           ? `\nThis target is ${n} residues; the longest fold this platform has completed is ` +
-            `${DEMONSTRATED_FOLD_RESIDUES} aa, so a memory wall here is the expected outcome, not a surprise. ` +
-            'Split the target into domains (≤ ~600 aa each) and predict them separately, ' +
-            'or configure a Boltz API key so the job runs on a larger card.'
+            `${DEMONSTRATED_FOLD_RESIDUES} aa (CASP14 T1024), so a memory wall here is the expected ` +
+            'outcome, not a surprise. Split the target into domains (≤ ~600 aa each) and predict ' +
+            'them separately, or configure a Boltz API key so the job runs on a larger card.'
           : ''),
     }
   }
@@ -556,7 +556,7 @@ export const predictComplex = {
     agnes.registerTool({
       name: 'predict_complex',
       description:
-        'Predict a protein complex or protein-ligand structure with Boltz-2 (co-folding). Handles multi-chain proteins, RNA/DNA, and small-molecule ligands; reports pTM/ipTM interface confidence and binding confidence. Uses the Boltz API when a key is configured (costs credits); otherwise runs the open-source weights locally via the boltz-community CLI (slow: minutes per target, first run downloads ~10 GB) — prefer predict_structure (ESMFold, free) for single-chain jobs under 400 residues; single chains of 400+ residues are accepted here as the long-chain fallback (ESMFold rejects those). The hard refusal bound is 1000 total residues (past it no configured tier can fold the chain and the tool refuses instead of stalling), but that is a rejection threshold, not a promise: this platform has actually folded up to ~420 residues, and on the 8 GB local GPU a 920-residue single chain completed MSA and preprocessing and then produced no model (accelerator out of memory). So between ~420 and 1000 residues expect the job to be accepted and to possibly fail on the worker GPU memory — the failure names that cause. Saves the best structure as a PDB with pLDDT in the B-factor column.',
+        'Predict a protein complex or protein-ligand structure with Boltz-2 (co-folding). Handles multi-chain proteins, RNA/DNA, and small-molecule ligands; reports pTM/ipTM interface confidence and binding confidence. Uses the Boltz API when a key is configured (costs credits); otherwise runs the open-source weights locally via the boltz-community CLI (slow: minutes per target, first run downloads ~10 GB) — prefer predict_structure (ESMFold, free) for single-chain jobs under 400 residues; single chains of 400+ residues are accepted here as the long-chain fallback (ESMFold rejects those). The hard refusal bound is 1000 total residues (past it no configured tier can fold the chain and the tool refuses instead of stalling), but that is a rejection threshold, not a promise: the longest fold this platform has actually completed is 408 residues (CASP14 T1024), and on the 8 GB local GPU a 920-residue single chain completed MSA and preprocessing and then produced no model (accelerator out of memory). So between 408 and 1000 residues expect the job to be accepted and to possibly fail on the worker GPU memory — the failure names that cause. Saves the best structure as a PDB with pLDDT in the B-factor column.',
       parameters: {
         [Kind]: 'Object',
         type: 'object',

@@ -117,7 +117,7 @@ const PDB = [
 {
   const d = String(spec.description ?? '')
   ok('description still states the 1000 refusal bound', d.includes('1000'))
-  ok('description discloses the measured fold limit', /\b420\b/.test(d) && /actually folded/i.test(d))
+  ok('description discloses the measured fold limit', /\b408\b/.test(d) && /actually completed/i.test(d))
   ok('description warns about the memory wall in between', /out of memory/i.test(d))
 }
 const CONF = { ptm: 0.9, iptm: 0.85 }
@@ -287,7 +287,7 @@ exit 0
   const longText = textOf(long)
   ok(
     'target past the demonstrated envelope is told the measured limit',
-    longText.includes('924 residues') && longText.includes('420 aa'),
+    longText.includes('924 residues') && longText.includes('408 aa'),
     longText.slice(-260),
   )
   ok('and is told the way out', /Split the target into domains/.test(longText) && /API key/.test(longText))

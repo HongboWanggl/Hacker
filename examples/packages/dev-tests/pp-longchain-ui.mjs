@@ -175,10 +175,10 @@ for (const c of selected) {
       `status=${row.status} figs=${figs} reason=${JSON.stringify(reason).slice(0, 160)}`,
     )
     if (done && figs > 0)
-      console.log(`  ✓  ${c.id}: a 920-aa chain folded on the worker — the envelope is wider than 420 aa`)
+      console.log(`  ✓  ${c.id}: a 920-aa chain folded on the worker — the envelope is wider than 408 aa`)
     else
       console.log(
-        `  ~  ${c.id}: no model; failure attributed to compute — the practical envelope stays ~420 aa`,
+        `  ~  ${c.id}: no model; failure attributed to compute — the practical envelope stays 408 aa`,
       )
   }
   // A run with nothing behind it must say why, and say something USEFUL.
