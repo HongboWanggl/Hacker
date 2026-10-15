@@ -449,6 +449,25 @@ html.dark .pl-composer textarea::placeholder {
   color: var(--pl-muted);
   letter-spacing: 0.02em;
 }
+/* A requested target that produced no structure: same footprint as a real mini
+   trace, so the strip stays a grid — but visibly empty, and the caption names
+   the target and says 未产出. The card's own title (hover) carries the reason. */
+.pl-thumb-cell.pl-thumb-missing .pl-thumb-x {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  border: 1px dashed #d3b3b3;
+  background: #fdf6f6;
+  color: #c98080;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pl-thumb-cell.pl-thumb-missing figcaption {
+  color: #b06a6a;
+}
 
 /* Delete affordance on archived task rows: quiet ✕, armed into a red confirm. */
 .pl-row-del {

@@ -95,6 +95,7 @@ export function StructureThumb({
   path,
   small,
   meta,
+  onResolved,
 }: {
   taskId: string
   path?: string
@@ -102,6 +103,10 @@ export function StructureThumb({
   /** ArchiveMeta carrying server-precomputed thumb(s) — when present the SVG
    *  renders synchronously, no structure fetch at all. */
   meta?: { thumb?: ThumbData; thumbs?: Record<string, ThumbData> }
+  /** Called once the answer is known (including "there is no structure"), so a
+   *  card can drop its figure treatment instead of reserving an empty slot for
+   *  a structure that does not exist. Must be a stable reference (a setState). */
+  onResolved?: (has: boolean) => void
 }) {
   // Batch archives hold one PDB per target (pdb-<basename>); `path` deep-links
   // to one of them via the server's ?path= resolution (model.pdb otherwise).
@@ -138,6 +143,11 @@ export function StructureThumb({
       alive = false
     }
   }, [key, taskId, path, preset])
+  // Report the verdict upward (undefined = still fetching). Cards that reserved
+  // a figure area need to know whether anything will ever fill it.
+  useEffect(() => {
+    if (thumb !== undefined) onResolved?.(!!thumb)
+  }, [thumb, onResolved])
   if (!thumb) return null
   return (
     <svg className={`pl-thumb${small ? ' pl-thumb-sm' : ''}`} viewBox={thumb.viewBox} aria-hidden>

@@ -31,6 +31,20 @@ run structure-service-unit.mts
 run confidence-multichain-unit.mts
 run pae-service.mjs
 
+# The platform's own units were hand-run only, which is how a red copy-confirm
+# assertion sat in the panel probes unnoticed (it aborted this script on the
+# first failure, so ~20 probes never ran). They are cheap and offline; gate on
+# them here.
+echo "=== unit (protein platform: task lifecycle, prompts, archive) ==="
+run pp-transient-unit.mts
+run pp-prompt-unit.mts
+run pp-task-reason-unit.mts
+run pp-task-status-unit.mts
+run pp-permission-unit.mts
+run pp-complex-tier-unit.mts
+run pp-boltz-worker-unit.mts
+run archive-put.mts
+
 echo "=== panel render: SSR ==="
 run pv-render-compare.mjs
 run pv-render-test.mjs

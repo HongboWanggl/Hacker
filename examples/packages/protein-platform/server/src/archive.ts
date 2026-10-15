@@ -30,6 +30,13 @@ export type ArchiveEntry = {
   /** Batch archives: basenames of the per-target PDBs stored as pdb-<basename>,
    *  so wall cards can render mini structure thumbnails per job. */
   jobPdbs?: string[]
+  /** Batch archives: one entry per REQUESTED target, in order. `jobPdbs` only
+   *  names the targets that produced a structure, so on its own a partially
+   *  failed batch ("1/2 目标成功") renders as a half-empty figure strip with no
+   *  word about the missing target — a green card that hides a failure. Backfilled
+   *  from the archived report's jobs (which carry each target's status and the
+   *  tool's own error text). */
+  jobStates?: Array<{ accession: string; status: string; error?: string }>
   /** Single/complex archives with a UniProt source: lets the archived result page
    *  offer the AlphaFold-DB compare flow without the original live task. */
   accession?: string
@@ -41,6 +48,34 @@ export type ArchiveEntry = {
 }
 
 export type ThumbData = { d: string[]; c: string[] }
+
+/** The requested-target list out of a batch report: who was asked for, and for
+ *  the failures the tool's own words. `jobPdbs` can only ever name the survivors
+ *  (it is derived from the files that exist), so a 1/2 run that showed only its
+ *  single success was a card hiding a failure. One definition, used both when an
+ *  archive is written and when an older one is read. */
+function batchJobStates(reportJson: unknown): ArchiveEntry['jobStates'] {
+  const jobs = (reportJson as { jobs?: unknown })?.jobs
+  if (!Array.isArray(jobs)) return undefined
+  const out = jobs
+    .slice(0, 8)
+    .map((j) => {
+      const job = (j ?? {}) as { accession?: unknown; status?: unknown; error?: unknown; savedTo?: unknown }
+      const saved = typeof job.savedTo === 'string' ? (job.savedTo.split('/').pop() ?? '') : ''
+      const accession =
+        typeof job.accession === 'string' && job.accession
+          ? job.accession
+          : saved.split('_')[0].replace(/\.pdb$/i, '')
+      if (!accession) return null
+      return {
+        accession,
+        status: typeof job.status === 'string' ? job.status : 'unknown',
+        ...(typeof job.error === 'string' && job.error ? { error: job.error.slice(0, 200) } : {}),
+      }
+    })
+    .filter((s): s is NonNullable<typeof s> => s !== null)
+  return out.length > 0 ? out : undefined
+}
 
 function archiveRoot(): string {
   return (
@@ -290,6 +325,16 @@ export function putArchive(body: {
       .slice(0, 8)
     if (bases.length > 0) meta.jobPdbs = bases
   }
+  if (body.type === 'batch' && files['report.json']) {
+    // Requested targets travel with the archive, not only on backfill: the wall
+    // card must be able to name the target that produced no structure.
+    try {
+      const states = batchJobStates(JSON.parse(files['report.json'].toString('utf8')))
+      if (states) meta.jobStates = states
+    } catch {
+      /* report unparsable — the card falls back to jobPdbs */
+    }
+  }
   writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta))
   for (const [name, buf] of Object.entries(files)) {
     writeFileSync(join(dir, name), buf)
@@ -511,6 +556,21 @@ export function listArchive(): ArchiveEntry[] {
         if (jobs.length > 0) {
           meta.jobPdbs = jobs.slice(0, 8)
           dirty = true
+        }
+      }
+      // The requested-target list, so a batch card can show a slot per target
+      // (with the failed one's own error) instead of only the survivors.
+      // jobPdbs is derived from the files that exist, so it can never answer
+      // "how many were asked for" — the archived report can.
+      if (meta.type === 'batch' && !meta.jobStates) {
+        try {
+          const states = batchJobStates(JSON.parse(readFileSync(join(root, id, 'report.json'), 'utf8')))
+          if (states) {
+            meta.jobStates = states
+            dirty = true
+          }
+        } catch {
+          /* pre-report batch archive — the card falls back to jobPdbs alone */
         }
       }
       // Archives written before mean-pLDDT backfill carry no score (complex

@@ -4,7 +4,7 @@
 // traversal guard, batch jobPdbs mirroring, and the over-budget pdb-drop
 // degradation (report survives, pdb-* dropped largest-first).
 import { strict as assert } from 'node:assert'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -200,6 +200,23 @@ console.log('putArchive workspace pulls')
     assert.equal(f.name, 'Q9Y6K9.pdb')
     assert.equal(Buffer.from(f.b64, 'base64').toString('utf8').includes('75.00'), true)
   })
+  // The requested-target list, NOT just the survivors. A real archived run
+  // (tmv8i5x90wtfc, "批量：P68871 · P02042 / 1/2 目标成功") rendered a single
+  // centred trace in a strip sized for three, with no mention of P02042 — the
+  // wall showed a green card whose missing target was invisible.
+  ok('batch: meta.jobStates names every requested target, in order', () => {
+    const states = meta.jobStates
+    assert.ok(states, 'no jobStates on the written meta')
+    assert.deepEqual(
+      states.map((s) => s.accession),
+      ['P12345', 'Q9Y6K9', 'FAILED'],
+    )
+    assert.equal(states[2].status, 'error')
+  })
+  ok('batch: a target with no accession falls back to its PDB basename', () => {
+    const states = meta.jobStates
+    assert.equal(states?.[2].accession, 'FAILED')
+  })
 }
 
 // --- 4. over budget: pdb-* dropped, report survives ---------------------------
@@ -237,6 +254,56 @@ console.log('putArchive workspace pulls')
   ok('absolute savedTo inside the task workspace still resolves', () => {
     assert.equal(meta.reportPath, 'report.json')
     assert.equal(meta.pdbPath, 'model.pdb')
+  })
+}
+
+// --- 6. listArchive backfills jobStates for archives written before the field --
+// The 45 archives already on the deployment predate jobStates; their batch cards
+// must gain the missing-target slot without a re-archive.
+{
+  const archRoot = process.env.PROTEIN_PLATFORM_ARCHIVE_DIR as string
+  const old = join(archRoot, 'task-batch-old')
+  mkdirSync(old, { recursive: true })
+  writeFileSync(
+    join(old, 'report.json'),
+    JSON.stringify({
+      jobs: [
+        { accession: 'P68871', status: 'ok', savedTo: 'structures/P68871_147aa.pdb' },
+        { accession: 'P02042', status: 'failed', error: 'ESMFold request failed: HTTP 504' },
+      ],
+      summary: { total: 2, ok: 1, failed: 1 },
+    }),
+  )
+  writeFileSync(
+    join(old, 'meta.json'),
+    JSON.stringify({
+      taskId: 'task-batch-old',
+      type: 'batch',
+      title: '批量：P68871 · P02042',
+      savedAt: new Date().toISOString(),
+      meanPlddt: 94.2,
+      verdict: '1/2 目标成功',
+      jobPdbs: ['P68871_147aa.pdb'],
+    }),
+  )
+  const { listArchive } = await import('../protein-platform/server/src/archive.ts')
+  const entry = listArchive().find((e) => e.taskId === 'task-batch-old')
+  ok('list: a pre-jobStates batch archive is backfilled on read', () => {
+    assert.ok(entry?.jobStates, 'no jobStates after listArchive')
+    assert.deepEqual(
+      entry?.jobStates?.map((s) => s.accession),
+      ['P68871', 'P02042'],
+    )
+  })
+  ok('list: the failed target keeps the tool’s own reason', () => {
+    assert.match(entry?.jobStates?.[1].error ?? '', /HTTP 504/)
+  })
+  ok('list: jobPdbs still names only the survivor', () => {
+    assert.deepEqual(entry?.jobPdbs, ['P68871_147aa.pdb'])
+  })
+  ok('list: the backfill is persisted, not recomputed every call', () => {
+    const meta = JSON.parse(readFileSync(join(old, 'meta.json'), 'utf8'))
+    assert.equal(meta.jobStates?.length, 2)
   })
 }
 

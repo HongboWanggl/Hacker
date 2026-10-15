@@ -95,6 +95,10 @@ export type ArchiveMeta = {
   pdbPath?: string
   /** Batch: per-target PDB basenames (pdb-<basename> files in the archive). */
   jobPdbs?: string[]
+  /** Batch: one entry per REQUESTED target (server backfills from the report),
+   *  so a partially failed run can name the target that produced no structure
+   *  instead of showing an empty slot. */
+  jobStates?: Array<{ accession: string; status: string; error?: string }>
   /** Single/complex: UniProt accession, enables the archived-page compare flow. */
   accession?: string
   /** Server-precomputed Cα mini-trace (model.pdb) — walls render with zero

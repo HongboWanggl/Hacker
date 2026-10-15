@@ -56,7 +56,12 @@ function ReportSnapshot({ task }: { task: any }) {
           {task.status === 'failed'
             ? (task.error ?? '任务失败')
             : task.status === 'done'
-              ? '已完成 · 点击查看'
+              ? // A 检索 run has no structure to show — ever. "已完成 · 点击查看"
+                // on the 最近预测 wall reads as a prediction that produced
+                // nothing; say which kind of record this is instead.
+                task.type === 'search'
+                ? '检索记录 · 不产生结构'
+                : '已完成 · 点击查看'
               : task.status === 'cancelled'
                 ? '已取消'
                 : '…'}
@@ -72,18 +77,60 @@ function ReportSnapshot({ task }: { task: any }) {
 function ArchiveCard({ m }: { m: ArchiveMeta }) {
   // compare archives store the prediction as model.pdb — the trace thumb works.
   const hasStructure = m.type === 'single' || m.type === 'complex' || m.type === 'compare'
+  const [hasThumb, setHasThumb] = useState<boolean | null>(null)
   // Batch cards show up to three per-target mini traces instead of one figure —
-  // an at-a-glance quality read across the whole run.
-  const batchJobs = m.type === 'batch' ? (m.jobPdbs ?? []).slice(0, 3) : []
+  // an at-a-glance quality read across the whole run. One cell per REQUESTED
+  // target, in order: jobPdbs only lists the targets that produced a structure,
+  // so a 1/2 run used to render a single centred trace in a strip sized for
+  // three — a green card whose missing half was never mentioned. A target with
+  // no structure gets a labeled placeholder carrying the tool's own reason.
+  const batchCells =
+    m.type === 'batch'
+      ? m.jobStates?.length
+        ? m.jobStates.slice(0, 3).map((j) => {
+            const p = (m.jobPdbs ?? []).find((b) => b.startsWith(`${j.accession}_`))
+            const ok = j.status === 'ok' && !!p
+            return {
+              key: j.accession,
+              acc: j.accession,
+              path: ok ? p : undefined,
+              error: ok ? undefined : j.error,
+            }
+          })
+        : (m.jobPdbs ?? []).slice(0, 3).map((p) => ({
+            key: p,
+            acc: p.split('_')[0].replace(/\.pdb$/, ''),
+            path: p,
+            error: undefined,
+          }))
+      : []
+  // The figure strip is part of the card's design, so it is only claimed when
+  // something fills it: a batch strip (even all-failed placeholders) or a trace
+  // that actually resolved. A "no structure" archive renders as a plain card
+  // rather than a figure-shaped hole.
+  const figCard = batchCells.length > 0 || (hasStructure && hasThumb !== false)
   return (
-    <a className="pl-card pl-card-fig" href={`#/task/${m.taskId}`}>
-      {hasStructure && <StructureThumb taskId={m.taskId} meta={m} />}
-      {batchJobs.length > 0 && (
+    <a className={`pl-card${figCard ? ' pl-card-fig' : ''}`} href={`#/task/${m.taskId}`}>
+      {hasStructure && <StructureThumb taskId={m.taskId} meta={m} onResolved={setHasThumb} />}
+      {batchCells.length > 0 && (
         <div className="pl-thumb-grid">
-          {batchJobs.map((p) => (
-            <figure key={p} className="pl-thumb-cell">
-              <StructureThumb taskId={m.taskId} path={p} small meta={m} />
-              <figcaption>{p.split('_')[0].replace(/\.pdb$/, '')}</figcaption>
+          {batchCells.map((c) => (
+            <figure
+              key={c.key}
+              className={`pl-thumb-cell${c.path ? '' : ' pl-thumb-missing'}`}
+              title={c.error ? `${c.acc}：${c.error}` : c.acc}
+            >
+              {c.path ? (
+                <StructureThumb taskId={m.taskId} path={c.path} small meta={m} />
+              ) : (
+                <span className="pl-thumb-x" aria-hidden>
+                  ✕
+                </span>
+              )}
+              <figcaption>
+                {c.acc}
+                {c.path ? '' : ' · 未产出'}
+              </figcaption>
             </figure>
           ))}
         </div>
@@ -122,9 +169,16 @@ function TaskCard({ task }: { task: any }) {
     task.status === 'done' &&
     task.archived === true &&
     (task.type === 'single' || task.type === 'complex' || task.type === 'compare')
+  // …and the figure strip is claimed only once a trace actually resolves. A done
+  // row whose structure never made it into the archive (the POST failed, or the
+  // archive was pruned) used to keep pl-card-fig and render a figure-shaped hole.
+  const [hasThumb, setHasThumb] = useState<boolean | null>(null)
   return (
-    <a className={`pl-card${showThumb ? ' pl-card-fig' : ''}`} href={`#/task/${task.id}`}>
-      {showThumb && <StructureThumb taskId={task.id} />}
+    <a
+      className={`pl-card${showThumb && hasThumb !== false ? ' pl-card-fig' : ''}`}
+      href={`#/task/${task.id}`}
+    >
+      {showThumb && <StructureThumb taskId={task.id} onResolved={setHasThumb} />}
       <div className="pl-card-top">
         <span className="pl-card-type">{TASK_TYPE_LABEL[task.type]}</span>
         {running && <span className="pl-spinner" />}
