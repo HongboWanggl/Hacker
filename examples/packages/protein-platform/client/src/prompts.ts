@@ -36,16 +36,26 @@ export function buildPrompt(type: TaskType, input: TaskInput): string {
       : `1) 调用 predict_structure 预测以下序列（name: ${name}）
 2) 调用 analyze_confidence 分析置信度并识别低置信区段
 3) 用一句话给出结论。`
-    // The length refusal is the one branch the numbered plan cannot survive:
-    // predict_structure refuses ≥1000 aa, so there is no PDB, and step 3 then
-    // fails on a path that was never written. Because the platform reports a
-    // failed task with its FIRST tool error (rootError), that second failure used
-    // to be the only thing the user saw — `Cannot read structures/Q02388.pdb` —
-    // burying the real cause, the residue count and the ceiling, which the tool
-    // had already stated perfectly. Stop at the refusal and say what it said.
+    // The numbered plan has two length branches and they must not be conflated:
+    //
+    //   · ESMFold's ~400 aa wall (HTTP 413) → the long-chain ROUTE, not an ending.
+    //     predict_structure's own error text names it ("use predict_complex"), and
+    //     predict_complex exists for exactly this. A prompt that told the agent to
+    //     stop on any length refusal silently removed the fallback: on 2026-10-15
+    //     a 920-aa chain failed in 24 s with the 413 text instead of going on to
+    //     fold, because "序列过长而拒绝" described both walls.
+    //
+    //   · predict_complex's >1000 refusal, or its compute failure → THIS is the
+    //     branch the numbered plan cannot survive: there is no PDB, so step 3
+    //     (analyze_confidence) would fail on a path never written, and because a
+    //     failed task is reported with its FIRST tool error (rootError), that
+    //     second failure used to be the only thing the user saw —
+    //     `Cannot read structures/Q02388.pdb` — burying the real cause, the
+    //     residue count and the ceiling, which the tool had stated perfectly.
     return `预测蛋白质三维结构。严格按步骤执行，不要询问任何问题：
 ${seq}
-如果 predict_structure 因序列过长而拒绝（上限 1000 aa）：立即停止后续步骤，不要调用 analyze_confidence —— 结构并不存在，那只会产生一个与真实原因无关的报错。请直接复述工具给出的原因（含具体残基数与上限），并说明可走的路线：改用不超过 1000 aa 的单个结构域或片段重新提交。
+如果 predict_structure 因链长超过 ESMFold 上限（约 400 个残基，返回 HTTP 413）而被拒绝：不要停下，走长链路线 —— 改调 predict_complex（chains 参数为该单链序列，name 继续用 ${name}），它是本平台对 400 aa 以上单链的换档路径；成功后再对产出的 PDB 调用 analyze_confidence。
+如果 predict_complex 也拒绝（总残基超过 1000）或失败（例如显存不足、超出 20 分钟上限）：立即停止后续步骤，不要调用 analyze_confidence —— 结构并不存在，那只会产生一个与真实原因无关的报错。请逐字复述工具给出的原因（含具体残基数、上限或算力原因），并说明可走的路线：把蛋白切成不超过 600 aa 的结构域分别预测，或为 Boltz-2 配置 API key 以在更大的显卡上运行。
 ${input.sequence ? `\n序列：\n${input.sequence.trim()}\n` : ''}`
   }
   if (type === 'complex') {
