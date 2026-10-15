@@ -41,7 +41,23 @@ export type Task = {
    *  predict_complex`, but the newest error was a downstream
    *  `Cannot read structures/Q02388.pdb` for a file that was never written. */
   rootError?: string
+  /** The error of the LAST fold tool that failed, when there was one. Preferred
+   *  over rootError, because "first" and "the one that explains the failure" are
+   *  not the same error when an early failure was a ROUTING signal rather than
+   *  the cause: the 920-aa P10275 run failed ESMFold with HTTP 413, switched to
+   *  predict_complex exactly as told, and then lost the fold to worker memory —
+   *  so the first error is a step the agent handled and the last fold error is
+   *  why the user has no structure. A fold tool beats rootError; a non-fold tool
+   *  (uniprot_fetch, analyze_confidence) never displaces one. */
+  foldError?: string
+  /** toolUseId → tool name. `tool/result` rows carry no name, so the attribution
+   *  above needs the `tool/call` that opened them. */
+  toolNames?: Record<string, string>
 }
+
+/** The tools whose whole job is producing the structure. A failure here is the
+ *  answer to "why is there no model"; a failure anywhere else is a step. */
+const FOLD_TOOLS = new Set(['predict_structure', 'predict_complex', 'batch_predict'])
 
 const LS_KEY = 'pp-tasks-v1'
 const listeners = new Set<() => void>()
@@ -279,6 +295,10 @@ export function reduceLedgerEvent(
   const kind = (env as { type?: string; kind?: string })?.type ?? (env as { kind?: string })?.kind
   if (kind === 'tool/call') {
     patch(id, (t) => {
+      if (ev.toolUseId && ev.name) {
+        if (!t.toolNames) t.toolNames = {}
+        t.toolNames[ev.toolUseId] = ev.name
+      }
       const existing = t.stages.find((s) => s.tool === ev.name && s.status === 'running')
       if (!existing)
         t.stages.push({
@@ -323,10 +343,13 @@ export function reduceLedgerEvent(
       const st = [...t.stages].reverse().find((s) => s.status === 'running')
       if (st) st.status = ev.isError ? 'error' : 'done'
       if (ev.isError) {
-        // Both, on purpose: rootError is the cause and is what the user is
-        // shown; lastError is the newest symptom and is what decides a retry.
+        // All three, on purpose: foldError is what the user is shown when a
+        // folding tool failed (see the field), rootError is the first error, and
+        // lastError is the newest symptom that decides a retry.
         if (!t.rootError) t.rootError = text.slice(0, 400)
         t.lastError = text.slice(0, 400)
+        if (FOLD_TOOLS.has(ev.toolUseId ? (t.toolNames?.[ev.toolUseId] ?? '') : ''))
+          t.foldError = text.slice(0, 400)
       }
       if (!ev.isError) {
         if (savedTo) t.savedTo[ev.toolUseId ?? st?.tool ?? '?'] = savedTo
@@ -350,12 +373,14 @@ export function reduceLedgerEvent(
           t.status = 'failed'
           // The CAUSE first. Showing only the newest error told the 2944-aa
           // Q02388 user that a PDB could not be read, when the tool had already
-          // said the sequence was too long and by how much.
-          t.error = t.rootError ?? t.lastError ?? '回合结束但没有产出结构或报告'
+          // said the sequence was too long and by how much. A failed FOLD tool
+          // outranks both: that is the tool whose job was the missing structure.
+          t.error = t.foldError ?? t.rootError ?? t.lastError ?? '回合结束但没有产出结构或报告'
         } else {
           t.status = 'done'
           t.lastError = undefined
           t.rootError = undefined
+          t.foldError = undefined
         }
       } else if (t.status === 'running') {
         // A user cancel settles as 已取消 — and must NOT read as failed, or the
@@ -700,6 +725,7 @@ export async function runTask(
           // reported as the reason for a failure it had nothing to do with.
           t2.lastError = undefined
           t2.rootError = undefined
+          t2.foldError = undefined
         })
       }
     } finally {
@@ -756,6 +782,7 @@ export async function reattachRunningTasks(sdk: DaemonLink): Promise<void> {
         t2.resultJson = undefined
         t2.lastError = undefined
         t2.rootError = undefined
+        t2.foldError = undefined
       })
       runners.set(id, () => {
         cancelledTasks.add(id)

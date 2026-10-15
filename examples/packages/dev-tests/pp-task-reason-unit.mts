@@ -77,6 +77,58 @@ ok('both errors closed their stage as errors', lc.stages.filter((s) => s.status 
 // Deterministic failure: a length refusal must not burn two more GPU attempts.
 ok('a length refusal does not auto-retry', !isTransientError(lc.error) && !isTransientError(lc.lastError))
 
+// --- the routing-signal chain: the FIRST error is not the cause --------------
+// Live replay ui3-under-ceiling-920 (P10275, 920 aa, 2026-10-15, 1222 s): ESMFold
+// answered HTTP 413, the agent did what the message said and switched to
+// predict_complex, the worker ran the fold for 20 minutes on an 8 GB card and
+// produced nothing. The first error is a step that WORKED (it routed the job);
+// the last fold error is why the user has no structure. Showing the 413 would be
+// the same defect as showing the downstream PDB read — an explanation for a
+// failure that is not this failure.
+const ROUTING =
+  'ESMFold request failed: HTTP 413 — chain too long for the free endpoint. For chains of 400+ residues use predict_complex (Boltz-2 folds single chains and runs locally).'
+const NO_MODEL =
+  'Local Boltz-2 finished but no model_0.pdb found under /tmp/boltz-local-xUkA46/out. This usually means the fold ran out of accelerator memory partway through'
+reduce('routed-then-oom', [
+  call('t0', 'uniprot_fetch'),
+  okResult('t0', '{"accession":"P10275","savedTo":"sequences/P10275.fasta"}'),
+  call('t1', 'predict_structure'),
+  errResult('t1', ROUTING),
+  call('t2', 'predict_complex'),
+  errResult('t2', NO_MODEL),
+  end(),
+])
+const oom = getTask('routed-then-oom')!
+ok('the fold tool that failed is the reason', oom.error === NO_MODEL, oom.error?.slice(0, 90))
+ok('the handled routing signal is not the reason', !oom.error?.includes('413'))
+ok('the reason names the missing model', !!oom.error?.includes('no model_0.pdb'))
+ok('the reason keeps the compute attribution', !!oom.error?.includes('accelerator memory'))
+ok('rootError still records the first error', oom.rootError === ROUTING)
+ok('lastError is the fold failure', oom.lastError === NO_MODEL)
+// An infrastructure failure that no fold tool shares stays a non-fold failure:
+// the user must not be told the model is missing when nothing was folded.
+reduce('fetch-only', [call('t0', 'uniprot_fetch'), errResult('t0', 'UniProt fetch failed: HTTP 503'), end()])
+const fetchOnly = getTask('fetch-only')!
+ok(
+  'a non-fold failure is still reported as-is',
+  fetchOnly.error === 'UniProt fetch failed: HTTP 503',
+  fetchOnly.error,
+)
+// …and it keeps its own retry semantics: an upstream 503 is transient even
+// though no fold tool ever ran, so the gate reachable here is the plain regex.
+ok('an upstream 503 is still transient', isTransientError(fetchOnly.error))
+// …and a fold error followed by an analysis error keeps the FOLD error, which is
+// the incident case above reached from the other direction.
+reduce('fold-then-analysis', [
+  call('t1', 'predict_complex'),
+  errResult('t1', NO_MODEL),
+  call('t2', 'analyze_confidence'),
+  errResult('t2', 'Cannot read structures/P10275.pdb'),
+  end(),
+])
+const fa = getTask('fold-then-analysis')!
+ok('a later analysis error does not displace the fold error', fa.error === NO_MODEL, fa.error?.slice(0, 80))
+
 // --- the retry judgement still sees a transient symptom ----------------------
 reduce('long-chain-then-transient', [
   call('t1', 'predict_structure'),

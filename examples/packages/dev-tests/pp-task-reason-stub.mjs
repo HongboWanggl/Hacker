@@ -22,6 +22,11 @@ globalThis.localStorage = {
 export const CASE_IDS = [
   'long-chain',
   'long-chain-then-transient',
+  // The routing-signal cases: an ESMFold length refusal the agent handled by
+  // switching to predict_complex, whose own failure is the real reason.
+  'routed-then-oom',
+  'fold-then-analysis',
+  'fetch-only',
   'blocked-turn',
   'stall-abort',
   'unknown-reason',
