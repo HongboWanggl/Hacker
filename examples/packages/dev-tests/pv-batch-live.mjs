@@ -147,10 +147,12 @@ check('row click opens drill-down', !!container.querySelector('.pv-batch-detail'
   }
   // drill-down 复制结论: recomputed from the loaded residues (mean, bands,
   // verdict, output file) — same markdown shape as the single-panel conclusion.
+  // The stub MUST return a promise — copyText() chains `.then(ok => setCopied(ok))`,
+  // so returning push()'s length throws in the handler and the ✓ never appears.
   const mdTexts2 = []
   try {
     Object.defineProperty(win.navigator, 'clipboard', {
-      value: { writeText: (t) => mdTexts2.push(t) },
+      value: { writeText: (t) => { mdTexts2.push(t); return Promise.resolve() } },
       configurable: true,
     })
   } catch {}
@@ -197,7 +199,7 @@ if (conclBtn2) {
   const mdTexts = []
   try {
     Object.defineProperty(win.navigator, 'clipboard', {
-      value: { writeText: (t) => mdTexts.push(t) },
+      value: { writeText: (t) => { mdTexts.push(t); return Promise.resolve() } },
       configurable: true,
     })
   } catch {}

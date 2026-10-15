@@ -210,10 +210,14 @@ for (const [name, ok] of checks.slice(checks.length - (chip ? 1 : 1))) {
 }
 
 // copy-summary: stub the clipboard, click 复制结论, inspect the markdown payload.
+// The stub MUST return a promise: the panel's copyText() chains `.then(ok =>
+// setCopied(ok))`, so a stub that returns a push() length throws inside the
+// click handler and the 已复制 ✓ never renders — the payload checks below would
+// still pass and hide that.
 const clipTexts = []
 try {
   Object.defineProperty(win.navigator, 'clipboard', {
-    value: { writeText: (t) => clipTexts.push(t) },
+    value: { writeText: (t) => { clipTexts.push(t); return Promise.resolve() } },
     configurable: true,
   })
 } catch {}
@@ -326,7 +330,13 @@ win.HTMLCanvasElement.prototype.toBlob = (cb) => cb(new Blob(['pngbytes'], { typ
 const cmpWrites = []
 try {
   Object.defineProperty(win.navigator, 'clipboard', {
-    value: { write: async (items) => cmpWrites.push(items), writeText: (t) => clipTexts.push(t) },
+    value: {
+      write: async (items) => cmpWrites.push(items),
+      writeText: (t) => {
+        clipTexts.push(t)
+        return Promise.resolve()
+      },
+    },
     configurable: true,
   })
 } catch {}

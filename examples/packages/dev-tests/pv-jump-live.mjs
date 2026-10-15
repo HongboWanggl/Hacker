@@ -99,10 +99,12 @@ async function run(services, report) {
   ok('jump box mounted', html.includes('pv-jump'))
   ok('export buttons mounted', container.querySelectorAll('.pv-export').length === 8) // 导出 PNG + 下载 PDB + 复制图像 + 复制序列 + curve 复制图像 + curve 导出 PNG + curve 导出 CSV + 复制结论
   // 复制序列: stub the clipboard, click, assert the FASTA payload (single chain → one record, 60-col lines).
+  // The stub MUST return a promise — copyText() chains `.then(ok => setCopied(ok))`,
+  // so returning push()'s length throws in the handler and the ✓ never appears.
   const clipTexts1 = []
   try {
     Object.defineProperty(win.navigator, 'clipboard', {
-      value: { writeText: (t) => clipTexts1.push(t) },
+      value: { writeText: (t) => { clipTexts1.push(t); return Promise.resolve() } },
       configurable: true,
     })
   } catch {}
