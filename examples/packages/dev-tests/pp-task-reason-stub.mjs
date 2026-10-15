@@ -27,6 +27,8 @@ export const CASE_IDS = [
   'routed-then-oom',
   'fold-then-analysis',
   'fetch-only',
+  'parked-by-restart',
+  'parked-bare',
   'blocked-turn',
   'stall-abort',
   'unknown-reason',

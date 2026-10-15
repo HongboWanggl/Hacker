@@ -55,7 +55,7 @@ export function buildPrompt(type: TaskType, input: TaskInput): string {
     return `预测蛋白质三维结构。严格按步骤执行，不要询问任何问题：
 ${seq}
 如果 predict_structure 因链长超过 ESMFold 上限（约 400 个残基，返回 HTTP 413）而被拒绝：不要停下，走长链路线 —— 改调 predict_complex（chains 参数为该单链序列，name 继续用 ${name}），它是本平台对 400 aa 以上单链的换档路径；成功后再对产出的 PDB 调用 analyze_confidence。
-如果 predict_complex 也拒绝（总残基超过 1000）或失败（例如显存不足、超出 20 分钟上限）：立即停止后续步骤，不要调用 analyze_confidence —— 结构并不存在，那只会产生一个与真实原因无关的报错。请逐字复述工具给出的原因（含具体残基数、上限或算力原因），并说明可走的路线：把蛋白切成不超过 600 aa 的结构域分别预测，或为 Boltz-2 配置 API key 以在更大的显卡上运行。
+如果 predict_complex 也拒绝（总残基超过 1000）或失败（例如显存不足、超出 20 分钟上限）：立即停止后续步骤，不要调用 analyze_confidence —— 结构并不存在，那只会产生一个与真实原因无关的报错。也不要用同样的输入重跑 predict_complex：序列没变，第二遍会花掉同样的几十分钟撞同一堵墙。请逐字复述工具给出的原因（含具体残基数、上限或算力原因），并说明可走的路线：把蛋白切成不超过 600 aa 的结构域分别预测，或为 Boltz-2 配置 API key 在更大的显卡上运行。
 ${input.sequence ? `\n序列：\n${input.sequence.trim()}\n` : ''}`
   }
   if (type === 'complex') {

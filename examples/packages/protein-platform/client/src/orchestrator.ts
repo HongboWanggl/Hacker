@@ -1,6 +1,6 @@
 import type { DaemonLink } from './agnes.ts'
 import { buildPrompt, STAGE_LABEL, TASK_TYPE_LABEL, type TaskInput, type TaskType } from './prompts.ts'
-import { shouldRetryAttempt } from './transient.ts'
+import { explainDaemonError, shouldRetryAttempt } from './transient.ts'
 
 // Task = one agent session. Progress is a ledger reduction: tool/call opens a
 // stage, tool/result closes it (savedTo captured), turn/end finishes the task.
@@ -162,7 +162,15 @@ export function turnFailureReason(
   const msg = ev.error?.message
   if (ev.reason === 'aborted' || /abort/i.test(msg ?? ''))
     return `STALL_WATCHDOG：超过 ${Math.round((ctx.stallMs ?? 180_000) / 1000)}s 无任何事件，会话已中止重试`
-  return msg ?? `回合 ${ev.reason} 结束（无进一步信息）`
+  // `parked` / `unknown-outcome` carry no message at all: the daemon suspended the
+  // turn waiting for a human to say whether a half-executed tool ran. Said as
+  // 「回合 parked 结束（无进一步信息）」 the user has nothing to act on.
+  return (
+    explainDaemonError(msg) ??
+    msg ??
+    explainDaemonError(ev.reason) ??
+    `回合 ${ev.reason} 结束（无进一步信息）`
+  )
 }
 
 function load(): Task[] {
@@ -387,9 +395,16 @@ export function reduceLedgerEvent(
         // gateway-flake retry below resubmits the task the user just cancelled.
         const cancelled = isCancelled()
         t.status = cancelled ? 'cancelled' : 'failed'
+        // A tool that was mid-flight when the turn died beats the daemon's own
+        // account of HOW the turn stopped. The parked case is exactly this: the
+        // reason sentence says "no approver for an unknown-outcome question"
+        // (a platform mechanism), while the fold's own error says the process
+        // died after the call went out (the fact the user needs). ui3,
+        // 2026-10-15: 10 minutes into a fold, a restart produced exactly this.
+        const foldCause = t.foldError ? (explainDaemonError(t.foldError) ?? t.foldError) : undefined
         t.error = cancelled
           ? undefined
-          : turnFailureReason(ev, { approvals: ctx.approvals, stallMs: ctx.stallMs?.() })
+          : (foldCause ?? turnFailureReason(ev, { approvals: ctx.approvals, stallMs: ctx.stallMs?.() }))
       }
     })
     if (ev.reason === 'completed' && getTask(id)?.status === 'done') void archiveTask(id)
@@ -667,9 +682,12 @@ export async function runTask(
       patch(id, (t) => {
         if (t.status === 'running') {
           t.status = /abort/i.test(String(e?.name ?? e)) && !stalled ? 'cancelled' : 'failed'
+          const raw = String(e?.message ?? e).slice(0, 300)
           t.error = stalled
             ? `STALL_WATCHDOG：超过 ${(stallMs / 1000) | 0}s 无任何事件，会话已中止重试`
-            : String(e?.message ?? e).slice(0, 300)
+            : // The rejection can be a bare wire code (see explainDaemonError) —
+              // 「INTERNAL_ERROR (-32603)」 on a card is not a reason.
+              (explainDaemonError(raw) ?? raw)
         }
       })
     } finally {

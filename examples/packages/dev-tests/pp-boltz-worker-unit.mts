@@ -291,6 +291,15 @@ exit 0
     longText.slice(-260),
   )
   ok('and is told the way out', /Split the target into domains/.test(longText) && /API key/.test(longText))
+  // The same sequence re-run reaches the same wall after the same minutes (ui3
+  // probe, 2026-10-15: the agent called predict_complex twice with the identical
+  // 920-aa chain). The tool's own words are the strongest place to say so, because
+  // they are read before the agent decides to retry.
+  ok(
+    'and is told not to resubmit the same sequence',
+    /Do NOT resubmit this same sequence/.test(longText),
+    longText.slice(-200),
+  )
   delete process.env.BOLTZ_LOCAL_BIN
 }
 

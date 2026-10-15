@@ -166,6 +166,38 @@ ok('an abort becomes the watchdog text', !!st.error?.startsWith('STALL_WATCHDOG'
 ok('the watchdog quotes the widened window', !!st.error?.includes('1400'), st.error)
 ok('the watchdog text is retryable', isTransientError(st.error))
 
+// --- a daemon restart mid-fold: parked, with an unknown-outcome tool -----------
+// Live replay (ui3, 2026-10-15 00:55 UTC): a deployment restart landed while the
+// 10-minute fold was in flight, the kernel died, the tool's outcome became
+// unknown, the daemon asked a human "did predict_complex happen?" and found no
+// approver — so the turn parked. The card read 「INTERNAL_ERROR (-32603)」: a
+// JSON-RPC code, no cause, no next step. (This one was our own deploy; the next
+// one will not be, and the text has to hold regardless.)
+reduce(
+  'parked-by-restart',
+  [
+    call('t1', 'predict_complex'),
+    errResult('t1', 'the outcome of predict_complex is unknown: the process died after the call went out'),
+    end('parked'),
+  ],
+  { approvals: ['unknown-outcome → unavailable'] },
+)
+const pr = getTask('parked-by-restart')!
+ok('a parked turn is 失败, not a shrug', pr.status === 'failed', pr.status)
+ok('parked is not echoed as the bare literal', !/^\s*parked\s*$/.test(pr.error ?? ''), pr.error)
+ok('the parked reason is retryable', isTransientError(pr.error))
+// The tool that was mid-flight is the cause the user needs — not the daemon's
+// account of how the turn stopped (parked: an unknown-outcome question with no
+// approver is a mechanism, not a reason).
+ok('the interrupted fold is the displayed cause', /工具结果未知/.test(pr.error ?? ''), pr.error?.slice(0, 70))
+ok('the cause names the tool that died', /predict_complex/.test(pr.error ?? ''))
+ok('the cause is not the JSON-RPC code', !/-32603/.test(pr.error ?? ''))
+// A parked turn with no tool error in flight still gets the parked explanation.
+reduce('parked-bare', [end('parked')], { approvals: [] })
+const pb = getTask('parked-bare')!
+ok('a bare parked turn is explained', /挂起/.test(pb.error ?? ''), pb.error?.slice(0, 60))
+ok('a bare parked turn is retryable', isTransientError(pb.error))
+
 // --- anything else keeps the daemon's own words -------------------------------
 reduce('unknown-reason', [end('error')])
 const ur = getTask('unknown-reason')!

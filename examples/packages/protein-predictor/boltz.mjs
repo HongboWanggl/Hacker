@@ -220,7 +220,9 @@ export async function runLocalBoltz({ proteins, smiles }) {
           ? `\nThis target is ${n} residues; the longest fold this platform has completed is ` +
             `${DEMONSTRATED_FOLD_RESIDUES} aa (CASP14 T1024), so a memory wall here is the expected ` +
             'outcome, not a surprise. Split the target into domains (≤ ~600 aa each) and predict ' +
-            'them separately, or configure a Boltz API key so the job runs on a larger card.'
+            'them separately, or configure a Boltz API key so the job runs on a larger card.' +
+            '\nDo NOT resubmit this same sequence: the input is unchanged, so a second run reaches ' +
+            'the same wall after spending the same minutes. Report this outcome and the options instead.'
           : ''),
     }
   }

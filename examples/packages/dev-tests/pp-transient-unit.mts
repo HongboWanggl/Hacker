@@ -1,7 +1,11 @@
 // Unit contract for the auto-retry gate (client/src/transient.ts): what counts
 // as a transient failure worth an automatic resubmit, and — just as important —
 // what must NOT (deterministic failures retrying would burn compute or loop).
-import { isTransientError, shouldRetryAttempt } from '../protein-platform/client/src/transient.ts'
+import {
+  explainDaemonError,
+  isTransientError,
+  shouldRetryAttempt,
+} from '../protein-platform/client/src/transient.ts'
 
 let bad = 0
 const expect = (label: string, got: boolean, want: boolean) => {
@@ -36,6 +40,16 @@ expect(
   true,
 )
 expect('reattach stream fail', isTransientError('重连会话事件流失败：socket closed'), true)
+// A daemon restart mid-tool surfaces as the wire code alone (ui3 probe, 2026-10-15:
+// the deploy's own restart landed while a 10-minute fold was in flight; the card
+// read 「INTERNAL_ERROR (-32603)」). It must earn a retry, not settle as
+// deterministic — and once explained, the sentence must still match.
+expect('daemon internal error code', isTransientError('INTERNAL_ERROR (-32603)'), true)
+expect(
+  'the explained sentence stays retryable',
+  isTransientError(explainDaemonError('INTERNAL_ERROR (-32603)')),
+  true,
+)
 
 // --- deterministic: must NOT retry ---
 expect('boltz 20min tool timeout', isTransientError('boltz predict timed out after 20m'), false)
@@ -47,6 +61,31 @@ expect('bad sequence', isTransientError('invalid residue Z in sequence'), false)
 expect('session gone', isTransientError('会话不存在（daemon 重启或已清理）：unknown session'), false)
 expect('empty', isTransientError(''), false)
 expect('undefined', isTransientError(undefined), false)
+
+// --- wire codes become sentences ---------------------------------------------
+// What the user reads must name a cause and a next step; the raw code does neither.
+{
+  const explained = explainDaemonError('INTERNAL_ERROR (-32603)')
+  expect('the code becomes a sentence', !!explained && explained.length > 30, true)
+  expect('the explanation admits the outcome is unknown', /无法确认|未知/.test(explained ?? ''), true)
+  expect('the explanation offers a next step', /重试/.test(explained ?? ''), true)
+  expect(
+    'an unknown-outcome message is explained',
+    /工具结果未知/.test(
+      explainDaemonError('the outcome of predict_complex is unknown: the process died') ?? '',
+    ),
+    true,
+  )
+  expect('a parked turn is explained', /挂起/.test(explainDaemonError('parked') ?? ''), true)
+  // Anything unrecognised keeps its own words — never replaced by a guess.
+  expect(
+    'an unknown error passes through untouched',
+    explainDaemonError('invalid residue Z') === undefined,
+    true,
+  )
+  expect('an empty error explains to nothing', explainDaemonError('') === undefined, true)
+  expect('undefined explains to nothing', explainDaemonError(undefined) === undefined, true)
+}
 
 // --- the retry checkpoint itself ---------------------------------------------
 // isTransientError alone was never enough: a marker that matches TRANSIENT_RE

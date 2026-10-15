@@ -40,6 +40,7 @@ const ok = (name: string, cond: boolean, extra = '') => {
   ok('the ceiling branch stops the run', /立即停止/.test(rest), rest.slice(0, 160))
   ok('the ceiling branch forbids analyze_confidence', /不要调用 analyze_confidence/.test(rest))
   ok('the ceiling branch asks for the tool text verbatim', /逐字复述/.test(rest))
+  ok('the ceiling branch forbids re-running the same fold', /不要用同样的输入重跑/.test(rest))
   ok('the ceiling branch offers the domain-split route', /600/.test(rest) && /结构域/.test(rest))
   ok('the ceiling branch offers the API-key route', /API key/.test(rest))
 }
