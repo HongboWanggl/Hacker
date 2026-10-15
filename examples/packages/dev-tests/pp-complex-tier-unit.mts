@@ -10,7 +10,7 @@
 // Runs against a fake worker on loopback: no GPU, no network, no daemon.
 import { createServer } from 'node:http'
 
-type Mode = 'ok' | 'terminal' | 'crash'
+type Mode = 'ok' | 'terminal' | 'crash' | 'no-bin'
 let mode: Mode = 'ok'
 const workerHits: string[] = []
 let predictBodies = 0
@@ -39,8 +39,16 @@ const server = createServer(async (req, res) => {
       return
     }
     if (mode === 'crash') {
+      // A 502 whose reason describes the fold, not the machine — worker.mjs's
+      // compute-failure shape. It is carried as `workerError`, but only as a
+      // PREFERENCE: a lower tier that can still run wins.
       res.writeHead(502, { 'content-type': 'application/json' })
-      res.end(JSON.stringify({ error: 'worker crash: some transient thing' }))
+      res.end(JSON.stringify({ error: 'Local Boltz-2 finished but no model_0.pdb found (accelerator OOM)' }))
+      return
+    }
+    if (mode === 'no-bin') {
+      res.writeHead(503, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ error: 'boltz CLI not available on worker' }))
       return
     }
     res.writeHead(200, { 'content-type': 'application/json' })
@@ -148,7 +156,11 @@ ok('fixture is 2944 residues', LONG.length === 2944, String(LONG.length))
   ok('terminal error does NOT fall through to the API', calls.length === 0, `${calls.length}`)
 }
 
-// --- 5. infrastructure failures still fall through (worker ≠ dependency) ----
+// --- 5. worker failures still fall through (worker ≠ dependency) ------------
+// Two shapes, and both must let a configured API key do the work: a 502 that
+// describes the fold (carried as a preference, not a verdict) and a 503 that
+// describes the machine. Only when NOTHING below can run does the 502 become the
+// answer — that last half lives in pp-boltz-worker-unit.mts, which has no key.
 {
   mode = 'crash'
   const calls: Call[] = []
@@ -158,8 +170,18 @@ ok('fixture is 2944 residues', LONG.length === 2944, String(LONG.length))
     { sequences: LONG.slice(0, 600), name: 'crash', wait: false },
     makeTctx(calls),
   )
-  ok('non-terminal worker 502 falls through to the API chain', calls.length > 0, `${calls.length}`)
+  ok('worker 502 compute error falls through to the API chain', calls.length > 0, `${calls.length}`)
   ok('fall-through still returns a submit result', res.isError !== true && !!res.structured)
+}
+{
+  mode = 'no-bin'
+  const calls: Call[] = []
+  const res = await spec.execute(
+    { sequences: LONG.slice(0, 600), name: 'no-bin', wait: false },
+    makeTctx(calls),
+  )
+  ok('worker 503 (no CLI) falls through to the API chain', calls.length > 0, `${calls.length}`)
+  ok('503 fall-through still returns a submit result', res.isError !== true && !!res.structured)
 }
 
 server.close()

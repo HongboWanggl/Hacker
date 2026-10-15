@@ -8,8 +8,14 @@
 //   AGH_HOME=... AGNES_PROFILE=local-dev node --import tsx pp-longchain-e2e.mts [caseId ...]
 //
 // Refusal cases (c1/c2/c3/c6) must come back FAST with the ceiling named and
-// must leave no structure behind; fold cases (c4/c5) are real GPU runs that
-// must actually produce a PDB — they prove the ceiling is not a blanket ban.
+// must leave no structure behind. Fold cases (c4/c5) are real GPU runs and must
+// end one of two ways: a PDB, or a failure that names the compute limit it hit.
+//
+// They do NOT all have to fold. The worker card is 8 GB: folds up to 408 aa are
+// on record, a 920-aa chain completes MSA and preprocessing and then produces
+// nothing, and the wall is somewhere between. Pretending 920 aa works would make
+// this probe lie in the same direction the platform used to — so the assertion
+// is on the REASON, and an attributed memory/timed-out failure is a pass.
 import { mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { createClient, memoryJournal } from '../../../packages/sdk/src/index.node.ts'
@@ -75,14 +81,14 @@ const CASES: Case[] = [
   },
   {
     id: 'c4-under-ceiling-920',
-    why: '天花板之下：雄激素受体 P10275 920 aa，应真的折叠出结构',
+    why: '天花板之下：雄激素受体 P10275 920 aa —— 出结构或说清算力原因（8 GB 卡实测在此 OOM）',
     type: 'single',
     input: { accession: 'P10275', name: 'ar_920' },
     kind: 'fold',
   },
   {
     id: 'c5-esmfold-wall-622',
-    why: 'ESMFold 墙：凝血酶 P00734 622 aa → 预期 413 后换档 predict_complex',
+    why: 'ESMFold 墙：凝血酶 P00734 622 aa → 预期 413 后换档 predict_complex（同处未知带，须归因）',
     type: 'single',
     input: { accession: 'P00734', name: 'thrombin_622' },
     kind: 'fold',
@@ -231,8 +237,24 @@ async function runCase(c: Case) {
   }
 
   // --- fold cases: the ceiling must not have become a blanket ban ------------
+  //
+  // A fold case demands a PDB OR an attributed failure. The distinction is the
+  // whole point of this file: the 8 GB worker card has a real memory wall
+  // somewhere between the 408 aa we have folded and the 920 aa that dies, and a
+  // target in that band is allowed to fail — but only while saying so. Silence,
+  // a shrug, or "needs an API key" is still a failure; "ran out of accelerator
+  // memory, split into domains" is the honest outcome this platform can offer.
+  const ATTRIBUTED =
+    /(no model_0\.pdb|out of accelerator memory|TIMEDOUT|20-?minute cap|exceeds what the local weights|longest fold this platform has completed|Split the target into domains|显存|内存不足)/i
   if (c.kind === 'fold') {
-    if (!pdbs.length) fails.push(`${c.id}: 未产出任何 PDB —— 天花板之下也不给折，能力被误伤`)
+    if (!pdbs.length) {
+      const why = [...resultTexts, finalText].filter(Boolean).join('\n')
+      if (!ATTRIBUTED.test(why))
+        fails.push(
+          `${c.id}: 未产出 PDB，且没有任何一句把原因归到算力/上限上 —— 这正是"长链静默失败"\n     实际: ${why.slice(0, 300)}`,
+        )
+      else warns.push(`${c.id}: 未产出 PDB，但失败原因已归因（算力/上限），记录为已知边界`)
+    }
     if (esmErr && !complexOk) warns.push(`${c.id}: ESMFold 已 413，但没有看到成功的 predict_complex 换档`)
     if (!esmErr && calls.some((x) => x.name === 'predict_structure' && x.result && !x.result.isError))
       warns.push(

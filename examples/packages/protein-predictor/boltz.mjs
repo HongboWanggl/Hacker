@@ -18,15 +18,24 @@ const Kind = Symbol.for('TypeBox.Kind')
 const BOLTZ_BASE = 'https://api.boltz.bio'
 const AA_RE = /^[ACDEFGHIKLMNPQRSTVWYBXZUO]+$/i
 const SMILES_MAX = 600
-// Ceiling for every tier this tool can route to, expressed in total residues.
-// All three engines bottom out at the same wall, so the ceiling is stated up
-// front instead of discovered after a 20-minute wait: the public ColabFold MSA
-// service must align the whole chain before Boltz-2 moves at all, and the 8 GB
-// worker card cannot hold a fold far past ~1000 residues. The longest target
-// this platform has actually completed is 408 aa (CASP14 T1024). Observed
-// 2026-10-15: a 2944-aa COL7A1 chain (Q02388) sat in the MSA step — 6 s of CPU
-// across 5 minutes, one open socket to the MSA server — until the cap killed it.
+// REFUSAL ceiling for every tier this tool can route to, expressed in total
+// residues. Stated up front instead of discovered after a 20-minute wait.
+//
+// This is NOT a capability claim, and the two numbers must not be blurred:
+//   · 1000 — the refusal bound. Past it the public ColabFold MSA service cannot
+//     align the chain before Boltz-2 moves at all, so the run is doomed. Observed
+//     2026-10-15: a 2944-aa COL7A1 chain (Q02388) sat in the MSA step — 6 s of CPU
+//     across 5 minutes, one open socket to the MSA server — until the cap killed it.
+//   · ~420 — what this platform has actually FOLDED. The longest completed target
+//     is 408 aa (CASP14 T1024); every success on record is at or below it, and
+//     every run well above it has failed.
+// A 920-aa chain (androgen receptor P10275, 2026-10-15) completed MSA in 10 min,
+// finished preprocessing, then wrote nothing into predictions/ and exited 0 — the
+// 8 GB worker card running out of memory mid-inference. So between ~420 and 1000
+// the tool will accept the job and may well fail on the worker's memory: the
+// caller is told the measured envelope rather than a promise.
 const MAX_TIER_RESIDUES = 1000
+const DEMONSTRATED_FOLD_RESIDUES = 420
 
 const writeMeta = {
   isReadOnly: false,
@@ -193,7 +202,28 @@ export async function runLocalBoltz({ proteins, smiles }) {
       else if (e.name.startsWith('pae_') && e.name.endsWith('model_0.npz')) paeNpz = p
     }
   }
-  if (!modelPdb) return { error: `Local Boltz-2 finished but no model_0.pdb found under ${outRoot}` }
+  // Boltz-2 can go all the way through MSA and preprocessing, start inference,
+  // write nothing into predictions/, and still exit 0 — the failure is only in
+  // its own stdout, which used to be discarded here. That threw away the one
+  // piece of evidence that explains the run (on the 8 GB RTX 4060 worker the
+  // 920-aa androgen receptor died exactly this way, most likely CUDA OOM:
+  //   /tmp/boltz-local-xUkA46 → msa/ + processed/ populated, predictions/ empty).
+  if (!modelPdb) {
+    const n = proteins.reduce((acc, s) => acc + s.length, 0)
+    return {
+      error:
+        `Local Boltz-2 finished but no model_0.pdb found under ${outRoot}. ` +
+        'This usually means the fold ran out of accelerator memory partway through ' +
+        '(MSA and preprocessing complete, inference produces nothing) — boltz-2 exited 0, ' +
+        `so the real cause is only in its output:\n${stdout.slice(-1200)}` +
+        (n > DEMONSTRATED_FOLD_RESIDUES
+          ? `\nThis target is ${n} residues; the longest fold this platform has completed is ` +
+            `${DEMONSTRATED_FOLD_RESIDUES} aa, so a memory wall here is the expected outcome, not a surprise. ` +
+            'Split the target into domains (≤ ~600 aa each) and predict them separately, ' +
+            'or configure a Boltz API key so the job runs on a larger card.'
+          : ''),
+    }
+  }
   const beside = (prefix, suffix = '_model_0.json') => {
     try {
       const dir = modelPdb.slice(0, modelPdb.lastIndexOf('/'))
@@ -310,6 +340,21 @@ export async function runWorkerBoltz({ proteins, smiles }) {
         body = undefined
       }
       if (res.status === 502 && body?.terminal && body.error) return { terminalError: String(body.error) }
+      // A 502 that names a compute outcome IS a property of this input, even
+      // without the `terminal` flag: the worker ran the fold and it did not
+      // produce a model. Falling through would run the same doomed job on the
+      // hosted API / VPS-local CLI, and with neither configured the user gets
+      // the generic "needs a Boltz API key" hint — which is how the 920-aa
+      // androgen receptor failure was reported as a setup problem. Carry the
+      // worker's own words so the fall-through can hand them over if it also
+      // has nothing better to offer.
+      //
+      // Scoped to 502 deliberately. worker.mjs answers 503 (no CLI), 500
+      // (crash), 401 (bad token) for conditions that say nothing about this
+      // input, and those keep the old accelerator semantics: fall through to
+      // the next tier. Only 502 means "the fold was attempted and produced
+      // nothing".
+      if (res.status === 502 && body?.error) return { workerError: String(body.error) }
       return undefined
     }
     const out = JSON.parse(res.body)
@@ -511,7 +556,7 @@ export const predictComplex = {
     agnes.registerTool({
       name: 'predict_complex',
       description:
-        'Predict a protein complex or protein-ligand structure with Boltz-2 (co-folding). Handles multi-chain proteins, RNA/DNA, and small-molecule ligands; reports pTM/ipTM interface confidence and binding confidence. Uses the Boltz API when a key is configured (costs credits); otherwise runs the open-source weights locally via the boltz-community CLI (slow: minutes per target, first run downloads ~10 GB) — prefer predict_structure (ESMFold, free) for single-chain jobs under 400 residues; single chains of 400+ residues are accepted here as the long-chain fallback (ESMFold rejects those), up to 1000 total residues — beyond that no configured tier can fold the chain and the tool refuses instead of stalling. Saves the best structure as a PDB with pLDDT in the B-factor column.',
+        'Predict a protein complex or protein-ligand structure with Boltz-2 (co-folding). Handles multi-chain proteins, RNA/DNA, and small-molecule ligands; reports pTM/ipTM interface confidence and binding confidence. Uses the Boltz API when a key is configured (costs credits); otherwise runs the open-source weights locally via the boltz-community CLI (slow: minutes per target, first run downloads ~10 GB) — prefer predict_structure (ESMFold, free) for single-chain jobs under 400 residues; single chains of 400+ residues are accepted here as the long-chain fallback (ESMFold rejects those). The hard refusal bound is 1000 total residues (past it no configured tier can fold the chain and the tool refuses instead of stalling), but that is a rejection threshold, not a promise: this platform has actually folded up to ~420 residues, and on the 8 GB local GPU a 920-residue single chain completed MSA and preprocessing and then produced no model (accelerator out of memory). So between ~420 and 1000 residues expect the job to be accepted and to possibly fail on the worker GPU memory — the failure names that cause. Saves the best structure as a PDB with pLDDT in the B-factor column.',
       parameters: {
         [Kind]: 'Object',
         type: 'object',
@@ -589,7 +634,12 @@ export const predictComplex = {
         const t0 = Date.now()
         const workerOut = await runWorkerBoltz({ proteins, smiles })
         if (workerOut?.terminalError) return fail(workerOut.terminalError)
-        if (workerOut) {
+        // A worker failure that names a compute outcome is kept, not dropped: if
+        // every later tier also comes up empty, this is a far better answer than
+        // "needs an API key". It does NOT stop the fall-through — an out-of-memory
+        // fold is exactly what a hosted API with a bigger card can absorb.
+        const workerError = workerOut?.workerError
+        if (workerOut?.pdbContent) {
           return finishBoltzResult({
             tctx,
             proteins,
@@ -607,9 +657,12 @@ export const predictComplex = {
         const key = resolveApiKey()
         // No key → run the open-source weights locally when the CLI exists.
         if (!key) {
-          if (!resolveLocalBoltz()) return fail(SETUP_HINT)
+          // This host has no engine of its own. If the worker got far enough to
+          // name what went wrong with the fold, that is the answer — the setup
+          // hint describes a missing engine and hides the real one.
+          if (!resolveLocalBoltz()) return fail(workerError ?? SETUP_HINT)
           const out = await runLocalBoltz({ proteins, smiles, label, wait })
-          if (out.missing) return fail(SETUP_HINT)
+          if (out.missing) return fail(workerError ?? SETUP_HINT)
           if (out.error) return fail(out.error)
           // boltz writes pLDDT into the PDB B-factor column, so the existing
           // confidence viewer renders local models without extra work.
