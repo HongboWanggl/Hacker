@@ -1,7 +1,7 @@
 // Unit contract for the auto-retry gate (client/src/transient.ts): what counts
 // as a transient failure worth an automatic resubmit, and — just as important —
 // what must NOT (deterministic failures retrying would burn compute or loop).
-import { isTransientError } from '../protein-platform/client/src/transient.ts'
+import { isTransientError, shouldRetryAttempt } from '../protein-platform/client/src/transient.ts'
 
 let bad = 0
 const expect = (label: string, got: boolean, want: boolean) => {
@@ -47,6 +47,45 @@ expect('bad sequence', isTransientError('invalid residue Z in sequence'), false)
 expect('session gone', isTransientError('会话不存在（daemon 重启或已清理）：unknown session'), false)
 expect('empty', isTransientError(''), false)
 expect('undefined', isTransientError(undefined), false)
+
+// --- the retry checkpoint itself ---------------------------------------------
+// isTransientError alone was never enough: a marker that matches TRANSIENT_RE
+// still needs a gate that lets the retry through. The 2026-10-15 regression was
+// a veto from the wrong signal — the stall watchdog aborts the attempt, and the
+// gate read that as "the user said stop".
+const gate = (o: Partial<Parameters<typeof shouldRetryAttempt>[0]> = {}) =>
+  shouldRetryAttempt({
+    attempt: 1,
+    maxAttempts: 3,
+    userCancelled: false,
+    status: 'failed',
+    hasProductArtifact: false,
+    ...o,
+  })
+
+expect('gate: a stalled attempt is retried', gate({ error: 'STALL_WATCHDOG：超过 180s 无任何事件' }), true)
+expect('gate: a stall is not a user cancel', gate({ error: 'STALL_WATCHDOG：…', userCancelled: false }), true)
+expect('gate: a user cancel is not retried', gate({ error: 'STALL_WATCHDOG：…', userCancelled: true }), false)
+expect('gate: a transport drop is retried', gate({ error: 'TRANSPORT status=?' }), true)
+expect(
+  'gate: a transient symptom earns it too',
+  gate({ error: 'no PDB in report', lastError: 'HTTP 502' }),
+  true,
+)
+expect(
+  'gate: the cause wins over a clean lastError',
+  gate({ error: 'invalid residue Z', lastError: '' }),
+  false,
+)
+expect(
+  'gate: a produced artifact is never re-rolled',
+  gate({ error: 'HTTP 502', hasProductArtifact: true }),
+  false,
+)
+expect('gate: only failed tasks retry', gate({ error: 'HTTP 502', status: 'done' }), false)
+expect('gate: cancelled rows do not retry', gate({ error: 'HTTP 502', status: 'cancelled' }), false)
+expect('gate: attempt ceiling is respected', gate({ error: 'HTTP 502', attempt: 3 }), false)
+expect('gate: the last allowed attempt retries', gate({ error: 'HTTP 502', attempt: 2 }), true)
 
 if (bad) {
   console.log(`FAIL: ${bad} mismatch(es)`)

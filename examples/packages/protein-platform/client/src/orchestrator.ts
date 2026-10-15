@@ -1,6 +1,6 @@
 import type { DaemonLink } from './agnes.ts'
 import { buildPrompt, STAGE_LABEL, TASK_TYPE_LABEL, type TaskInput, type TaskType } from './prompts.ts'
-import { isTransientError } from './transient.ts'
+import { shouldRetryAttempt } from './transient.ts'
 
 // Task = one agent session. Progress is a ledger reduction: tool/call opens a
 // stage, tool/result closes it (savedTo captured), turn/end finishes the task.
@@ -127,7 +127,12 @@ export function describeApproval(
  *  guard then skipped the STALL_WATCHDOG message entirely — which also killed
  *  the auto-retry, since isTransientError keys on that marker (the raw abort
  *  text matches nothing in TRANSIENT_RE). Both now resolve here, and the
- *  caller has already excluded user cancellations. */
+ *  caller has already excluded user cancellations.
+ *
+ *  A third defect sat one step downstream and outlived this fix: the marker did
+ *  earn a retry, but the retry gate demanded an un-aborted signal — and the
+ *  watchdog aborts. So the stall reason was honest and the resubmit still never
+ *  happened. See shouldRetryAttempt() in transient.ts. */
 export function turnFailureReason(
   ev: { reason?: string; error?: { message?: string } },
   ctx: { approvals?: readonly string[]; stallMs?: number } = {},
@@ -497,12 +502,25 @@ export async function runTask(
   tasks = [task, ...tasks]
   emit()
 
-  const controller = new AbortController()
+  // Per-attempt signal, because the watchdog aborts the ATTEMPT and not the task.
+  // One controller shared across attempts made the watchdog a dead end: abort()
+  // left signal.aborted true forever, so the `!controller.signal.aborted` retry
+  // gate above could never open and a hung gateway — the exact failure the retry
+  // exists for — settled the task as failed instead of being resubmitted. The
+  // 2026-10-15 pasted-2944 run is the case on record: inference produced no events
+  // for 209 s, the 180-s watchdog aborted it, and nothing was ever retried.
+  let activeController = new AbortController()
+  // Set by the watchdog, read by the retry gate: a stalled attempt is NOT a user
+  // cancellation, so it must not veto the retry the way a cancel does.
+  let stalledAttempt = false
   runners.set(id, () => {
     cancelledTasks.add(id)
-    controller.abort()
+    activeController.abort()
   })
   const attempt = async (): Promise<void> => {
+    const controller = new AbortController()
+    activeController = controller
+    stalledAttempt = false
     // Stall watchdog: the model gateway occasionally hangs an inference without a
     // transport error, so neither turn/end nor the events-loop catch ever fires and
     // the task spins in "running" forever. Any ledger event or preview delta counts
@@ -526,6 +544,7 @@ export async function runTask(
     const watchdog = setInterval(() => {
       if (Date.now() - lastActivity > stallMs) {
         stalled = true
+        stalledAttempt = true
         clearInterval(watchdog)
         controller.abort()
       }
@@ -647,21 +666,26 @@ export async function runTask(
       for (let n = 1; ; n++) {
         await attempt()
         const t = getTask(id)
-        const retryable =
-          n < MAX_ATTEMPTS &&
-          !controller.signal.aborted &&
-          t?.status === 'failed' &&
+        const retryable = shouldRetryAttempt({
+          attempt: n,
+          maxAttempts: MAX_ATTEMPTS,
+          // "The user cancelled" — not "the signal is aborted", which a stalled
+          // attempt also makes true (see stalledAttempt above).
+          userCancelled: cancelledTasks.has(id),
+          status: t?.status,
           // Product-aware, like the turn/end test above: a leftover fetched
           // FASTA must not veto the retry of a failed fold (Q02388).
-          !!t &&
-          !hasProductArtifact(t) &&
+          hasProductArtifact: !!t && hasProductArtifact(t),
           // Either end of the error chain: t.error is now the CAUSE, so a
           // transient symptom that came later must still be able to earn a
           // retry rather than being masked by a deterministic first failure.
-          (isTransientError(t.error) || isTransientError(t.lastError))
+          error: t?.error,
+          lastError: t?.lastError,
+        })
         if (!retryable) break
         console.log(
-          `[platform] attempt ${n} failed transiently (${(t!.error ?? '').slice(0, 120)}), auto-retrying`,
+          `[platform] attempt ${n} ${stalledAttempt ? 'was aborted by the stall watchdog' : 'failed transiently'} ` +
+            `(${(t!.error ?? '').slice(0, 120)}), auto-retrying`,
         )
         await new Promise((r) => setTimeout(r, n === 1 ? 3000 : 8000))
         patch(id, (t2) => {
@@ -686,7 +710,10 @@ export async function runTask(
 
   return {
     cancel: () => {
-      controller.abort()
+      // Same path as the UI's cancel affordance: mark it a user cancellation and
+      // abort whatever attempt is live right now.
+      cancelledTasks.add(id)
+      activeController.abort()
     },
   }
 }

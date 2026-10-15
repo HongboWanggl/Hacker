@@ -20,3 +20,38 @@ const TRANSIENT_RE =
 export function isTransientError(text: string | undefined | null): boolean {
   return typeof text === 'string' && TRANSIENT_RE.test(text)
 }
+
+/**
+ * The retry checkpoint, as a pure function.
+ *
+ * It lives here (rather than inline in the run loop) because one of its inputs is
+ * easy to get wrong in a way nothing else notices: **`userCancelled` must mean
+ * "the user asked to stop", not "the abort signal is up"**. The stall watchdog
+ * aborts the attempt it is watching, so a signal-based test silently vetoes the
+ * retry for exactly the hung-gateway failure the watchdog exists to catch — and
+ * the task then settles as failed instead of being resubmitted. That bug shipped
+ * (2026-10-15: a 209 s stalled inference, aborted at 180 s, never retried); the
+ * unit test drives both spellings so it cannot come back.
+ */
+export function shouldRetryAttempt(opts: {
+  /** 1-based; the attempt that just finished. */
+  attempt: number
+  maxAttempts: number
+  /** True only for a user-requested cancel. */
+  userCancelled: boolean
+  status?: string
+  /** A partial result beats re-rolling: never wipe a produced artifact. */
+  hasProductArtifact: boolean
+  /** The cause (first tool error). */
+  error?: string
+  /** The newest symptom. */
+  lastError?: string
+}): boolean {
+  return (
+    opts.attempt < opts.maxAttempts &&
+    !opts.userCancelled &&
+    opts.status === 'failed' &&
+    !opts.hasProductArtifact &&
+    (isTransientError(opts.error) || isTransientError(opts.lastError))
+  )
+}
